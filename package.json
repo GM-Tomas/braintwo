@@ -1,0 +1,20 @@
+{
+  "name": "braintwo",
+  "version": "0.1.0",
+  "description": "Tu segundo cerebro local — captura notas desde WhatsApp, búsqueda semántica RAG, todo en tu disco.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "NODE_ENV=development electron .",
+    "build": "electron-builder"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "^1.23.0",
+    "sql.js": "^1.11.0",
+    "@google/generative-ai": "^0.3.1",
+    "qrcode": "^1.5.3"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0"
+  }
+}
