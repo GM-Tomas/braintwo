@@ -1,0 +1,60 @@
+{
+  "name": "braintwo-desktop",
+  "version": "1.0.4",
+  "description": "BrainTwo is a desktop Electron application.",
+  "main": "main.js",
+  "scripts": {
+    "start-react": "cd frontend && npm start",
+    "build-react": "cd frontend && npm run build",
+    "start-base": "electron .",
+    "start-dev": "set BRAINTWO_HOST=dev&& concurrently \"npm run start-react\" \"wait-on http://localhost:3000 && npm run start-base\"",
+    "start-prod": "set BRAINTWO_HOST=prod&& npm run start-base",
+    "build-all": "npm run build-react && npm run dist",
+    "dist": "electron-builder"
+  },
+  "keywords": [],
+  "author": "TomasGM",
+  "license": "ISC",
+  "devDependencies": {
+    "child_process": "^1.0.2",
+    "concurrently": "^9.1.2",
+    "electron": "^40.6.0",
+    "electron-builder": "^26.8.1",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "com.desktop.braintwo",
+    "productName": "BrainTwo",
+    "directories": {
+      "output": "dist"
+    },
+    "msi": {
+      "oneClick": false,
+      "runAfterFinish": false
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "backend/**",
+      "configTemplate.json",
+      {
+        "from": "frontend/build",
+        "to": "frontend/build"
+      }
+    ],
+    "win": {
+      "target": [
+        "msi"
+      ],
+      "icon": "./resources/Images/icon.png",
+      "extraFiles": [
+        "manual_de_uso_braintwo.html",
+        "resources/**"
+      ]
+    }
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "python-shell": "^5.0.0"
+  }
+}

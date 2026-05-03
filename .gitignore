@@ -1,0 +1,21 @@
+# Dependencies
+/node_modules
+
+# Build output
+/dist
+
+# Logs
+/logs
+
+# Automations (user data, not source code)
+/automations
+
+# User data Config
+/userData
+
+# Environment
+/.env
+
+# Root-level bot artifacts (should be inside bot folders)
+/input
+/output
