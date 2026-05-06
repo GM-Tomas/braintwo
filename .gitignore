@@ -1,21 +1,18 @@
-# Dependencies
-/node_modules
+node_modules/
+out/
+dist/
+build/
+userData/
+logs/
+*.log
+.DS_Store
+.env
+.env.local
+.env.*.local
+.vite/
+*.tsbuildinfo
 
-# Build output
-/dist
-
-# Logs
-/logs
-
-# Automations (user data, not source code)
-/automations
-
-# User data Config
-/userData
-
-# Environment
-/.env
-
-# Root-level bot artifacts (should be inside bot folders)
-/input
-/output
+# Legacy archived project — preserve in tree, ignore its build artifacts
+archive/**/node_modules/
+archive/**/build/
+archive/**/dist/

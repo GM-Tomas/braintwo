@@ -1,60 +1,37 @@
 {
-  "name": "braintwo-desktop",
-  "version": "1.0.4",
-  "description": "BrainTwo is a desktop Electron application.",
-  "main": "main.js",
+  "name": "braintwo",
+  "version": "0.1.0",
+  "description": "Personal knowledge base from your WhatsApp self-chat",
+  "main": "out/main/main.js",
+  "private": true,
+  "author": "Syntropy",
+  "license": "UNLICENSED",
   "scripts": {
-    "start-react": "cd frontend && npm start",
-    "build-react": "cd frontend && npm run build",
-    "start-base": "electron .",
-    "start-dev": "set BRAINTWO_HOST=dev&& concurrently \"npm run start-react\" \"wait-on http://localhost:3000 && npm run start-base\"",
-    "start-prod": "set BRAINTWO_HOST=prod&& npm run start-base",
-    "build-all": "npm run build-react && npm run dist",
-    "dist": "electron-builder"
+    "dev": "node scripts/run-evite.mjs dev",
+    "build": "node scripts/run-evite.mjs build",
+    "preview": "node scripts/run-evite.mjs preview",
+    "package": "node scripts/run-evite.mjs build && electron-builder",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck:web": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web"
   },
-  "keywords": [],
-  "author": "TomasGM",
-  "license": "ISC",
   "devDependencies": {
-    "child_process": "^1.0.2",
-    "concurrently": "^9.1.2",
-    "electron": "^40.6.0",
-    "electron-builder": "^26.8.1",
-    "wait-on": "^8.0.3"
-  },
-  "build": {
-    "appId": "com.desktop.braintwo",
-    "productName": "BrainTwo",
-    "directories": {
-      "output": "dist"
-    },
-    "msi": {
-      "oneClick": false,
-      "runAfterFinish": false
-    },
-    "files": [
-      "main.js",
-      "preload.js",
-      "backend/**",
-      "configTemplate.json",
-      {
-        "from": "frontend/build",
-        "to": "frontend/build"
-      }
-    ],
-    "win": {
-      "target": [
-        "msi"
-      ],
-      "icon": "./resources/Images/icon.png",
-      "extraFiles": [
-        "manual_de_uso_braintwo.html",
-        "resources/**"
-      ]
-    }
+    "@types/node": "^22.9.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.20",
+    "cross-env": "^10.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
   },
   "dependencies": {
-    "adm-zip": "^0.5.16",
-    "python-shell": "^5.0.0"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   }
 }
