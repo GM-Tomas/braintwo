@@ -7,7 +7,12 @@ import {
   nativeImage,
   shell
 } from 'electron'
-import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+import { createWhatsAppService, type WhatsAppService } from './services/whatsapp'
+import type { WAConnectionState } from './services/whatsapp-state'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const isDev = !app.isPackaged
 const startedHidden = process.argv.includes('--hidden')
@@ -15,6 +20,9 @@ const startedHidden = process.argv.includes('--hidden')
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
+let whatsapp: WhatsAppService | null = null
+let lastConnectionState: WAConnectionState = 'disconnected'
+let lastQr: string | null = null
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
@@ -28,6 +36,7 @@ app.on('second-instance', () => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  void whatsapp?.stop()
 })
 
 function buildResourcePath(...segments: string[]): string {
@@ -42,6 +51,19 @@ function configureAutostart(): void {
     openAsHidden: true,
     args: ['--hidden']
   })
+}
+
+function statusLabel(state: WAConnectionState): string {
+  switch (state) {
+    case 'connecting':
+      return 'Conectando…'
+    case 'open':
+      return 'Conectado'
+    case 'disconnected':
+      return 'Reconectando…'
+    case 'logged-out':
+      return 'Sesión cerrada'
+  }
 }
 
 function buildTrayMenu(status: string): Menu {
@@ -75,6 +97,11 @@ function updateTrayStatus(status: string): void {
   tray.setToolTip(`BrainTwo — ${status}`)
 }
 
+function broadcast(channel: string, payload: unknown): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send(channel, payload)
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -86,7 +113,7 @@ function createWindow(): void {
     backgroundColor: '#060a12',
     icon: nativeImage.createFromPath(buildResourcePath('icon-256.png')),
     webPreferences: {
-      preload: join(__dirname, '../preload/preload.js'),
+      preload: join(__dirname, '../preload/preload.mjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false
@@ -113,6 +140,12 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
+  mainWindow.webContents.on('did-finish-load', () => {
+    // Re-broadcast latest known state so the renderer never starts blank.
+    broadcast('wa:connection-state', lastConnectionState)
+    if (lastQr) broadcast('wa:qr', lastQr)
+  })
+
   if (process.env['ELECTRON_RENDERER_URL']) {
     void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -130,6 +163,30 @@ function showWindow(): void {
   mainWindow.focus()
 }
 
+function startWhatsApp(): void {
+  const authPath = join(app.getPath('userData'), 'auth')
+  whatsapp = createWhatsAppService({ authPath })
+
+  whatsapp.on('connection-state', (state) => {
+    lastConnectionState = state
+    if (state === 'open') lastQr = null
+    updateTrayStatus(statusLabel(state))
+    broadcast('wa:connection-state', state)
+  })
+
+  whatsapp.on('qr', (qr) => {
+    lastQr = qr
+    broadcast('wa:qr', qr)
+  })
+
+  whatsapp.on('logged-out', () => {
+    lastQr = null
+    broadcast('wa:logged-out', undefined)
+  })
+
+  void whatsapp.start()
+}
+
 ipcMain.handle('app:open-window', () => {
   showWindow()
 })
@@ -143,11 +200,25 @@ ipcMain.handle('app:get-version', () => app.getVersion())
 
 ipcMain.handle('app:get-platform', () => process.platform)
 
+ipcMain.handle('wa:get-connection-state', () => lastConnectionState)
+
+ipcMain.handle('wa:get-current-qr', () => lastQr)
+
+ipcMain.handle('wa:request-qr', async () => {
+  if (!whatsapp) return
+  await whatsapp.stop()
+  await whatsapp.start()
+})
+
+ipcMain.handle('wa:logout', async () => {
+  await whatsapp?.logout()
+})
+
 void app.whenReady().then(() => {
   configureAutostart()
   createTray()
+  startWhatsApp()
   createWindow()
-  updateTrayStatus('Listo')
 })
 
 // Keep the app alive in tray on Windows/Linux. Default behavior would be to

@@ -6,7 +6,10 @@ export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     build: {
-      lib: { entry: resolve('electron/main.ts') }
+      lib: { entry: resolve('electron/main.ts'), formats: ['es'] },
+      rollupOptions: {
+        output: { entryFileNames: '[name].mjs' }
+      }
     },
     resolve: {
       alias: { '@shared': resolve('shared') }
@@ -15,7 +18,10 @@ export default defineConfig({
   preload: {
     plugins: [externalizeDepsPlugin()],
     build: {
-      lib: { entry: resolve('electron/preload.ts') }
+      lib: { entry: resolve('electron/preload.ts'), formats: ['es'] },
+      rollupOptions: {
+        output: { entryFileNames: '[name].mjs' }
+      }
     },
     resolve: {
       alias: { '@shared': resolve('shared') }
