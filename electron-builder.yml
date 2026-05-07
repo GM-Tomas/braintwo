@@ -7,6 +7,11 @@ directories:
 files:
   - out/**/*
   - package.json
+extraResources:
+  - from: build
+    to: build
+    filter:
+      - '*.png'
 asar: true
 win:
   target: nsis

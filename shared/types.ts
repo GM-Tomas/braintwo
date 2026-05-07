@@ -8,15 +8,23 @@ export type ConnectionState =
   | 'disconnected'
   | 'logged-out'
 
+export interface BrainTwoBridge {
+  platform: NodeJS.Platform
+  versions: {
+    electron: string
+    node: string
+    chrome: string
+  }
+  app: {
+    openWindow: () => Promise<void>
+    quit: () => Promise<void>
+    getVersion: () => Promise<string>
+    getPlatform: () => Promise<NodeJS.Platform>
+  }
+}
+
 declare global {
   interface Window {
-    braintwo: {
-      platform: NodeJS.Platform
-      versions: {
-        electron: string
-        node: string
-        chrome: string
-      }
-    }
+    braintwo: BrainTwoBridge
   }
 }
