@@ -1,11 +1,12 @@
 import { vi } from 'vitest'
-import type { BrainTwoBridge, WAConnectionState } from '@shared/types'
+import type { BrainTwoBridge, RecentMessage, WAConnectionState } from '@shared/types'
 
 export interface BridgeHandle {
   bridge: BrainTwoBridge
   emitConnectionState: (state: WAConnectionState) => void
   emitQr: (qr: string) => void
   emitLoggedOut: () => void
+  emitMessagesBatch: (batch: RecentMessage[]) => void
   spies: {
     requestQr: ReturnType<typeof vi.fn>
     logout: ReturnType<typeof vi.fn>
@@ -15,6 +16,8 @@ export interface BridgeHandle {
     getPlatform: ReturnType<typeof vi.fn>
     getConnectionState: ReturnType<typeof vi.fn>
     getCurrentQr: ReturnType<typeof vi.fn>
+    getMessageCount: ReturnType<typeof vi.fn>
+    getRecentMessages: ReturnType<typeof vi.fn>
   }
 }
 
@@ -23,12 +26,15 @@ export interface BridgeOpts {
   initialQr?: string | null
   version?: string
   platform?: NodeJS.Platform
+  initialMessageCount?: number
+  initialRecent?: RecentMessage[]
 }
 
 export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
   const stateListeners: ((s: WAConnectionState) => void)[] = []
   const qrListeners: ((qr: string) => void)[] = []
   const loggedOutListeners: (() => void)[] = []
+  const batchListeners: ((batch: RecentMessage[]) => void)[] = []
 
   const spies = {
     requestQr: vi.fn(async () => {}),
@@ -38,7 +44,9 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
     getVersion: vi.fn(async () => opts.version ?? '0.1.0'),
     getPlatform: vi.fn(async () => opts.platform ?? 'win32'),
     getConnectionState: vi.fn(async () => opts.initialState ?? 'connecting'),
-    getCurrentQr: vi.fn(async () => opts.initialQr ?? null)
+    getCurrentQr: vi.fn(async () => opts.initialQr ?? null),
+    getMessageCount: vi.fn(async () => opts.initialMessageCount ?? 0),
+    getRecentMessages: vi.fn(async () => opts.initialRecent ?? [])
   }
 
   const bridge: BrainTwoBridge = {
@@ -48,7 +56,18 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
       openWindow: spies.openWindow,
       quit: spies.quit,
       getVersion: spies.getVersion,
-      getPlatform: spies.getPlatform
+      getPlatform: spies.getPlatform,
+      getMessageCount: spies.getMessageCount as unknown as () => Promise<number>,
+      getRecentMessages: spies.getRecentMessages as unknown as (
+        limit: number
+      ) => Promise<RecentMessage[]>,
+      onMessagesBatch: (cb) => {
+        batchListeners.push(cb)
+        return () => {
+          const i = batchListeners.indexOf(cb)
+          if (i >= 0) batchListeners.splice(i, 1)
+        }
+      }
     },
     wa: {
       getConnectionState: spies.getConnectionState as unknown as () => Promise<WAConnectionState>,
@@ -86,6 +105,7 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
     emitConnectionState: (state) => stateListeners.forEach((l) => l(state)),
     emitQr: (qr) => qrListeners.forEach((l) => l(qr)),
     emitLoggedOut: () => loggedOutListeners.forEach((l) => l()),
+    emitMessagesBatch: (batch) => batchListeners.forEach((l) => l(batch)),
     spies
   }
 }

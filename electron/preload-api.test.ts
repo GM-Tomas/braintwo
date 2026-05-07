@@ -74,11 +74,18 @@ describe('preload-api createApi', () => {
       ['openWindow', 'app:open-window'],
       ['quit', 'app:quit'],
       ['getVersion', 'app:get-version'],
-      ['getPlatform', 'app:get-platform']
+      ['getPlatform', 'app:get-platform'],
+      ['getMessageCount', 'app:get-message-count']
     ] as const)('%s → invoke(%s)', async (method, channel) => {
       const api = createApi(ipc, env)
       await api.app[method]()
       expect(ipc.invoke).toHaveBeenCalledWith(channel)
+    })
+
+    it('getRecentMessages forwards the limit argument', async () => {
+      const api = createApi(ipc, env)
+      await api.app.getRecentMessages(25)
+      expect(ipc.invoke).toHaveBeenCalledWith('app:get-recent-messages', 25)
     })
   })
 
@@ -155,6 +162,26 @@ describe('preload-api createApi', () => {
       ipc._emit('wa:connection-state', 'open')
       expect(a).not.toHaveBeenCalled()
       expect(b).toHaveBeenCalledWith('open')
+    })
+
+    it('onMessagesBatch wires to app:messages-batch', () => {
+      const api = createApi(ipc, env)
+      const cb = vi.fn()
+      const off = api.app.onMessagesBatch(cb)
+      const batch = [
+        {
+          id: 1,
+          wa_msg_id: 'a',
+          timestamp: 1,
+          text: 'hi',
+          source: 'realtime' as const
+        }
+      ]
+      ipc._emit('app:messages-batch', batch)
+      expect(cb).toHaveBeenCalledWith(batch)
+      off()
+      ipc._emit('app:messages-batch', batch)
+      expect(cb).toHaveBeenCalledTimes(1)
     })
   })
 })

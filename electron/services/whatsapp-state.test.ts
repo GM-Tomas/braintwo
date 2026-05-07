@@ -3,6 +3,8 @@ import {
   deriveTransition,
   nextBackoff,
   isLoggedOutCode,
+  isSelfChat,
+  normalizeJid,
   LOGGED_OUT_CODE,
   type RawConnectionUpdate
 } from './whatsapp-state'
@@ -117,6 +119,62 @@ describe('whatsapp-state', () => {
       const r = deriveTransition({ connection: 'open', qr: 'X' })
       expect(r.state).toBe('open')
       expect(r.qr).toBeNull()
+    })
+  })
+
+  describe('normalizeJid', () => {
+    it('strips :N device suffix', () => {
+      expect(normalizeJid('5491134567890:42@s.whatsapp.net')).toBe(
+        '5491134567890@s.whatsapp.net'
+      )
+    })
+
+    it('returns input unchanged when no device suffix', () => {
+      expect(normalizeJid('5491134567890@s.whatsapp.net')).toBe(
+        '5491134567890@s.whatsapp.net'
+      )
+    })
+
+    it('returns null on null/undefined/empty', () => {
+      expect(normalizeJid(null)).toBeNull()
+      expect(normalizeJid(undefined)).toBeNull()
+      expect(normalizeJid('')).toBeNull()
+    })
+
+    it('handles group JIDs (no @s.whatsapp.net) — leaves them as-is', () => {
+      expect(normalizeJid('123-456@g.us')).toBe('123-456@g.us')
+    })
+  })
+
+  describe('isSelfChat', () => {
+    it('true when remoteJid matches user JID without device suffix', () => {
+      expect(
+        isSelfChat('5491134567890@s.whatsapp.net', '5491134567890:42@s.whatsapp.net')
+      ).toBe(true)
+    })
+
+    it('true when both already normalized', () => {
+      expect(
+        isSelfChat('5491134567890@s.whatsapp.net', '5491134567890@s.whatsapp.net')
+      ).toBe(true)
+    })
+
+    it('false for a different remote JID', () => {
+      expect(
+        isSelfChat('5491100000000@s.whatsapp.net', '5491134567890:42@s.whatsapp.net')
+      ).toBe(false)
+    })
+
+    it('false for group chats', () => {
+      expect(
+        isSelfChat('123-456@g.us', '5491134567890:42@s.whatsapp.net')
+      ).toBe(false)
+    })
+
+    it('false when either side is null/undefined', () => {
+      expect(isSelfChat(undefined, '5491134567890:42@s.whatsapp.net')).toBe(false)
+      expect(isSelfChat('5491134567890@s.whatsapp.net', null)).toBe(false)
+      expect(isSelfChat(null, null)).toBe(false)
     })
   })
 })

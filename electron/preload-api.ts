@@ -1,5 +1,6 @@
 import type { IpcRenderer, IpcRendererEvent } from 'electron'
 import type { WAConnectionState } from './services/whatsapp-state'
+import type { RecentMessage } from './services/ingest'
 
 export type Unsubscribe = () => void
 
@@ -15,6 +16,9 @@ export interface BrainTwoApi {
     quit: () => Promise<void>
     getVersion: () => Promise<string>
     getPlatform: () => Promise<NodeJS.Platform>
+    getMessageCount: () => Promise<number>
+    getRecentMessages: (limit: number) => Promise<RecentMessage[]>
+    onMessagesBatch: (cb: (batch: RecentMessage[]) => void) => Unsubscribe
   }
   wa: {
     getConnectionState: () => Promise<WAConnectionState>
@@ -70,7 +74,11 @@ export function createApi(
       openWindow: () => ipcRenderer.invoke('app:open-window'),
       quit: () => ipcRenderer.invoke('app:quit'),
       getVersion: () => ipcRenderer.invoke('app:get-version'),
-      getPlatform: () => ipcRenderer.invoke('app:get-platform')
+      getPlatform: () => ipcRenderer.invoke('app:get-platform'),
+      getMessageCount: () => ipcRenderer.invoke('app:get-message-count'),
+      getRecentMessages: (limit: number) =>
+        ipcRenderer.invoke('app:get-recent-messages', limit),
+      onMessagesBatch: subscribe<RecentMessage[]>('app:messages-batch')
     },
     wa: {
       getConnectionState: () => ipcRenderer.invoke('wa:get-connection-state'),

@@ -11,11 +11,21 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { createWhatsAppService, type WhatsAppService } from './services/whatsapp'
 import type { WAConnectionState } from './services/whatsapp-state'
+import { openDatabase, type DbInstance } from './services/db'
+import {
+  createIngestPipeline,
+  extractText,
+  extractTimestampMs,
+  type IngestPipeline,
+  type RecentMessage
+} from './services/ingest'
 import {
   statusLabel,
   buildResourcePath,
   pickTrayIconName,
-  buildTrayMenuTemplate
+  buildTrayMenuTemplate,
+  createMessageBatcher,
+  type MessageBatcher
 } from './main-helpers'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -29,6 +39,9 @@ let isQuitting = false
 let whatsapp: WhatsAppService | null = null
 let lastConnectionState: WAConnectionState = 'disconnected'
 let lastQr: string | null = null
+let db: DbInstance | null = null
+let ingest: IngestPipeline | null = null
+let messageBatcher: MessageBatcher<RecentMessage> | null = null
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
@@ -43,6 +56,8 @@ app.on('second-instance', () => {
 app.on('before-quit', () => {
   isQuitting = true
   void whatsapp?.stop()
+  messageBatcher?.flush()
+  db?.close()
 })
 
 const resourceOpts = () => ({
@@ -153,6 +168,15 @@ function showWindow(): void {
   mainWindow.focus()
 }
 
+function openStorage(): void {
+  const dbPath = join(app.getPath('userData'), 'braintwo.db')
+  db = openDatabase(dbPath)
+  ingest = createIngestPipeline(db)
+  messageBatcher = createMessageBatcher<RecentMessage>({
+    broadcast: (batch) => broadcast('app:messages-batch', batch)
+  })
+}
+
 function startWhatsApp(): void {
   const authPath = join(app.getPath('userData'), 'auth')
   whatsapp = createWhatsAppService({ authPath })
@@ -174,6 +198,23 @@ function startWhatsApp(): void {
     broadcast('wa:logged-out', undefined)
   })
 
+  whatsapp.on('message', ({ raw, source }) => {
+    if (!ingest || !messageBatcher) return
+    const result = ingest.ingest(raw, source)
+    if (!result.inserted || result.rowId === null) return
+    const id = raw.key?.id
+    if (!id) return
+    // Build the renderer-friendly row directly from inputs to avoid an extra
+    // SELECT — the values are already validated by ingestMessage.
+    messageBatcher.push({
+      id: result.rowId,
+      wa_msg_id: id,
+      timestamp: extractTimestampMs(raw),
+      text: extractText(raw),
+      source
+    })
+  })
+
   void whatsapp.start()
 }
 
@@ -189,6 +230,12 @@ ipcMain.handle('app:quit', () => {
 ipcMain.handle('app:get-version', () => app.getVersion())
 
 ipcMain.handle('app:get-platform', () => process.platform)
+
+ipcMain.handle('app:get-message-count', () => ingest?.count() ?? 0)
+
+ipcMain.handle('app:get-recent-messages', (_e, limit: number) => {
+  return ingest?.recent(Math.max(0, Math.min(limit, 500))) ?? []
+})
 
 ipcMain.handle('wa:get-connection-state', () => lastConnectionState)
 
@@ -206,6 +253,7 @@ ipcMain.handle('wa:logout', async () => {
 
 void app.whenReady().then(() => {
   configureAutostart()
+  openStorage()
   createTray()
   startWhatsApp()
   createWindow()

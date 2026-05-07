@@ -9,9 +9,12 @@ import makeWASocket, {
 import pino, { type Logger } from 'pino'
 import {
   deriveTransition,
+  isSelfChat,
   nextBackoff,
   type WAConnectionState
 } from './whatsapp-state'
+import type { MessageSource } from './db'
+import type { WAMessageLike } from './ingest'
 
 interface MinimalEv {
   on: (event: string, handler: (...args: unknown[]) => void) => void
@@ -44,6 +47,11 @@ export interface WhatsAppDeps {
   cancelReconnect?: (handle: unknown) => void
 }
 
+export interface IngestableMessage {
+  raw: WAMessageLike
+  source: MessageSource
+}
+
 export interface WhatsAppService {
   start(): Promise<void>
   stop(): Promise<void>
@@ -53,6 +61,7 @@ export interface WhatsAppService {
   on(event: 'qr', listener: (qr: string) => void): this
   on(event: 'connection-state', listener: (state: WAConnectionState) => void): this
   on(event: 'logged-out', listener: () => void): this
+  on(event: 'message', listener: (msg: IngestableMessage) => void): this
   off(event: string, listener: (...args: unknown[]) => void): this
 }
 
@@ -203,6 +212,19 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
         const update = (args[0] ?? {}) as Parameters<typeof deriveTransition>[0]
         this.handleConnectionUpdate(update)
       })
+
+      this.socket.ev.on('messages.upsert', (...args: unknown[]) => {
+        const evt = (args[0] ?? {}) as {
+          type?: string
+          messages?: WAMessageLike[]
+        }
+        this.handleMessagesUpsert(evt)
+      })
+
+      this.socket.ev.on('messaging-history.set', (...args: unknown[]) => {
+        const evt = (args[0] ?? {}) as { messages?: WAMessageLike[] }
+        this.handleHistorySet(evt)
+      })
     } catch (err) {
       this.logger.error({ err }, 'whatsapp connect failed')
       this.scheduleReconnectIfNeeded()
@@ -232,6 +254,30 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       this.handleServerLoggedOut()
     } else if (t.shouldReconnect) {
       this.scheduleReconnectIfNeeded()
+    }
+  }
+
+  private handleMessagesUpsert(evt: {
+    type?: string
+    messages?: WAMessageLike[]
+  }): void {
+    const myJid = this.socket?.user?.id
+    if (!myJid || !evt.messages) return
+    // type === 'append' is offline catch-up; 'notify' (and others) are realtime.
+    const source: MessageSource =
+      evt.type === 'append' ? 'offline-sync' : 'realtime'
+    for (const msg of evt.messages) {
+      if (!isSelfChat(msg.key?.remoteJid, myJid)) continue
+      this.emit('message', { raw: msg, source })
+    }
+  }
+
+  private handleHistorySet(evt: { messages?: WAMessageLike[] }): void {
+    const myJid = this.socket?.user?.id
+    if (!myJid || !evt.messages) return
+    for (const msg of evt.messages) {
+      if (!isSelfChat(msg.key?.remoteJid, myJid)) continue
+      this.emit('message', { raw: msg, source: 'history-sync' })
     }
   }
 

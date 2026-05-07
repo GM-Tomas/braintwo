@@ -51,3 +51,46 @@ export function buildTrayMenuTemplate(
     { label: 'Salir', click: actions.onQuit }
   ]
 }
+
+export interface MessageBatcher<T> {
+  push: (item: T) => void
+  flush: () => void
+  size: () => number
+}
+
+export interface BatcherOpts<T> {
+  broadcast: (batch: T[]) => void
+  scheduler?: (cb: () => void) => unknown
+}
+
+// Coalesces calls within a single tick into a single broadcast — so a burst
+// of messages from history-sync (potentially 1000+ at once) only crosses
+// the IPC boundary once per tick.
+export function createMessageBatcher<T>(opts: BatcherOpts<T>): MessageBatcher<T> {
+  const schedule = opts.scheduler ?? ((cb) => setImmediate(cb))
+  let pending: T[] = []
+  let scheduled = false
+
+  function flushNow(): void {
+    if (pending.length === 0) {
+      scheduled = false
+      return
+    }
+    const batch = pending
+    pending = []
+    scheduled = false
+    opts.broadcast(batch)
+  }
+
+  return {
+    push(item) {
+      pending.push(item)
+      if (!scheduled) {
+        scheduled = true
+        schedule(flushNow)
+      }
+    },
+    flush: flushNow,
+    size: () => pending.length
+  }
+}

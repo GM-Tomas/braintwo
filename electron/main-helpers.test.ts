@@ -4,7 +4,8 @@ import {
   statusLabel,
   buildResourcePath,
   pickTrayIconName,
-  buildTrayMenuTemplate
+  buildTrayMenuTemplate,
+  createMessageBatcher
 } from './main-helpers'
 
 describe('main-helpers', () => {
@@ -108,6 +109,96 @@ describe('main-helpers', () => {
         onQuit: () => {}
       })
       expect(tpl[1]!.label).toBe('Estado: Conectando…')
+    })
+  })
+
+  describe('createMessageBatcher', () => {
+    it('coalesces multiple pushes within the same tick into one broadcast', () => {
+      const broadcast = vi.fn()
+      let scheduled: (() => void) | null = null
+      const batcher = createMessageBatcher<number>({
+        broadcast,
+        scheduler: (cb) => {
+          scheduled = cb
+          return null
+        }
+      })
+
+      batcher.push(1)
+      batcher.push(2)
+      batcher.push(3)
+
+      expect(broadcast).not.toHaveBeenCalled()
+      expect(batcher.size()).toBe(3)
+
+      scheduled!()
+      expect(broadcast).toHaveBeenCalledTimes(1)
+      expect(broadcast).toHaveBeenCalledWith([1, 2, 3])
+      expect(batcher.size()).toBe(0)
+    })
+
+    it('schedules a fresh flush for the next batch', () => {
+      const broadcast = vi.fn()
+      const calls: (() => void)[] = []
+      const batcher = createMessageBatcher<string>({
+        broadcast,
+        scheduler: (cb) => {
+          calls.push(cb)
+          return null
+        }
+      })
+
+      batcher.push('a')
+      calls[0]!()
+      expect(broadcast).toHaveBeenLastCalledWith(['a'])
+
+      batcher.push('b')
+      batcher.push('c')
+      expect(calls.length).toBe(2)
+      calls[1]!()
+      expect(broadcast).toHaveBeenLastCalledWith(['b', 'c'])
+    })
+
+    it('flush() forces an immediate drain regardless of scheduler', () => {
+      const broadcast = vi.fn()
+      const batcher = createMessageBatcher<number>({
+        broadcast,
+        scheduler: () => null // never auto-flushes
+      })
+      batcher.push(1)
+      batcher.push(2)
+      batcher.flush()
+      expect(broadcast).toHaveBeenCalledWith([1, 2])
+    })
+
+    it('flush() is a no-op when nothing is pending', () => {
+      const broadcast = vi.fn()
+      const batcher = createMessageBatcher({
+        broadcast,
+        scheduler: () => null
+      })
+      batcher.flush()
+      expect(broadcast).not.toHaveBeenCalled()
+    })
+
+    it('uses setImmediate by default', async () => {
+      const broadcast = vi.fn()
+      const batcher = createMessageBatcher<number>({ broadcast })
+      batcher.push(1)
+      batcher.push(2)
+      // setImmediate runs on the next macrotask; await one tick to drain.
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      expect(broadcast).toHaveBeenCalledWith([1, 2])
+    })
+
+    it('only schedules ONCE while pending; second push reuses the scheduled flush', () => {
+      const broadcast = vi.fn()
+      const scheduler = vi.fn((_cb: () => void) => null)
+      const batcher = createMessageBatcher<number>({ broadcast, scheduler })
+      batcher.push(1)
+      batcher.push(2)
+      batcher.push(3)
+      expect(scheduler).toHaveBeenCalledTimes(1)
     })
   })
 })

@@ -16,6 +16,16 @@ export type WAConnectionState =
 
 export type Unsubscribe = () => void
 
+export type MessageSource = 'export' | 'history-sync' | 'realtime' | 'offline-sync'
+
+export interface RecentMessage {
+  id: number
+  wa_msg_id: string
+  timestamp: number
+  text: string
+  source: MessageSource
+}
+
 export interface BrainTwoBridge {
   platform: NodeJS.Platform
   versions: {
@@ -28,6 +38,9 @@ export interface BrainTwoBridge {
     quit: () => Promise<void>
     getVersion: () => Promise<string>
     getPlatform: () => Promise<NodeJS.Platform>
+    getMessageCount: () => Promise<number>
+    getRecentMessages: (limit: number) => Promise<RecentMessage[]>
+    onMessagesBatch: (cb: (batch: RecentMessage[]) => void) => Unsubscribe
   }
   wa: {
     getConnectionState: () => Promise<WAConnectionState>

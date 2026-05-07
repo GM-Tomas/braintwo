@@ -99,11 +99,11 @@ describe('<App />', () => {
       const user = userEvent.setup()
       // user navigates to Timeline manually
       await user.click(screen.getByRole('button', { name: 'Timeline' }))
-      expect(screen.getByText(/Cronología completa/)).toBeInTheDocument()
+      expect(screen.getByText(/Aún no hay mensajes/)).toBeInTheDocument()
 
       // a re-emit of 'open' should NOT yank them back to Search
       act(() => h.emitConnectionState('open'))
-      expect(screen.getByText(/Cronología completa/)).toBeInTheDocument()
+      expect(screen.getByText(/Aún no hay mensajes/)).toBeInTheDocument()
     })
 
     it('logged-out forces back to Onboarding even after auto-route', async () => {
@@ -131,7 +131,7 @@ describe('<App />', () => {
       ).toBeInTheDocument()
 
       await user.click(screen.getByRole('button', { name: 'Timeline' }))
-      expect(screen.getByText(/Cronología completa/)).toBeInTheDocument()
+      expect(screen.getByText(/Aún no hay mensajes/)).toBeInTheDocument()
 
       await user.click(screen.getByRole('button', { name: 'Onboarding' }))
       expect(screen.getByText(/Vinculá tu WhatsApp/)).toBeInTheDocument()

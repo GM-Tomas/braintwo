@@ -29,6 +29,26 @@ export function isLoggedOutCode(code: number | undefined): boolean {
   return code === LOGGED_OUT_CODE
 }
 
+// Strip an optional `:<deviceId>` device suffix from a JID's user portion.
+// 549...:42@s.whatsapp.net → 549...@s.whatsapp.net
+export function normalizeJid(jid: string | null | undefined): string | null {
+  if (!jid) return null
+  return jid.replace(/:\d+(?=@)/, '')
+}
+
+// The chat-with-self has `remoteJid` equal to the user's own JID, but Baileys
+// reports `sock.user.id` with the linked-device suffix (`:N`). Compare the
+// normalized forms.
+export function isSelfChat(
+  remoteJid: string | null | undefined,
+  myJid: string | null | undefined
+): boolean {
+  const a = normalizeJid(remoteJid)
+  const b = normalizeJid(myJid)
+  if (!a || !b) return false
+  return a === b
+}
+
 export function nextBackoff(
   current: number,
   initialMs = 1000,
