@@ -1,0 +1,167 @@
+import Database, { type Database as DatabaseType } from 'better-sqlite3'
+import * as sqliteVec from 'sqlite-vec'
+
+export const VEC_DIM = 384
+
+export type MessageSource = 'export' | 'history-sync' | 'realtime' | 'offline-sync'
+
+export interface NewMessage {
+  wa_msg_id: string
+  timestamp: number
+  text: string
+  source: MessageSource
+  raw_json?: string | null
+}
+
+export interface InsertResult {
+  inserted: boolean
+  rowId: number | null
+}
+
+export interface SimilarResult {
+  id: number
+  wa_msg_id: string
+  timestamp: number
+  text: string
+  source: MessageSource
+  distance: number
+}
+
+export interface DbInstance {
+  raw: DatabaseType
+  insertMessage: (msg: NewMessage) => InsertResult
+  insertEmbedding: (msgId: number, vec: Float32Array) => void
+  searchSimilar: (queryVec: Float32Array, k: number) => SimilarResult[]
+  countMessages: () => number
+  countEmbeddings: () => number
+  hasEmbedding: (msgId: number) => boolean
+  close: () => void
+}
+
+const SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS messages (
+     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+     wa_msg_id   TEXT UNIQUE NOT NULL,
+     timestamp   INTEGER NOT NULL,
+     text        TEXT NOT NULL,
+     source      TEXT NOT NULL,
+     raw_json    TEXT,
+     created_at  INTEGER DEFAULT (unixepoch())
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_msg_ts ON messages(timestamp)`,
+  `CREATE VIRTUAL TABLE IF NOT EXISTS message_embeddings USING vec0(
+     msg_id      INTEGER PRIMARY KEY,
+     embedding   FLOAT[${VEC_DIM}]
+   )`
+]
+
+export function applyPragmas(db: DatabaseType): void {
+  db.pragma('journal_mode = WAL')
+  db.pragma('synchronous = NORMAL')
+  db.pragma('temp_store = MEMORY')
+  db.pragma('mmap_size = 134217728')
+  db.pragma('foreign_keys = ON')
+}
+
+export function applyMigrations(db: DatabaseType): void {
+  for (const sql of SCHEMA_STATEMENTS) {
+    db.exec(sql)
+  }
+}
+
+function vecToBuffer(vec: Float32Array): Buffer {
+  if (vec.length !== VEC_DIM) {
+    throw new Error(
+      `Embedding must have ${VEC_DIM} dims, got ${vec.length}`
+    )
+  }
+  return Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength)
+}
+
+export function openDatabase(filePath: string): DbInstance {
+  const db = new Database(filePath)
+  applyPragmas(db)
+  sqliteVec.load(db)
+  applyMigrations(db)
+
+  const insertMsgStmt = db.prepare(
+    `INSERT OR IGNORE INTO messages (wa_msg_id, timestamp, text, source, raw_json)
+     VALUES (?, ?, ?, ?, ?)`
+  )
+
+  const insertEmbStmt = db.prepare(
+    `INSERT INTO message_embeddings(msg_id, embedding) VALUES (?, ?)`
+  )
+
+  const searchStmt = db.prepare<[Buffer, number], SimilarResult>(`
+    SELECT m.id, m.wa_msg_id, m.timestamp, m.text, m.source, e.distance
+    FROM message_embeddings e
+    JOIN messages m ON m.id = e.msg_id
+    WHERE e.embedding MATCH ? AND k = ?
+    ORDER BY e.distance
+  `)
+
+  const countMsgStmt = db.prepare<[], { count: number }>(
+    'SELECT COUNT(*) AS count FROM messages'
+  )
+
+  const countEmbStmt = db.prepare<[], { count: number }>(
+    'SELECT COUNT(*) AS count FROM message_embeddings'
+  )
+
+  const hasEmbStmt = db.prepare<[number], { count: number }>(
+    'SELECT COUNT(*) AS count FROM message_embeddings WHERE msg_id = ?'
+  )
+
+  return {
+    raw: db,
+    insertMessage(msg) {
+      const r = insertMsgStmt.run(
+        msg.wa_msg_id,
+        msg.timestamp,
+        msg.text,
+        msg.source,
+        msg.raw_json ?? null
+      )
+      const inserted = r.changes > 0
+      return {
+        inserted,
+        rowId: inserted ? Number(r.lastInsertRowid) : null
+      }
+    },
+    insertEmbedding(msgId, vec) {
+      // sqlite-vec's vec0 strictly requires BigInt for the PK column,
+      // even for integer-valued JS numbers — better-sqlite3 binds JS
+      // numbers as REAL by default.
+      insertEmbStmt.run(BigInt(msgId), vecToBuffer(vec))
+    },
+    searchSimilar(queryVec, k) {
+      if (k <= 0) return []
+      return searchStmt.all(vecToBuffer(queryVec), k)
+    },
+    countMessages() {
+      return countMsgStmt.get()?.count ?? 0
+    },
+    countEmbeddings() {
+      return countEmbStmt.get()?.count ?? 0
+    },
+    hasEmbedding(msgId) {
+      return (hasEmbStmt.get(msgId)?.count ?? 0) > 0
+    },
+    close() {
+      db.close()
+    }
+  }
+}
+
+let _instance: DbInstance | null = null
+
+export function getDb(filePath: string): DbInstance {
+  if (!_instance) _instance = openDatabase(filePath)
+  return _instance
+}
+
+export function closeDb(): void {
+  _instance?.close()
+  _instance = null
+}
