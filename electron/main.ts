@@ -11,6 +11,12 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { createWhatsAppService, type WhatsAppService } from './services/whatsapp'
 import type { WAConnectionState } from './services/whatsapp-state'
+import {
+  statusLabel,
+  buildResourcePath,
+  pickTrayIconName,
+  buildTrayMenuTemplate
+} from './main-helpers'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -39,10 +45,11 @@ app.on('before-quit', () => {
   void whatsapp?.stop()
 })
 
-function buildResourcePath(...segments: string[]): string {
-  if (app.isPackaged) return join(process.resourcesPath, 'build', ...segments)
-  return join(__dirname, '..', '..', 'build', ...segments)
-}
+const resourceOpts = () => ({
+  isPackaged: app.isPackaged,
+  resourcesPath: process.resourcesPath,
+  dirname: __dirname
+})
 
 function configureAutostart(): void {
   if (isDev) return
@@ -53,37 +60,21 @@ function configureAutostart(): void {
   })
 }
 
-function statusLabel(state: WAConnectionState): string {
-  switch (state) {
-    case 'connecting':
-      return 'Conectando…'
-    case 'open':
-      return 'Conectado'
-    case 'disconnected':
-      return 'Reconectando…'
-    case 'logged-out':
-      return 'Sesión cerrada'
-  }
-}
-
 function buildTrayMenu(status: string): Menu {
-  return Menu.buildFromTemplate([
-    { label: 'Abrir BrainTwo', click: () => showWindow() },
-    { label: `Estado: ${status}`, enabled: false },
-    { type: 'separator' },
-    {
-      label: 'Salir',
-      click: () => {
+  return Menu.buildFromTemplate(
+    buildTrayMenuTemplate(status, {
+      onOpen: showWindow,
+      onQuit: () => {
         isQuitting = true
         app.quit()
       }
-    }
-  ])
+    })
+  )
 }
 
 function createTray(): void {
-  const iconName = process.platform === 'darwin' ? 'tray-icon.png' : 'tray-icon@2x.png'
-  const icon = nativeImage.createFromPath(buildResourcePath(iconName))
+  const iconName = pickTrayIconName(process.platform)
+  const icon = nativeImage.createFromPath(buildResourcePath(resourceOpts(), iconName))
   tray = new Tray(icon)
   tray.setToolTip('BrainTwo')
   tray.setContextMenu(buildTrayMenu('Iniciando…'))
@@ -111,7 +102,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#060a12',
-    icon: nativeImage.createFromPath(buildResourcePath('icon-256.png')),
+    icon: nativeImage.createFromPath(buildResourcePath(resourceOpts(), 'icon-256.png')),
     webPreferences: {
       preload: join(__dirname, '../preload/preload.mjs'),
       sandbox: false,
@@ -141,7 +132,6 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.on('did-finish-load', () => {
-    // Re-broadcast latest known state so the renderer never starts blank.
     broadcast('wa:connection-state', lastConnectionState)
     if (lastQr) broadcast('wa:qr', lastQr)
   })
@@ -221,8 +211,6 @@ void app.whenReady().then(() => {
   createWindow()
 })
 
-// Keep the app alive in tray on Windows/Linux. Default behavior would be to
-// quit when the last window closes; attaching this handler suppresses that.
 app.on('window-all-closed', () => {
   // Intentionally empty: tray keeps the process alive.
 })
