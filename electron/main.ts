@@ -5,6 +5,7 @@ import {
   Tray,
   ipcMain,
   nativeImage,
+  session,
   shell
 } from 'electron'
 import { fileURLToPath } from 'node:url'
@@ -151,8 +152,27 @@ function createWindow(): void {
     if (lastQr) broadcast('wa:qr', lastQr)
   })
 
+  // Forward renderer console (incl. errors) to the terminal in dev so blank
+  // screens have a visible cause. Levels: 0=verbose 1=info 2=warning 3=error.
+  if (isDev) {
+    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      const tag = ['[V]', '[I]', '[W]', '[E]'][level] ?? '[?]'
+      // eslint-disable-next-line no-console
+      console.log(`[renderer]${tag} ${message}  (${sourceId}:${line})`)
+    })
+    mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+      // eslint-disable-next-line no-console
+      console.error(`[renderer:fail-load] ${code} ${desc} ${url}`)
+    })
+    mainWindow.webContents.on('render-process-gone', (_e, details) => {
+      // eslint-disable-next-line no-console
+      console.error(`[renderer:gone] ${JSON.stringify(details)}`)
+    })
+  }
+
   if (process.env['ELECTRON_RENDERER_URL']) {
     void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
@@ -252,6 +272,27 @@ ipcMain.handle('wa:logout', async () => {
 })
 
 void app.whenReady().then(() => {
+  // CSP is enforced at the network layer in production only; in dev we rely
+  // on Vite's normal same-origin loading without a strict policy that would
+  // block HMR scripts/styles.
+  if (!isDev) {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self'; " +
+              "script-src 'self'; " +
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+              "font-src 'self' https://fonts.gstatic.com; " +
+              "img-src 'self' data:; " +
+              "connect-src 'self' ws: wss:"
+          ]
+        }
+      })
+    })
+  }
+
   configureAutostart()
   openStorage()
   createTray()
