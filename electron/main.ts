@@ -120,7 +120,7 @@ function createWindow(): void {
     backgroundColor: '#060a12',
     icon: nativeImage.createFromPath(buildResourcePath(resourceOpts(), 'icon-256.png')),
     webPreferences: {
-      preload: join(__dirname, '../preload/preload.mjs'),
+      preload: join(__dirname, '../preload/preload.cjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false
@@ -167,6 +167,10 @@ function createWindow(): void {
     mainWindow.webContents.on('render-process-gone', (_e, details) => {
       // eslint-disable-next-line no-console
       console.error(`[renderer:gone] ${JSON.stringify(details)}`)
+    })
+    mainWindow.webContents.on('preload-error', (_e, preloadPath, error) => {
+      // eslint-disable-next-line no-console
+      console.error(`[preload:error] ${preloadPath}\n${error.stack ?? error.message}`)
     })
   }
 

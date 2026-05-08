@@ -11,8 +11,3 @@ logs/
 .env.*.local
 .vite/
 *.tsbuildinfo
-
-# Legacy archived project — preserve in tree, ignore its build artifacts
-archive/**/node_modules/
-archive/**/build/
-archive/**/dist/

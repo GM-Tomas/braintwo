@@ -18,9 +18,13 @@ export default defineConfig({
   preload: {
     plugins: [externalizeDepsPlugin()],
     build: {
-      lib: { entry: resolve('electron/preload.ts'), formats: ['es'] },
+      // CJS for the preload: avoids Electron 33's ESM-preload pitfalls
+      // (silent contextBridge failure when `import { ... } from "electron"`
+      // can't resolve in the renderer's preload context). Main process
+      // still ESM because Baileys 7.x is ESM-only.
+      lib: { entry: resolve('electron/preload.ts'), formats: ['cjs'] },
       rollupOptions: {
-        output: { entryFileNames: '[name].mjs' }
+        output: { entryFileNames: '[name].cjs' }
       }
     },
     resolve: {
