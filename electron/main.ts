@@ -8,6 +8,7 @@ import {
   session,
   shell
 } from 'electron'
+import pino from 'pino'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { createWhatsAppService, type WhatsAppService } from './services/whatsapp'
@@ -205,7 +206,12 @@ function openStorage(): void {
 
 function startWhatsApp(): void {
   const authPath = join(app.getPath('userData'), 'auth')
-  whatsapp = createWhatsAppService({ authPath })
+  // In dev we surface info-level logs (Baileys handshake, messages.upsert
+  // counters, history-set deltas) to the terminal; in prod we stay silent.
+  const waLogger = isDev
+    ? pino({ level: 'info', name: 'wa' })
+    : pino({ level: 'silent' })
+  whatsapp = createWhatsAppService({ authPath, logger: waLogger })
 
   whatsapp.on('connection-state', (state) => {
     lastConnectionState = state

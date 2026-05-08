@@ -36,17 +36,38 @@ export function normalizeJid(jid: string | null | undefined): string | null {
   return jid.replace(/:\d+(?=@)/, '')
 }
 
-// The chat-with-self has `remoteJid` equal to the user's own JID, but Baileys
-// reports `sock.user.id` with the linked-device suffix (`:N`). Compare the
-// normalized forms.
+// Returns just the user portion of a JID, before the `:device` suffix and
+// before the `@server` part. Two JIDs share a user-part iff they refer to
+// the same WhatsApp account regardless of which addressing form (PN, LID)
+// the message happened to use.
+//
+//   549...:42@s.whatsapp.net  → "549..."
+//   abc-xyz@lid               → "abc-xyz"
+//   549...@s.whatsapp.net     → "549..."
+export function jidUserPart(jid: string | null | undefined): string | null {
+  if (!jid) return null
+  const match = jid.match(/^([^:@]+)/)
+  return match && match[1] ? match[1] : null
+}
+
+// True when `remoteJid` matches any of the user's known JID variants. Baileys
+// 7's `sock.user` carries up to three forms of the same account — `id` (the
+// preferred lid or phone), `phoneNumber` (`@s.whatsapp.net`) and `lid`
+// (`@lid`). The message's `remoteJid` may use any of them, so we accept a
+// match against ANY variant.
 export function isSelfChat(
   remoteJid: string | null | undefined,
-  myJid: string | null | undefined
+  myJids: ReadonlyArray<string | null | undefined> | string | null | undefined
 ): boolean {
-  const a = normalizeJid(remoteJid)
-  const b = normalizeJid(myJid)
-  if (!a || !b) return false
-  return a === b
+  const r = jidUserPart(remoteJid)
+  if (!r) return false
+  // Skip groups, broadcasts, communities — those are server-suffix marked.
+  if (remoteJid?.includes('@g.us') || remoteJid?.includes('@broadcast')) return false
+  const candidates = Array.isArray(myJids) ? myJids : [myJids]
+  for (const candidate of candidates) {
+    if (jidUserPart(candidate) === r) return true
+  }
+  return false
 }
 
 export function nextBackoff(

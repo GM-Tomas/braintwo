@@ -24,7 +24,16 @@ interface MinimalSocket {
   ev: MinimalEv
   end?: (err?: Error) => void
   logout?: () => Promise<void> | void
-  user?: { id?: string }
+  user?: {
+    /** Preferred id — could be the LID (`@lid`) or PN (`@s.whatsapp.net`) form. */
+    id?: string
+    /** ID in PN format (`@s.whatsapp.net`). */
+    phoneNumber?: string
+    /** ID in LID format (`@lid`). */
+    lid?: string
+    name?: string
+    notify?: string
+  }
 }
 
 interface MinimalAuthState {
@@ -182,7 +191,16 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       this.transitionTo('connecting')
 
       const auth = await this.authStateFactory(this.authPath)
-      const { version } = await this.versionFactory()
+      // fetchLatestBaileysVersion does an HTTP GET to a remote repo; if it
+      // fails (offline, blocked, slow DNS) we don't want to block pairing.
+      // Fall back to a known-good version so the socket still initializes.
+      let version: unknown = [2, 3000, 1023223]
+      try {
+        const fetched = await this.versionFactory()
+        if (fetched?.version) version = fetched.version
+      } catch (err) {
+        this.logger.warn({ err }, 'fetchLatestBaileysVersion failed, using fallback')
+      }
 
       this.socket = this.socketFactory({
         version,
@@ -257,28 +275,80 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
     }
   }
 
+  private myJidVariants(): string[] {
+    const u = this.socket?.user
+    if (!u) return []
+    const all = [u.id, u.phoneNumber, u.lid].filter(
+      (v): v is string => typeof v === 'string' && v.length > 0
+    )
+    return all
+  }
+
   private handleMessagesUpsert(evt: {
     type?: string
     messages?: WAMessageLike[]
   }): void {
-    const myJid = this.socket?.user?.id
-    if (!myJid || !evt.messages) return
+    if (!evt.messages) return
+    const variants = this.myJidVariants()
     // type === 'append' is offline catch-up; 'notify' (and others) are realtime.
     const source: MessageSource =
       evt.type === 'append' ? 'offline-sync' : 'realtime'
+
+    let kept = 0
+    let skipped = 0
+    const sampleRemoteJids = new Set<string>()
     for (const msg of evt.messages) {
-      if (!isSelfChat(msg.key?.remoteJid, myJid)) continue
+      const remoteJid = msg.key?.remoteJid
+      if (remoteJid) sampleRemoteJids.add(remoteJid)
+      if (!isSelfChat(remoteJid, variants)) {
+        skipped++
+        continue
+      }
+      kept++
       this.emit('message', { raw: msg, source })
     }
+    this.logger.info(
+      {
+        event: 'messages.upsert',
+        type: evt.type,
+        total: evt.messages.length,
+        kept,
+        skipped,
+        sample_remote_jids: Array.from(sampleRemoteJids).slice(0, 5),
+        my_jid_variants: variants
+      },
+      'messages.upsert processed'
+    )
   }
 
   private handleHistorySet(evt: { messages?: WAMessageLike[] }): void {
-    const myJid = this.socket?.user?.id
-    if (!myJid || !evt.messages) return
+    if (!evt.messages) return
+    const variants = this.myJidVariants()
+
+    let kept = 0
+    let skipped = 0
+    const sampleRemoteJids = new Set<string>()
     for (const msg of evt.messages) {
-      if (!isSelfChat(msg.key?.remoteJid, myJid)) continue
+      const remoteJid = msg.key?.remoteJid
+      if (remoteJid) sampleRemoteJids.add(remoteJid)
+      if (!isSelfChat(remoteJid, variants)) {
+        skipped++
+        continue
+      }
+      kept++
       this.emit('message', { raw: msg, source: 'history-sync' })
     }
+    this.logger.info(
+      {
+        event: 'messaging-history.set',
+        total: evt.messages.length,
+        kept,
+        skipped,
+        sample_remote_jids: Array.from(sampleRemoteJids).slice(0, 5),
+        my_jid_variants: variants
+      },
+      'messaging-history.set processed'
+    )
   }
 
   private handleServerLoggedOut(): void {

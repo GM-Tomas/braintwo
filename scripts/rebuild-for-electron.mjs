@@ -34,6 +34,19 @@ try {
   }
   console.log('[rebuild] Done — marker .abi/electron.marker written.')
 } catch (err) {
-  console.error('[rebuild] electron-rebuild failed:', err)
+  const msg = err instanceof Error ? err.message : String(err)
+  if (/EPERM|EBUSY/i.test(msg) || /operation not permitted/i.test(msg)) {
+    console.error('')
+    console.error('[rebuild] ✗ Native module is locked.')
+    console.error(
+      '[rebuild]   Looks like an Electron dev process is still running.'
+    )
+    console.error(
+      '[rebuild]   Close it (tray → Salir, or kill the dev terminal) and re-run.'
+    )
+    console.error('')
+  } else {
+    console.error('[rebuild] electron-rebuild failed:', msg)
+  }
   process.exit(1)
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   deriveTransition,
+  jidUserPart,
   nextBackoff,
   isLoggedOutCode,
   isSelfChat,
@@ -146,6 +147,33 @@ describe('whatsapp-state', () => {
     })
   })
 
+  describe('jidUserPart', () => {
+    it('returns the digits before :device@server', () => {
+      expect(jidUserPart('5491134567890:42@s.whatsapp.net')).toBe(
+        '5491134567890'
+      )
+    })
+
+    it('returns the user portion of an @lid jid', () => {
+      expect(jidUserPart('abc-xyz@lid')).toBe('abc-xyz')
+    })
+
+    it('returns the user portion when there is no device suffix', () => {
+      expect(jidUserPart('5491134567890@s.whatsapp.net')).toBe('5491134567890')
+    })
+
+    it('returns null on null/undefined/empty', () => {
+      expect(jidUserPart(null)).toBeNull()
+      expect(jidUserPart(undefined)).toBeNull()
+      expect(jidUserPart('')).toBeNull()
+    })
+
+    it('returns null for a string with no user portion', () => {
+      expect(jidUserPart(':42@s.whatsapp.net')).toBeNull()
+      expect(jidUserPart('@server')).toBeNull()
+    })
+  })
+
   describe('isSelfChat', () => {
     it('true when remoteJid matches user JID without device suffix', () => {
       expect(
@@ -165,16 +193,66 @@ describe('whatsapp-state', () => {
       ).toBe(false)
     })
 
-    it('false for group chats', () => {
+    it('false for group chats even with matching user portion', () => {
       expect(
-        isSelfChat('123-456@g.us', '5491134567890:42@s.whatsapp.net')
+        isSelfChat('5491134567890@g.us', '5491134567890:42@s.whatsapp.net')
       ).toBe(false)
+    })
+
+    it('false for broadcast lists', () => {
+      expect(isSelfChat('status@broadcast', '54911@s.whatsapp.net')).toBe(false)
     })
 
     it('false when either side is null/undefined', () => {
       expect(isSelfChat(undefined, '5491134567890:42@s.whatsapp.net')).toBe(false)
       expect(isSelfChat('5491134567890@s.whatsapp.net', null)).toBe(false)
       expect(isSelfChat(null, null)).toBe(false)
+    })
+
+    describe('multi-variant matching (Baileys 7 LID + PN)', () => {
+      it('matches against any of an array of candidates', () => {
+        const variants = [
+          'abc-xyz:42@lid',
+          '5491134567890:42@s.whatsapp.net'
+        ]
+        // remoteJid in PN form, sock.user.id is the LID — still matches via
+        // phoneNumber variant.
+        expect(
+          isSelfChat('5491134567890@s.whatsapp.net', variants)
+        ).toBe(true)
+      })
+
+      it('matches against any of an array (LID side)', () => {
+        const variants = [
+          '5491134567890:42@s.whatsapp.net',
+          'abc-xyz@lid'
+        ]
+        expect(isSelfChat('abc-xyz@lid', variants)).toBe(true)
+      })
+
+      it('returns false when no variant matches', () => {
+        expect(
+          isSelfChat('OTHER@s.whatsapp.net', [
+            '5491134567890:42@s.whatsapp.net',
+            'abc-xyz@lid'
+          ])
+        ).toBe(false)
+      })
+
+      it('skips empty / nullable entries in the variant list', () => {
+        expect(
+          isSelfChat('5491134567890@s.whatsapp.net', [
+            null,
+            undefined,
+            '',
+            '5491134567890:42@s.whatsapp.net'
+          ])
+        ).toBe(true)
+      })
+
+      it('returns false when the variant array is empty', () => {
+        expect(isSelfChat('5491134567890@s.whatsapp.net', [])).toBe(false)
+      })
     })
   })
 })
