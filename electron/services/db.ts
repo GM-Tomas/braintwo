@@ -5,11 +5,32 @@ export const VEC_DIM = 384
 
 export type MessageSource = 'export' | 'history-sync' | 'realtime' | 'offline-sync'
 
+export type MessageKind =
+  | 'text'
+  | 'audio'
+  | 'image'
+  | 'video'
+  | 'document'
+  | 'sticker'
+  | 'other'
+
+export interface MediaMeta {
+  durationSec?: number
+  fileName?: string
+  fileLengthBytes?: number
+  mimetype?: string
+  transcript?: string
+  ptt?: boolean
+}
+
 export interface NewMessage {
   wa_msg_id: string
   timestamp: number
   text: string
   source: MessageSource
+  kind?: MessageKind
+  media?: MediaMeta | null
+  from_me?: boolean
   raw_json?: string | null
 }
 
@@ -24,6 +45,7 @@ export interface SimilarResult {
   timestamp: number
   text: string
   source: MessageSource
+  kind: MessageKind
   distance: number
 }
 
@@ -55,6 +77,13 @@ const SCHEMA_STATEMENTS = [
    )`
 ]
 
+// Idempotent column additions for users upgrading from earlier schemas.
+const POST_MIGRATIONS = [
+  { column: 'kind', sql: `ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'` },
+  { column: 'media_meta', sql: `ALTER TABLE messages ADD COLUMN media_meta TEXT` },
+  { column: 'from_me', sql: `ALTER TABLE messages ADD COLUMN from_me INTEGER NOT NULL DEFAULT 0` }
+]
+
 export function applyPragmas(db: DatabaseType): void {
   db.pragma('journal_mode = WAL')
   db.pragma('synchronous = NORMAL')
@@ -63,9 +92,18 @@ export function applyPragmas(db: DatabaseType): void {
   db.pragma('foreign_keys = ON')
 }
 
+function listColumns(db: DatabaseType, table: string): string[] {
+  const rows = db.pragma(`table_info(${table})`) as { name: string }[]
+  return rows.map((r) => r.name)
+}
+
 export function applyMigrations(db: DatabaseType): void {
   for (const sql of SCHEMA_STATEMENTS) {
     db.exec(sql)
+  }
+  const cols = new Set(listColumns(db, 'messages'))
+  for (const m of POST_MIGRATIONS) {
+    if (!cols.has(m.column)) db.exec(m.sql)
   }
 }
 
@@ -85,8 +123,9 @@ export function openDatabase(filePath: string): DbInstance {
   applyMigrations(db)
 
   const insertMsgStmt = db.prepare(
-    `INSERT OR IGNORE INTO messages (wa_msg_id, timestamp, text, source, raw_json)
-     VALUES (?, ?, ?, ?, ?)`
+    `INSERT OR IGNORE INTO messages
+       (wa_msg_id, timestamp, text, source, raw_json, kind, media_meta, from_me)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   )
 
   const insertEmbStmt = db.prepare(
@@ -94,7 +133,7 @@ export function openDatabase(filePath: string): DbInstance {
   )
 
   const searchStmt = db.prepare<[Buffer, number], SimilarResult>(`
-    SELECT m.id, m.wa_msg_id, m.timestamp, m.text, m.source, e.distance
+    SELECT m.id, m.wa_msg_id, m.timestamp, m.text, m.source, m.kind, e.distance
     FROM message_embeddings e
     JOIN messages m ON m.id = e.msg_id
     WHERE e.embedding MATCH ? AND k = ?
@@ -121,7 +160,10 @@ export function openDatabase(filePath: string): DbInstance {
         msg.timestamp,
         msg.text,
         msg.source,
-        msg.raw_json ?? null
+        msg.raw_json ?? null,
+        msg.kind ?? 'text',
+        msg.media ? JSON.stringify(msg.media) : null,
+        msg.from_me ? 1 : 0
       )
       const inserted = r.changes > 0
       return {

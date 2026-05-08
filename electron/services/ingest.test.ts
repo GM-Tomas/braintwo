@@ -197,14 +197,53 @@ describe('createIngestPipeline', () => {
     )
   })
 
-  it('skips messages without text or caption', () => {
+  it('captures media-only messages without caption (kind preserved)', () => {
     const p = createIngestPipeline(db, logger as never)
     const r = p.ingest(
       baseMsg({ message: { imageMessage: { caption: null } } }),
       'realtime'
     )
+    expect(r.inserted).toBe(true)
+    expect(r.kind).toBe('image')
+    expect(p.count()).toBe(1)
+  })
+
+  it('captures voice notes (audio only) and stores ptt + duration meta', () => {
+    const p = createIngestPipeline(db, logger as never)
+    const r = p.ingest(
+      baseMsg({
+        key: { id: 'voice-1' },
+        message: {
+          audioMessage: {
+            seconds: 12,
+            mimetype: 'audio/ogg; codecs=opus',
+            ptt: true
+          }
+        }
+      }),
+      'realtime'
+    )
+    expect(r.inserted).toBe(true)
+    expect(r.kind).toBe('audio')
+    const row = db.raw
+      .prepare('SELECT kind, media_meta, text FROM messages WHERE wa_msg_id = ?')
+      .get('voice-1') as { kind: string; media_meta: string; text: string }
+    expect(row.kind).toBe('audio')
+    expect(row.text).toBe('')
+    const meta = JSON.parse(row.media_meta) as Record<string, unknown>
+    expect(meta.durationSec).toBe(12)
+    expect(meta.ptt).toBe(true)
+    expect(meta.mimetype).toBe('audio/ogg; codecs=opus')
+  })
+
+  it('skips fully-empty messages (no text, no media, unknown kind) as "empty"', () => {
+    const p = createIngestPipeline(db, logger as never)
+    const r = p.ingest(
+      { ...baseMsg(), message: null },
+      'realtime'
+    )
     expect(r.inserted).toBe(false)
-    expect(r.skipped).toBe('no-text')
+    expect(r.skipped).toBe('empty')
     expect(p.count()).toBe(0)
   })
 

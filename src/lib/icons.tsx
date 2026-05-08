@@ -28,6 +28,11 @@ export type IconName =
   | 'logout'
   | 'check'
   | 'x'
+  | 'image'
+  | 'video'
+  | 'file'
+  | 'sticker'
+  | 'help'
 
 export function Icon({
   name,
@@ -169,6 +174,43 @@ function renderPath(
         <>
           <line x1="6" y1="6" x2="18" y2="18" {...s} />
           <line x1="6" y1="18" x2="18" y2="6" {...s} />
+        </>
+      )
+    case 'image':
+      return (
+        <>
+          <rect x="3" y="3" width="18" height="18" rx="2" {...s} />
+          <circle cx="8.5" cy="8.5" r="1.5" {...s} />
+          <polyline points="21 15 16 10 5 21" {...s} />
+        </>
+      )
+    case 'video':
+      return (
+        <>
+          <rect x="2" y="6" width="14" height="12" rx="2" {...s} />
+          <polygon points="16 9 22 6 22 18 16 15" {...s} />
+        </>
+      )
+    case 'file':
+      return (
+        <>
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" {...s} />
+          <polyline points="14 2 14 8 20 8" {...s} />
+        </>
+      )
+    case 'sticker':
+      return (
+        <>
+          <path d="M15 3H5a2 2 0 00-2 2v14a2 2 0 002 2h10l6-6V5a2 2 0 00-2-2z" {...s} />
+          <path d="M15 21V15a2 2 0 012-2h4" {...s} />
+        </>
+      )
+    case 'help':
+      return (
+        <>
+          <circle cx="12" cy="12" r="10" {...s} />
+          <path d="M9.1 9a3 3 0 015.83 1c0 2-3 3-3 3" {...s} />
+          <line x1="12" y1="17" x2="12.01" y2="17" {...s} />
         </>
       )
     default:

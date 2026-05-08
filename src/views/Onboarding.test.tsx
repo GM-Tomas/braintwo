@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, act, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Onboarding } from './Onboarding'
+import { Onboarding, WelcomeCards } from './Onboarding'
 import {
   installBraintwoBridge,
   type BridgeHandle
@@ -200,6 +200,25 @@ describe('<Onboarding />', () => {
           screen.queryByRole('img', { name: /QR/i })
         ).not.toBeInTheDocument()
       })
+    })
+  })
+
+  describe('<WelcomeCards />', () => {
+    it('renders the four feature cards and headline', () => {
+      render(<WelcomeCards onContinue={() => {}} />)
+      expect(screen.getByText(/Tu segundo cerebro de WhatsApp/)).toBeInTheDocument()
+      expect(screen.getByText('Buscá en tu historial')).toBeInTheDocument()
+      expect(screen.getByText('Timeline propio')).toBeInTheDocument()
+      expect(screen.getByText('100% local y privado')).toBeInTheDocument()
+      expect(screen.getByText('Vinculación oficial')).toBeInTheDocument()
+    })
+
+    it('invokes onContinue when the button is clicked', async () => {
+      const onContinue = vi.fn()
+      render(<WelcomeCards onContinue={onContinue} />)
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('button', { name: /Continuar/ }))
+      expect(onContinue).toHaveBeenCalledTimes(1)
     })
   })
 

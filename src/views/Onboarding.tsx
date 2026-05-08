@@ -2,7 +2,99 @@ import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import type { WAConnectionState } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
-import { Icon } from '@/lib/icons'
+import { Icon, BrainMark, type IconName } from '@/lib/icons'
+
+interface WelcomeCardsProps {
+  onContinue: () => void
+}
+
+interface FeatureCard {
+  icon: IconName
+  title: string
+  body: string
+}
+
+const FEATURE_CARDS: FeatureCard[] = [
+  {
+    icon: 'search',
+    title: 'Buscá en tu historial',
+    body: 'Encontrá cualquier conversación, audio o link que mandaste o recibiste, sin scrollear meses de chats.'
+  },
+  {
+    icon: 'home',
+    title: 'Timeline propio',
+    body: 'Tu actividad de WhatsApp ordenada cronológicamente — un feed de lo que importa, no de lo que el algoritmo elige.'
+  },
+  {
+    icon: 'bolt',
+    title: '100% local y privado',
+    body: 'Todo se procesa en tu computadora. Tus mensajes nunca salen a la nube ni a servidores externos.'
+  },
+  {
+    icon: 'wa',
+    title: 'Vinculación oficial',
+    body: 'Se conecta como un dispositivo vinculado de WhatsApp, igual que WhatsApp Web. No reemplaza tu app.'
+  }
+]
+
+export function WelcomeCards({ onContinue }: WelcomeCardsProps) {
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden animate-fade-in">
+      <header className="flex flex-col items-center gap-4 px-14 pt-14 pb-6 text-center">
+        <div className="p-2" aria-hidden>
+          <BrainMark size={44} />
+        </div>
+        <div className="text-[11px] uppercase tracking-eyebrow text-bt-dim">
+          Bienvenido a BrainTwo
+        </div>
+        <h1 className="font-display text-[44px] leading-tight tracking-tight text-bt-text">
+          Tu segundo cerebro de WhatsApp
+        </h1>
+        <p className="max-w-xl text-sm leading-relaxed text-bt-muted">
+          Una capa local sobre tus chats que te deja buscar, recordar y revivir lo que pasó —
+          sin enviar nada a la nube.
+        </p>
+      </header>
+
+      <div className="flex flex-1 overflow-y-auto px-14 pb-10">
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-8">
+          <div className="grid gap-4 md:grid-cols-2">
+            {FEATURE_CARDS.map((card) => (
+              <article
+                key={card.title}
+                className="flex flex-col gap-3 rounded-[14px] border border-bt-border bg-bt-surf p-5"
+              >
+                <div
+                  className="flex h-10 w-10 items-center justify-center rounded-[10px]"
+                  style={{ background: 'linear-gradient(135deg,#1a8fe320,#2ec4a520)' }}
+                  aria-hidden
+                >
+                  <Icon name={card.icon} size={20} className="text-bt-text" />
+                </div>
+                <h2 className="text-[15px] font-semibold text-bt-text">{card.title}</h2>
+                <p className="text-sm leading-relaxed text-bt-muted">{card.body}</p>
+              </article>
+            ))}
+          </div>
+
+          <div className="flex flex-col items-center gap-3">
+            <button
+              type="button"
+              onClick={onContinue}
+              className="rounded-[10px] px-6 py-3 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ background: 'linear-gradient(135deg,#1a8fe3,#2ec4a5)' }}
+            >
+              Continuar
+            </button>
+            <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">
+              Próximo paso · Vincular WhatsApp
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export function Onboarding() {
   const [state, setState] = useState<WAConnectionState>('connecting')

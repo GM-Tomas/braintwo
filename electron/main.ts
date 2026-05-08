@@ -15,6 +15,8 @@ import type { WAConnectionState } from './services/whatsapp-state'
 import { openDatabase, type DbInstance } from './services/db'
 import {
   createIngestPipeline,
+  extractKind,
+  extractMediaMeta,
   extractText,
   extractTimestampMs,
   type IngestPipeline,
@@ -235,7 +237,10 @@ function startWhatsApp(): void {
       wa_msg_id: id,
       timestamp: extractTimestampMs(raw),
       text: extractText(raw),
-      source
+      source,
+      kind: extractKind(raw),
+      media: extractMediaMeta(raw),
+      fromMe: raw.key?.fromMe === true
     })
   })
 

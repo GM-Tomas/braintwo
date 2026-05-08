@@ -13,6 +13,9 @@ const sample = (over: Partial<RecentMessage> = {}): RecentMessage => ({
   timestamp: 1_700_000_000_000,
   text: 'hello',
   source: 'realtime',
+  kind: 'text',
+  media: null,
+  fromMe: true,
   ...over
 })
 
@@ -154,6 +157,172 @@ describe('<Timeline />', () => {
       expect(screen.getByText('Catch-up')).toBeInTheDocument()
       expect(screen.getByText('Histórico')).toBeInTheDocument()
       expect(screen.getByText('Importado')).toBeInTheDocument()
+    })
+  })
+
+  describe('media kinds', () => {
+    it('renders an audio voice note with duration + ptt label', async () => {
+      h = installBraintwoBridge({
+        initialMessageCount: 1,
+        initialRecent: [
+          sample({
+            id: 1,
+            kind: 'audio',
+            text: '',
+            media: { durationSec: 47, ptt: true, mimetype: 'audio/ogg' }
+          })
+        ]
+      })
+      render(<Timeline />)
+      expect(await screen.findByText('Audio')).toBeInTheDocument()
+      // duration formatted as 0:47 + "Nota de voz"
+      expect(screen.getByText(/0:47/)).toBeInTheDocument()
+      expect(screen.getByText(/Nota de voz/)).toBeInTheDocument()
+    })
+
+    it('renders an image without caption as "Imagen · Sin descripción"', async () => {
+      h = installBraintwoBridge({
+        initialMessageCount: 1,
+        initialRecent: [
+          sample({
+            id: 1,
+            kind: 'image',
+            text: '',
+            media: { mimetype: 'image/jpeg' }
+          })
+        ]
+      })
+      render(<Timeline />)
+      expect(await screen.findByText('Imagen')).toBeInTheDocument()
+      expect(screen.getByText(/Sin descripción/)).toBeInTheDocument()
+    })
+
+    it('renders an image WITH caption using the caption as preview', async () => {
+      h = installBraintwoBridge({
+        initialMessageCount: 1,
+        initialRecent: [
+          sample({
+            id: 1,
+            kind: 'image',
+            text: 'Mi nuevo escritorio',
+            media: { mimetype: 'image/jpeg' }
+          })
+        ]
+      })
+      render(<Timeline />)
+      expect(await screen.findByText('Mi nuevo escritorio')).toBeInTheDocument()
+      // The "Imagen" label is NOT shown when text is present (preview wins).
+      expect(screen.queryByText('Imagen')).not.toBeInTheDocument()
+    })
+
+    it('renders a video with formatted duration', async () => {
+      h = installBraintwoBridge({
+        initialMessageCount: 1,
+        initialRecent: [
+          sample({
+            id: 1,
+            kind: 'video',
+            text: '',
+            media: { durationSec: 83, mimetype: 'video/mp4' }
+          })
+        ]
+      })
+      render(<Timeline />)
+      expect(await screen.findByText('Video')).toBeInTheDocument()
+      expect(screen.getByText(/1:23/)).toBeInTheDocument()
+    })
+
+    it('renders a document with fileName', async () => {
+      h = installBraintwoBridge({
+        initialMessageCount: 1,
+        initialRecent: [
+          sample({
+            id: 1,
+            kind: 'document',
+            text: '',
+            media: { fileName: 'pitch.pdf', mimetype: 'application/pdf' }
+          })
+        ]
+      })
+      render(<Timeline />)
+      expect(await screen.findByText('Documento')).toBeInTheDocument()
+      expect(screen.getByText(/pitch\.pdf/)).toBeInTheDocument()
+    })
+
+    it('renders bytes when fileName is missing', async () => {
+      h = installBraintwoBridge({
+        initialMessageCount: 1,
+        initialRecent: [
+          sample({
+            id: 1,
+            kind: 'document',
+            text: '',
+            media: { fileLengthBytes: 2_500_000 }
+          })
+        ]
+      })
+      render(<Timeline />)
+      expect(await screen.findByText(/2\.4 MB/)).toBeInTheDocument()
+    })
+
+    it('renders "Sin contenido textual" when media is null', async () => {
+      h = installBraintwoBridge({
+        initialMessageCount: 1,
+        initialRecent: [sample({ id: 1, kind: 'other', text: '', media: null })]
+      })
+      render(<Timeline />)
+      expect(await screen.findByText(/Sin contenido textual/)).toBeInTheDocument()
+    })
+  })
+
+  describe('kind filter', () => {
+    beforeEach(() => {
+      h = installBraintwoBridge({
+        initialMessageCount: 3,
+        initialRecent: [
+          sample({ id: 1, kind: 'text', text: 'plain text' }),
+          sample({
+            id: 2,
+            kind: 'audio',
+            text: '',
+            media: { durationSec: 12, ptt: true }
+          }),
+          sample({
+            id: 3,
+            kind: 'image',
+            text: '',
+            media: { mimetype: 'image/jpeg' }
+          })
+        ]
+      })
+    })
+
+    it('shows all messages by default', async () => {
+      render(<Timeline />)
+      expect(await screen.findByText('plain text')).toBeInTheDocument()
+      expect(screen.getByText('Audio')).toBeInTheDocument()
+      expect(screen.getByText('Imagen')).toBeInTheDocument()
+    })
+
+    it('filters to audios when the Audios pill is active', async () => {
+      const userEvent = (await import('@testing-library/user-event')).default
+      const u = userEvent.setup()
+      render(<Timeline />)
+      await screen.findByText('plain text')
+      await u.click(screen.getByRole('button', { name: /Audios/ }))
+      expect(screen.queryByText('plain text')).not.toBeInTheDocument()
+      expect(screen.getByText('Audio')).toBeInTheDocument()
+    })
+
+    it('shows the empty-filter copy when no messages match the filter', async () => {
+      const userEvent = (await import('@testing-library/user-event')).default
+      const u = userEvent.setup()
+      render(<Timeline />)
+      await screen.findByText('plain text')
+      await u.click(screen.getByRole('button', { name: /Videos/ }))
+      expect(
+        screen.getByText(/No hay mensajes del tipo/)
+      ).toBeInTheDocument()
     })
   })
 

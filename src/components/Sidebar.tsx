@@ -8,7 +8,6 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { id: 'onboarding', icon: 'wa', label: 'Onboarding' },
   { id: 'search', icon: 'search', label: 'Buscar' },
   { id: 'timeline', icon: 'home', label: 'Timeline' }
 ]
@@ -33,6 +32,7 @@ interface SidebarProps {
   connectionState: WAConnectionState
   version?: string
   platform?: NodeJS.Platform | null
+  onLogout?: () => void
 }
 
 export function Sidebar({
@@ -40,11 +40,12 @@ export function Sidebar({
   setView,
   connectionState,
   version,
-  platform
+  platform,
+  onLogout
 }: SidebarProps) {
   return (
     <aside
-      className="flex w-16 shrink-0 flex-col items-center border-r border-bt-border bg-bt-bg py-4"
+      className="flex w-20 shrink-0 flex-col items-center border-r border-bt-border bg-bt-bg py-4"
       aria-label="Navegación principal"
     >
       <div className="mb-6 p-1.5" title="BrainTwo">
@@ -82,9 +83,9 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="flex flex-col items-center gap-3 pb-1">
+      <div className="flex w-full flex-col items-center gap-2 px-1 pb-1">
         <div
-          className="flex h-10 w-10 items-center justify-center rounded-[10px]"
+          className="flex h-8 w-8 items-center justify-center rounded-[10px]"
           aria-label="Estado de conexión"
           title={STATUS_LABEL[connectionState]}
         >
@@ -95,12 +96,26 @@ export function Sidebar({
         </div>
         <span
           aria-live="polite"
-          className="text-[10px] tracking-eyebrow uppercase text-bt-dim text-center px-1 leading-tight"
+          className="w-full text-[10px] uppercase text-bt-dim text-center leading-tight"
         >
           {STATUS_LABEL[connectionState]}
         </span>
+        {onLogout && (
+          <button
+            type="button"
+            onClick={onLogout}
+            aria-label="Cerrar sesión de WhatsApp"
+            title="Cerrar sesión de WhatsApp"
+            className="mt-1 flex w-full flex-col items-center gap-1 rounded-[10px] py-1.5 text-bt-muted transition-colors hover:bg-bt-hover/60 hover:text-bt-text"
+          >
+            <Icon name="logout" size={16} />
+            <span className="text-[9px] uppercase leading-tight">
+              Cerrar sesión
+            </span>
+          </button>
+        )}
         {(version || platform) && (
-          <span className="text-[9px] uppercase tracking-ribbon text-bt-dim text-center px-1 leading-tight">
+          <span className="mt-1 text-[9px] uppercase text-bt-dim text-center leading-tight">
             {version ? `v${version}` : ''}
             {version && platform ? ' · ' : ''}
             {platform ?? ''}

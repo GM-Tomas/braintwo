@@ -10,12 +10,12 @@ describe('<Sidebar />', () => {
     expect(screen.getByText('BrainTwo')).toBeInTheDocument()
   })
 
-  it('renders the three nav buttons with accessible names', () => {
+  it('renders the two post-onboarding nav buttons with accessible names', () => {
     const setView = vi.fn()
-    render(<Sidebar view="onboarding" setView={setView} connectionState="connecting" />)
-    expect(screen.getByRole('button', { name: 'Onboarding' })).toBeInTheDocument()
+    render(<Sidebar view="search" setView={setView} connectionState="open" />)
     expect(screen.getByRole('button', { name: 'Buscar' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Timeline' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Onboarding' })).not.toBeInTheDocument()
   })
 
   it('marks the current view with aria-current=page', () => {
@@ -25,7 +25,7 @@ describe('<Sidebar />', () => {
       'aria-current',
       'page'
     )
-    expect(screen.getByRole('button', { name: 'Onboarding' })).not.toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Timeline' })).not.toHaveAttribute(
       'aria-current'
     )
   })
