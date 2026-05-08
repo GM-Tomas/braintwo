@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { MessageSource, RecentMessage } from '@shared/types'
+import { PageHeader } from '../components/PageHeader'
+import { Icon } from '@/lib/icons'
 
 const RECENT_LIMIT = 50
 
@@ -10,11 +12,11 @@ const SOURCE_LABEL: Record<MessageSource, string> = {
   export: 'Importado'
 }
 
-const SOURCE_TONE: Record<MessageSource, string> = {
-  realtime: 'bg-emerald-900/30 text-bt-accent',
-  'offline-sync': 'bg-amber-900/30 text-amber-300',
-  'history-sync': 'bg-sky-900/30 text-sky-300',
-  export: 'bg-bt-surface text-bt-muted'
+const SOURCE_DOT: Record<MessageSource, string> = {
+  realtime: 'bg-bt-accent',
+  'offline-sync': 'bg-bt-amber',
+  'history-sync': 'bg-bt-primary',
+  export: 'bg-bt-red'
 }
 
 export function Timeline() {
@@ -52,40 +54,98 @@ export function Timeline() {
   )
 
   return (
-    <div className="mx-auto max-w-2xl pt-4">
-      <header className="mb-4 flex items-baseline justify-between">
-        <h2 className="text-xl font-semibold">Timeline</h2>
-        <span className="text-sm text-bt-muted" aria-label="Total de mensajes">
-          {count.toLocaleString()} {count === 1 ? 'mensaje' : 'mensajes'}
-        </span>
-      </header>
+    <div className="flex flex-1 flex-col overflow-hidden animate-fade-in">
+      <PageHeader
+        eyebrow="Tu cerebro"
+        title="Timeline"
+        subtitle="Todo lo que mandaste a BrainTwo, ordenado cronológicamente."
+        action={
+          <span
+            className="text-sm text-bt-muted"
+            aria-label="Total de mensajes"
+          >
+            {count.toLocaleString()} {count === 1 ? 'mensaje' : 'mensajes'}
+          </span>
+        }
+      />
 
-      {messages.length === 0 ? (
-        <div className="rounded-lg border border-bt-border bg-bt-surface p-6 text-sm text-bt-muted">
-          Aún no hay mensajes. Apenas BrainTwo se conecte y reciba algo en tu
-          chat conmigo mismo, vas a verlo acá.
+      <div className="flex-1 overflow-y-auto px-14 pb-14 pt-2">
+        <div className="max-w-[760px]">
+          {messages.length === 0 ? (
+            <EmptyState />
+          ) : (
+            <ul>
+              {messages.map((m) => (
+                <NoteRow
+                  key={m.id}
+                  message={m}
+                  formatted={formatter.format(new Date(m.timestamp))}
+                />
+              ))}
+            </ul>
+          )}
         </div>
-      ) : (
-        <ul className="space-y-2">
-          {messages.map((m) => (
-            <li
-              key={m.id}
-              className="rounded-lg border border-bt-border bg-bt-surface p-3"
-            >
-              <div className="mb-1 flex items-center justify-between text-xs">
-                <span className={`rounded px-2 py-0.5 ${SOURCE_TONE[m.source]}`}>
-                  {SOURCE_LABEL[m.source]}
-                </span>
-                <time className="text-bt-muted" dateTime={new Date(m.timestamp).toISOString()}>
-                  {formatter.format(new Date(m.timestamp))}
-                </time>
-              </div>
-              <p className="whitespace-pre-wrap text-sm">{m.text}</p>
-            </li>
-          ))}
-        </ul>
-      )}
+      </div>
     </div>
+  )
+}
+
+function EmptyState() {
+  return (
+    <div className="py-20 text-center text-[13px] text-bt-dim">
+      <p>Aún no hay mensajes.</p>
+      <p className="mt-1">
+        Apenas BrainTwo se conecte y reciba algo en tu chat conmigo mismo, vas a
+        verlo acá.
+      </p>
+    </div>
+  )
+}
+
+function NoteRow({
+  message,
+  formatted
+}: {
+  message: RecentMessage
+  formatted: string
+}) {
+  return (
+    <li>
+      <article className="flex items-start gap-[18px] border-b border-bt-border py-5 transition-colors duration-100 hover:bg-white/[0.015]">
+        <div
+          aria-hidden
+          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
+          style={{
+            background: 'rgba(26,143,227,0.08)',
+            border: '1px solid rgba(26,143,227,0.2)'
+          }}
+        >
+          <Icon name="bolt" size={15} className="text-bt-primary" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="mb-2 line-clamp-2 whitespace-pre-wrap text-[14.5px] leading-relaxed text-bt-text">
+            {message.text}
+          </p>
+          <div className="flex items-center gap-2.5 text-[11.5px] text-bt-dim">
+            <span className="inline-flex items-center gap-1.5 text-bt-muted">
+              <span
+                aria-hidden
+                className={`h-1.5 w-1.5 rounded-full ${SOURCE_DOT[message.source]}`}
+              />
+              {SOURCE_LABEL[message.source]}
+            </span>
+            <span>·</span>
+            <time
+              dateTime={new Date(message.timestamp).toISOString()}
+              className="text-bt-dim"
+            >
+              {formatted}
+            </time>
+          </div>
+        </div>
+        <Icon name="chev" size={14} className="mt-1 text-bt-dim" />
+      </article>
+    </li>
   )
 }
 

@@ -31,6 +31,9 @@ export default defineConfig({
         'electron/main-helpers.ts',
         'src/App.tsx',
         'src/views/**/*.tsx',
+        'src/components/**/*.tsx',
+        'src/lib/**/*.ts',
+        'src/lib/**/*.tsx',
         'scripts/generate-icons-lib.mjs'
       ],
       exclude: [
