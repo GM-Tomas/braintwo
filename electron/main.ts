@@ -198,7 +198,11 @@ function showWindow(): void {
 function openStorage(): void {
   const dbPath = join(app.getPath('userData'), 'braintwo.db')
   db = openDatabase(dbPath)
-  ingest = createIngestPipeline(db)
+  const ingestLogger = isDev
+    ? pino({ level: 'info', name: 'ingest' })
+    : undefined
+  ingest = createIngestPipeline(db, ingestLogger)
+  ingestLogger?.info({ dbPath, count: ingest.count() }, 'storage opened')
   messageBatcher = createMessageBatcher<RecentMessage>({
     broadcast: (batch) => broadcast('app:messages-batch', batch)
   })

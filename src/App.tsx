@@ -42,6 +42,7 @@ export default function App() {
   const [waState, setWaState] = useState<WAConnectionState>('connecting')
   const [version, setVersion] = useState<string>('')
   const [platform, setPlatform] = useState<NodeJS.Platform | null>(null)
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
   useEffect(() => {
     void window.braintwo.wa.getConnectionState().then(setWaState)
@@ -63,9 +64,9 @@ export default function App() {
       return
     }
     if (waState === 'logged-out') {
-      // Skip welcome on re-login if user was already onboarded.
       setPhase(readFlag(ONBOARDED_KEY) || readFlag(FTU_KEY) ? 'qr' : 'welcome')
       setView('onboarding')
+      setShowLogoutConfirm(false)
     }
   }, [waState, autoRouted, phase])
 
@@ -102,21 +103,56 @@ export default function App() {
         connectionState={waState}
         version={version}
         platform={platform}
-        onLogout={() => {
-          if (
-            window.confirm(
-              '¿Cerrar sesión de WhatsApp? Vas a tener que escanear el QR de nuevo.'
-            )
-          ) {
-            void window.braintwo.wa.logout()
-          }
-        }}
+        onLogout={() => setShowLogoutConfirm(true)}
       />
       <main className="flex flex-1 flex-col overflow-hidden">
         {view === 'onboarding' && <Onboarding />}
         {view === 'search' && <Search />}
         {view === 'timeline' && <Timeline />}
       </main>
+      {showLogoutConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-6 backdrop-blur-[2px]"
+          role="presentation"
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="logout-title"
+            className="w-full max-w-[360px] rounded-[8px] border border-bt-border bg-[#0a101b] p-5 shadow-[0_20px_80px_rgba(0,0,0,0.45)]"
+          >
+            <h2
+              id="logout-title"
+              className="font-display text-[20px] leading-tight text-bt-text"
+            >
+              Cerrar sesión de WhatsApp
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-bt-muted">
+              Para volver a conectar BrainTwo vas a tener que escanear el QR de
+              nuevo.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowLogoutConfirm(false)}
+                className="h-9 rounded-[8px] border border-bt-border px-4 text-[13px] font-medium text-bt-muted transition-colors hover:bg-bt-hover hover:text-bt-text"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLogoutConfirm(false)
+                  void window.braintwo.wa.logout()
+                }}
+                className="h-9 rounded-[8px] bg-bt-red px-4 text-[13px] font-semibold text-white transition-colors hover:bg-bt-red/90"
+              >
+                Cerrar sesión
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   )
 }

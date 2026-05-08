@@ -39,9 +39,9 @@ describe('<Sidebar />', () => {
   })
 
   it.each([
-    ['connecting', 'Conectando…'],
+    ['connecting', 'Conectando...'],
     ['open', 'Conectado'],
-    ['disconnected', 'Reconectando…'],
+    ['disconnected', 'Reconectando...'],
     ['logged-out', 'Sesión cerrada']
   ] as const)('shows the connection label for %s', (state, label) => {
     const setView = vi.fn()
@@ -64,7 +64,7 @@ describe('<Sidebar />', () => {
     expect(screen.getByText(/darwin/)).toBeInTheDocument()
   })
 
-  it('omits the footer when no version/platform supplied', () => {
+  it('omits the footer version when no version/platform supplied', () => {
     const setView = vi.fn()
     render(<Sidebar view="onboarding" setView={setView} connectionState="open" />)
     expect(screen.queryByText(/v\d/)).not.toBeInTheDocument()

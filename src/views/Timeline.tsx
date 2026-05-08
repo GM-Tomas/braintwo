@@ -142,14 +142,14 @@ export function Timeline() {
 
       <KindFilter active={filter} onChange={setFilter} counts={counts} total={messages.length} />
 
-      <div className="flex-1 overflow-y-auto px-14 pb-14 pt-2">
-        <div className="max-w-[760px]">
+      <div className="flex-1 overflow-y-auto px-10 pb-14 pt-2">
+        <div className="w-full">
           {messages.length === 0 ? (
             <EmptyState />
           ) : visible.length === 0 ? (
             <FilteredEmpty kind={filter as MessageKind} />
           ) : (
-            <ul>
+            <ul className="w-full">
               {visible.map((m) => (
                 <NoteRow
                   key={m.id}
@@ -239,7 +239,7 @@ function NoteRow({
   const style = KIND_STYLE[message.kind] ?? KIND_STYLE.other
   return (
     <li>
-      <article className="flex items-start gap-[18px] border-b border-bt-border py-5 transition-colors duration-100 hover:bg-white/[0.015]">
+      <article className="group grid min-h-[92px] grid-cols-[36px_minmax(0,1fr)_16px] items-start gap-[18px] border-b border-bt-border px-4 py-5 transition-colors duration-100 hover:bg-white/[0.018]">
         <div
           aria-hidden
           className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
@@ -275,7 +275,11 @@ function NoteRow({
             ) : null}
           </div>
         </div>
-        <Icon name="chev" size={14} className="mt-1 text-bt-dim" />
+        <Icon
+          name="chev"
+          size={14}
+          className="mt-1 text-bt-dim transition-colors group-hover:text-bt-muted"
+        />
       </article>
     </li>
   )

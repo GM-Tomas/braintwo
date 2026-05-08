@@ -20,6 +20,14 @@ interface MinimalEv {
   on: (event: string, handler: (...args: unknown[]) => void) => void
 }
 
+interface MinimalWaUser {
+  id?: string
+  phoneNumber?: string
+  lid?: string
+  name?: string
+  notify?: string
+}
+
 interface MinimalSocket {
   ev: MinimalEv
   end?: (err?: Error) => void
@@ -37,7 +45,7 @@ interface MinimalSocket {
 }
 
 interface MinimalAuthState {
-  state: { creds: unknown; keys: unknown }
+  state: { creds: { me?: MinimalWaUser } & Record<string, unknown>; keys: unknown }
   saveCreds: () => Promise<void> | void
 }
 
@@ -83,6 +91,8 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
   private currentBackoffMs = 0
   private reconnectHandle: unknown = null
   private socket: MinimalSocket | null = null
+  private authCreds: MinimalAuthState['state']['creds'] | null = null
+  private pendingMessages: IngestableMessage[] = []
   private stopped = false
   private connecting = false
 
@@ -165,6 +175,8 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       }
     }
     this.socket = null
+    this.authCreds = null
+    this.pendingMessages = []
     await this.rmAuth(this.authPath)
     this.transitionTo('logged-out')
     this.currentQr = null
@@ -191,6 +203,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       this.transitionTo('connecting')
 
       const auth = await this.authStateFactory(this.authPath)
+      this.authCreds = auth.state.creds
       // fetchLatestBaileysVersion does an HTTP GET to a remote repo; if it
       // fails (offline, blocked, slow DNS) we don't want to block pairing.
       // Fall back to a known-good version so the socket still initializes.
@@ -221,8 +234,14 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       })
 
       this.socket.ev.on('creds.update', (...args: unknown[]) => {
+        const update = args[0] as { me?: MinimalWaUser } | undefined
+        if (update?.me) {
+          this.authCreds = { ...(this.authCreds ?? {}), me: update.me }
+        }
         void Promise.resolve(auth.saveCreds(...(args as []))).catch((err: unknown) => {
           this.logger.warn({ err }, 'saveCreds failed')
+        }).finally(() => {
+          this.flushPendingMessages('creds.update')
         })
       })
 
@@ -266,6 +285,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
     if (t.state === 'open') {
       this.currentBackoffMs = 0
       this.currentQr = null
+      this.flushPendingMessages('connection.open')
     }
 
     if (t.isLoggedOut) {
@@ -276,12 +296,16 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
   }
 
   private myJidVariants(): string[] {
-    const u = this.socket?.user
-    if (!u) return []
-    const all = [u.id, u.phoneNumber, u.lid].filter(
-      (v): v is string => typeof v === 'string' && v.length > 0
-    )
-    return all
+    const seen = new Set<string>()
+    const addUser = (u: MinimalWaUser | null | undefined) => {
+      if (!u) return
+      for (const jid of [u.id, u.phoneNumber, u.lid]) {
+        if (typeof jid === 'string' && jid.length > 0) seen.add(jid)
+      }
+    }
+    addUser(this.socket?.user)
+    addUser(this.authCreds?.me)
+    return Array.from(seen)
   }
 
   private handleMessagesUpsert(evt: {
@@ -289,15 +313,36 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
     messages?: WAMessageLike[]
   }): void {
     if (!evt.messages) return
-    const variants = this.myJidVariants()
     // type === 'append' is offline catch-up; 'notify' (and others) are realtime.
     const source: MessageSource =
       evt.type === 'append' ? 'offline-sync' : 'realtime'
+    this.processMessageBatch('messages.upsert', evt.messages, source, evt.type)
+  }
+
+  private handleHistorySet(evt: { messages?: WAMessageLike[] }): void {
+    if (!evt.messages) return
+    this.processMessageBatch('messaging-history.set', evt.messages, 'history-sync')
+  }
+
+  private processMessageBatch(
+    event: string,
+    messages: WAMessageLike[],
+    source: MessageSource,
+    type?: string
+  ): void {
+    const variants = this.myJidVariants()
+    if (variants.length === 0) {
+      this.queuePendingMessages(messages, source, event, type)
+      return
+    }
+    if (this.pendingMessages.length > 0) {
+      this.flushPendingMessages(`${event}.variants-known`)
+    }
 
     let kept = 0
     let skipped = 0
     const sampleRemoteJids = new Set<string>()
-    for (const msg of evt.messages) {
+    for (const msg of messages) {
       const remoteJid = msg.key?.remoteJid
       if (remoteJid) sampleRemoteJids.add(remoteJid)
       if (!isSelfChat(remoteJid, variants)) {
@@ -309,26 +354,54 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
     }
     this.logger.info(
       {
-        event: 'messages.upsert',
-        type: evt.type,
-        total: evt.messages.length,
+        event,
+        type,
+        total: messages.length,
         kept,
         skipped,
         sample_remote_jids: Array.from(sampleRemoteJids).slice(0, 5),
         my_jid_variants: variants
       },
-      'messages.upsert processed'
+      `${event} processed`
     )
   }
 
-  private handleHistorySet(evt: { messages?: WAMessageLike[] }): void {
-    if (!evt.messages) return
-    const variants = this.myJidVariants()
+  private queuePendingMessages(
+    messages: WAMessageLike[],
+    source: MessageSource,
+    event: string,
+    type?: string
+  ): void {
+    for (const raw of messages) this.pendingMessages.push({ raw, source })
+    const sampleRemoteJids = new Set<string>()
+    for (const msg of messages) {
+      const remoteJid = msg.key?.remoteJid
+      if (remoteJid) sampleRemoteJids.add(remoteJid)
+    }
+    this.logger.warn(
+      {
+        event,
+        type,
+        queued: messages.length,
+        pending_total: this.pendingMessages.length,
+        sample_remote_jids: Array.from(sampleRemoteJids).slice(0, 5)
+      },
+      `${event} queued until own JID variants are known`
+    )
+  }
 
+  private flushPendingMessages(reason: string): void {
+    if (this.pendingMessages.length === 0) return
+    const variants = this.myJidVariants()
+    if (variants.length === 0) return
+
+    const pending = this.pendingMessages
+    this.pendingMessages = []
     let kept = 0
     let skipped = 0
     const sampleRemoteJids = new Set<string>()
-    for (const msg of evt.messages) {
+    for (const { raw, source } of pending) {
+      const msg = raw
       const remoteJid = msg.key?.remoteJid
       if (remoteJid) sampleRemoteJids.add(remoteJid)
       if (!isSelfChat(remoteJid, variants)) {
@@ -336,24 +409,27 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
         continue
       }
       kept++
-      this.emit('message', { raw: msg, source: 'history-sync' })
+      this.emit('message', { raw, source })
     }
     this.logger.info(
       {
-        event: 'messaging-history.set',
-        total: evt.messages.length,
+        event: 'pending.flush',
+        reason,
+        total: pending.length,
         kept,
         skipped,
         sample_remote_jids: Array.from(sampleRemoteJids).slice(0, 5),
         my_jid_variants: variants
       },
-      'messaging-history.set processed'
+      'queued WhatsApp messages processed'
     )
   }
 
   private handleServerLoggedOut(): void {
     this.clearReconnect()
     this.socket = null
+    this.authCreds = null
+    this.pendingMessages = []
     void this.rmAuth(this.authPath).catch((err: unknown) => {
       this.logger.warn({ err }, 'rmAuth after server logout failed')
     })

@@ -6,12 +6,12 @@ interface FakeSocket {
   ev: { on: ReturnType<typeof vi.fn> }
   end: ReturnType<typeof vi.fn>
   logout: ReturnType<typeof vi.fn>
-  user?: { id?: string }
+  user?: { id?: string; phoneNumber?: string; lid?: string }
   _handlers: Map<string, ((...args: unknown[]) => void)[]>
   _trigger: (event: string, ...args: unknown[]) => void
 }
 
-function makeFakeSocket(userId?: string): FakeSocket {
+function makeFakeSocket(user?: FakeSocket['user']): FakeSocket {
   const handlers = new Map<string, ((...args: unknown[]) => void)[]>()
   const sock: FakeSocket = {
     ev: {
@@ -23,7 +23,7 @@ function makeFakeSocket(userId?: string): FakeSocket {
     },
     end: vi.fn(),
     logout: vi.fn(async () => {}),
-    user: userId ? { id: userId } : undefined,
+    user,
     _handlers: handlers,
     _trigger: (event, ...args) => {
       for (const h of handlers.get(event) ?? []) h(...args)
@@ -47,11 +47,14 @@ interface Harness {
 
 interface HarnessOpts extends Partial<WhatsAppDeps> {
   userId?: string
+  user?: FakeSocket['user']
+  authMe?: FakeSocket['user']
 }
 
 async function buildHarness(overrides: HarnessOpts = {}): Promise<Harness> {
-  const { userId, ...waOverrides } = overrides
-  let socket: FakeSocket = makeFakeSocket(userId)
+  const { userId, user, authMe, ...waOverrides } = overrides
+  const socketUser = user ?? (userId ? { id: userId } : undefined)
+  let socket: FakeSocket = makeFakeSocket(socketUser)
   const sockets: FakeSocket[] = [socket]
   const saveCreds = vi.fn(async () => {})
   const reconnectCalls: { cb: () => void; ms: number }[] = []
@@ -60,12 +63,12 @@ async function buildHarness(overrides: HarnessOpts = {}): Promise<Harness> {
     authPath: '/tmp/auth-test',
     socketFactory: vi.fn(() => {
       // each connect creates a new fake socket
-      socket = makeFakeSocket(userId)
+      socket = makeFakeSocket(socketUser)
       sockets.push(socket)
       return socket
     }),
     authStateFactory: vi.fn(async () => ({
-      state: { creds: { id: 'creds' }, keys: { id: 'keys' } },
+      state: { creds: { id: 'creds', me: authMe }, keys: { id: 'keys' } },
       saveCreds
     })),
     versionFactory: vi.fn(async () => ({ version: [2, 3000, 0], isLatest: true })),
@@ -478,7 +481,7 @@ describe('whatsapp service', () => {
       expect(onMessage.mock.calls[0]![0].raw.key.id).toBe('m1')
     })
 
-    it('does nothing when sock.user.id is missing (no pairing yet)', async () => {
+    it('does not emit immediately when own JID variants are missing', async () => {
       const h = await buildHarness({ userId: undefined })
       const onMessage = vi.fn()
       h.service.on('message', onMessage)
@@ -487,6 +490,81 @@ describe('whatsapp service', () => {
         messages: [selfChatMsg('m1', 'x')]
       })
       expect(onMessage).not.toHaveBeenCalled()
+    })
+
+    it('uses creds.me as a fallback when sock.user is not populated yet', async () => {
+      const h = await buildHarness({
+        userId: undefined,
+        authMe: { phoneNumber: SELF }
+      })
+      const onMessage = vi.fn()
+      h.service.on('message', onMessage)
+
+      h.socket._trigger('messages.upsert', {
+        type: 'notify',
+        messages: [selfChatMsg('m1', 'from creds')]
+      })
+
+      expect(onMessage).toHaveBeenCalledTimes(1)
+      expect(onMessage.mock.calls[0]![0].raw.key.id).toBe('m1')
+    })
+
+    it('queues early upsert messages until own JID variants become available', async () => {
+      const h = await buildHarness({ userId: undefined })
+      const onMessage = vi.fn()
+      h.service.on('message', onMessage)
+
+      h.socket._trigger('messages.upsert', {
+        type: 'notify',
+        messages: [selfChatMsg('m1', 'early')]
+      })
+      expect(onMessage).not.toHaveBeenCalled()
+
+      h.socket.user = { id: SELF }
+      h.socket._trigger('connection.update', { connection: 'open' })
+
+      expect(onMessage).toHaveBeenCalledTimes(1)
+      expect(onMessage.mock.calls[0]![0]).toEqual({
+        raw: expect.objectContaining({ key: expect.objectContaining({ id: 'm1' }) }),
+        source: 'realtime'
+      })
+    })
+
+    it('flushes queued upsert messages when creds.update provides me', async () => {
+      const h = await buildHarness({ userId: undefined })
+      const onMessage = vi.fn()
+      h.service.on('message', onMessage)
+
+      h.socket._trigger('messages.upsert', {
+        type: 'notify',
+        messages: [selfChatMsg('m1', 'early creds')]
+      })
+      expect(onMessage).not.toHaveBeenCalled()
+
+      h.socket._trigger('creds.update', { me: { phoneNumber: SELF } })
+      await new Promise((r) => setTimeout(r, 0))
+
+      expect(onMessage).toHaveBeenCalledTimes(1)
+      expect(onMessage.mock.calls[0]![0].source).toBe('realtime')
+    })
+
+    it('matches PN remoteJid against sock.user.phoneNumber when id is LID', async () => {
+      const h = await buildHarness({
+        user: {
+          id: 'lid-user@lid',
+          phoneNumber: SELF,
+          lid: 'lid-user@lid'
+        }
+      })
+      const onMessage = vi.fn()
+      h.service.on('message', onMessage)
+
+      h.socket._trigger('messages.upsert', {
+        type: 'notify',
+        messages: [selfChatMsg('m1', 'pn via phoneNumber')]
+      })
+
+      expect(onMessage).toHaveBeenCalledTimes(1)
     })
 
     it('tolerates missing messages array', async () => {
@@ -549,7 +627,7 @@ describe('whatsapp service', () => {
       expect(onMessage).not.toHaveBeenCalled()
     })
 
-    it('does nothing when sock.user.id is missing', async () => {
+    it('does not emit history immediately when own JID variants are missing', async () => {
       const h = await buildHarness({ userId: undefined })
       const onMessage = vi.fn()
       h.service.on('message', onMessage)
@@ -563,6 +641,56 @@ describe('whatsapp service', () => {
         ]
       })
       expect(onMessage).not.toHaveBeenCalled()
+    })
+
+    it('queues early history until own JID variants become available', async () => {
+      const h = await buildHarness({ userId: undefined })
+      const onMessage = vi.fn()
+      h.service.on('message', onMessage)
+      h.socket._trigger('messaging-history.set', {
+        messages: [
+          {
+            key: {
+              id: 'h1',
+              remoteJid: '5491134567890@s.whatsapp.net',
+              fromMe: true
+            },
+            messageTimestamp: 1,
+            message: { conversation: 'queued history' }
+          }
+        ]
+      })
+      expect(onMessage).not.toHaveBeenCalled()
+
+      h.socket.user = { id: SELF }
+      h.socket._trigger('connection.update', { connection: 'open' })
+
+      expect(onMessage).toHaveBeenCalledTimes(1)
+      expect(onMessage.mock.calls[0]![0].source).toBe('history-sync')
+    })
+
+    it('uses creds.me for history when sock.user is missing', async () => {
+      const h = await buildHarness({
+        userId: undefined,
+        authMe: { phoneNumber: SELF }
+      })
+      const onMessage = vi.fn()
+      h.service.on('message', onMessage)
+      h.socket._trigger('messaging-history.set', {
+        messages: [
+          {
+            key: {
+              id: 'h1',
+              remoteJid: '5491134567890@s.whatsapp.net',
+              fromMe: true
+            },
+            messageTimestamp: 1,
+            message: { conversation: 'creds history' }
+          }
+        ]
+      })
+      expect(onMessage).toHaveBeenCalledTimes(1)
+      expect(onMessage.mock.calls[0]![0].source).toBe('history-sync')
     })
 
     it('tolerates missing messages array', async () => {

@@ -20,9 +20,9 @@ const STATUS_DOT: Record<WAConnectionState, string> = {
 }
 
 const STATUS_LABEL: Record<WAConnectionState, string> = {
-  connecting: 'Conectando…',
+  connecting: 'Conectando...',
   open: 'Conectado',
-  disconnected: 'Reconectando…',
+  disconnected: 'Reconectando...',
   'logged-out': 'Sesión cerrada'
 }
 
@@ -45,15 +45,42 @@ export function Sidebar({
 }: SidebarProps) {
   return (
     <aside
-      className="flex w-20 shrink-0 flex-col items-center border-r border-bt-border bg-bt-bg py-4"
+      className="flex w-[208px] shrink-0 flex-col border-r border-bt-border bg-[#070c14] px-4 py-5"
       aria-label="Navegación principal"
     >
-      <div className="mb-6 p-1.5" title="BrainTwo">
-        <BrainMark size={26} />
-        <span className="sr-only">BrainTwo</span>
+      <section
+        className="mb-5 flex items-center gap-2.5 rounded-[8px] border border-bt-border bg-white/[0.025] px-3 py-2.5"
+        aria-label="Estado de conexión"
+        title={STATUS_LABEL[connectionState]}
+      >
+        <span
+          className={`h-2 w-2 rounded-full ${STATUS_DOT[connectionState]}`}
+          aria-hidden
+        />
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-eyebrow text-bt-dim">
+            WhatsApp
+          </p>
+          <p
+            aria-live="polite"
+            className="truncate text-[13px] font-medium text-bt-text"
+          >
+            {STATUS_LABEL[connectionState]}
+          </p>
+        </div>
+      </section>
+
+      <div className="mb-8 flex items-center gap-3 px-1" title="BrainTwo">
+        <BrainMark size={30} />
+        <div className="min-w-0">
+          <p className="font-display text-[17px] leading-none text-bt-text">
+            BrainTwo
+          </p>
+          <p className="mt-1 text-[11px] text-bt-dim">Memoria personal</p>
+        </div>
       </div>
 
-      <nav className="flex flex-1 flex-col items-center gap-1">
+      <nav className="flex flex-1 flex-col gap-1.5">
         {NAV.map((item) => {
           const active = view === item.id
           return (
@@ -64,73 +91,49 @@ export function Sidebar({
               aria-label={item.label}
               aria-current={active ? 'page' : undefined}
               title={item.label}
-              className={`relative flex h-10 w-10 items-center justify-center rounded-[10px] transition-colors duration-150 ${
+              className={`relative flex h-10 w-full items-center gap-3 rounded-[8px] px-3 text-left text-[13px] font-medium transition-colors duration-150 ${
                 active
-                  ? 'bg-bt-hover text-bt-text'
+                  ? 'bg-bt-hover text-bt-text shadow-[inset_0_0_0_1px_rgba(26,143,227,0.18)]'
                   : 'text-bt-muted hover:bg-bt-hover/60 hover:text-bt-text'
               }`}
             >
               {active && (
                 <span
                   aria-hidden
-                  className="absolute -left-3 top-2.5 bottom-2.5 w-0.5 rounded-sm bg-bt-grad"
+                  className="absolute bottom-2.5 left-0 top-2.5 w-0.5 rounded-sm"
                   style={{ background: 'linear-gradient(135deg,#1a8fe3,#2ec4a5)' }}
                 />
               )}
               <Icon name={item.icon} size={18} />
+              <span>{item.label}</span>
             </button>
           )
         })}
       </nav>
 
-      <div className="flex w-full flex-col items-center gap-2 px-1 pb-1">
-        <div
-          className="flex h-8 w-8 items-center justify-center rounded-[10px]"
-          aria-label="Estado de conexión"
-          title={STATUS_LABEL[connectionState]}
-        >
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[connectionState]}`}
-            aria-hidden
-          />
-        </div>
-        <span
-          aria-live="polite"
-          className="w-full text-[10px] uppercase text-bt-dim text-center leading-tight"
-        >
-          {STATUS_LABEL[connectionState]}
-        </span>
+      <div className="mt-6 border-t border-bt-border pt-4">
         {onLogout && (
           <button
             type="button"
             onClick={onLogout}
             aria-label="Cerrar sesión de WhatsApp"
             title="Cerrar sesión de WhatsApp"
-            className="mt-1 flex w-full flex-col items-center gap-1 rounded-[10px] py-1.5 text-bt-muted transition-colors hover:bg-bt-hover/60 hover:text-bt-text"
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-[8px] border border-bt-border text-[12px] font-medium text-bt-muted transition-colors hover:border-bt-red/40 hover:bg-bt-red/10 hover:text-bt-text"
           >
             <Icon name="logout" size={16} />
-            <span className="text-[9px] uppercase leading-tight">
-              Cerrar sesión
-            </span>
+            <span>Cerrar sesión</span>
           </button>
         )}
-        {(version || platform) && (
-          <span className="mt-1 text-[9px] uppercase text-bt-dim text-center leading-tight">
-            {version ? `v${version}` : ''}
-            {version && platform ? ' · ' : ''}
-            {platform ?? ''}
-          </span>
-        )}
-        <span
-          aria-hidden
-          className="mt-2 text-[8px] uppercase tracking-ribbon text-bt-dim"
-          style={{
-            writingMode: 'vertical-rl',
-            transform: 'rotate(180deg)'
-          }}
-        >
-          by Syntropy
-        </span>
+        <div className="mt-4 flex items-center justify-between gap-3 px-0.5 text-[11px] text-bt-dim">
+          <span>by Syntropy</span>
+          {(version || platform) && (
+            <span className="truncate text-right">
+              {version ? `v${version}` : ''}
+              {version && platform ? ' | ' : ''}
+              {platform ?? ''}
+            </span>
+          )}
+        </div>
       </div>
     </aside>
   )

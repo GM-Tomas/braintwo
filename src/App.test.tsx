@@ -87,7 +87,7 @@ describe('<App />', () => {
     it('renders the sidebar with title and status badge', async () => {
       render(<App />)
       expect(screen.getByText('BrainTwo')).toBeInTheDocument()
-      expect(await screen.findByText('Conectando…')).toBeInTheDocument()
+      expect(await screen.findByText('Conectando...')).toBeInTheDocument()
     })
 
     it('reads version + platform from the IPC bridge', async () => {
@@ -99,11 +99,11 @@ describe('<App />', () => {
     })
 
     it.each([
-      ['connecting', 'Conectando…'],
+      ['connecting', 'Conectando...'],
       ['open', 'Conectado']
     ] as const)('on %s the sidebar shows %s', async (state, label) => {
       render(<App />)
-      await screen.findByText('Conectando…')
+      await screen.findByText('Conectando...')
       act(() => h.emitConnectionState(state))
       expect(await screen.findByText(label)).toBeInTheDocument()
     })
@@ -113,7 +113,7 @@ describe('<App />', () => {
       await screen.findByText('Conectando…')
       act(() => h.emitConnectionState('disconnected'))
       await waitFor(() => {
-        expect(screen.getAllByText('Reconectando…').length).toBeGreaterThan(0)
+        expect(screen.getAllByText('Reconectando...').length).toBeGreaterThan(0)
       })
     })
   })
@@ -140,7 +140,7 @@ describe('<App />', () => {
     it('after auto-routing, subsequent open events do NOT re-route', async () => {
       markOnboarded()
       render(<App />)
-      await screen.findByText('Conectando…')
+      await screen.findByText('Conectando...')
 
       act(() => h.emitConnectionState('open'))
       await waitFor(() =>
@@ -160,7 +160,7 @@ describe('<App />', () => {
     it('logged-out from app phase falls back to QR (skipping welcome)', async () => {
       markOnboarded()
       render(<App />)
-      await screen.findByText('Conectando…')
+      await screen.findByText('Conectando...')
 
       act(() => h.emitConnectionState('logged-out'))
       expect(await screen.findByText(/Vinculá tu WhatsApp/)).toBeInTheDocument()
@@ -176,7 +176,7 @@ describe('<App />', () => {
 
     it('both nav buttons swap the view', async () => {
       render(<App />)
-      await screen.findByText('Conectando…')
+      await screen.findByText('Conectando...')
       const user = userEvent.setup()
 
       await user.click(screen.getByRole('button', { name: 'Buscar' }))
@@ -190,7 +190,7 @@ describe('<App />', () => {
 
     it('does NOT expose an Onboarding nav button after onboarding', async () => {
       render(<App />)
-      await screen.findByText('Conectando…')
+      await screen.findByText('Conectando...')
       expect(
         screen.queryByRole('button', { name: 'Onboarding' })
       ).not.toBeInTheDocument()
