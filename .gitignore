@@ -11,3 +11,4 @@ logs/
 .env.*.local
 .vite/
 *.tsbuildinfo
+.abi/

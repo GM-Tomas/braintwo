@@ -9,17 +9,22 @@
   "license": "UNLICENSED",
   "scripts": {
     "dev": "node scripts/run-evite.mjs dev",
+    "predev": "node scripts/rebuild-for-electron.mjs",
     "build": "node scripts/run-evite.mjs build",
+    "prebuild": "node scripts/rebuild-for-electron.mjs",
     "preview": "node scripts/run-evite.mjs preview",
     "package": "node scripts/run-evite.mjs build && electron-builder",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "test": "vitest run",
+    "pretest": "node scripts/rebuild-for-node.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "rebuild": "electron-rebuild -f -w better-sqlite3",
-    "postinstall": "electron-rebuild -f -w better-sqlite3"
+    "pretest:coverage": "node scripts/rebuild-for-node.mjs",
+    "rebuild:electron": "node scripts/rebuild-for-electron.mjs",
+    "rebuild:node": "node scripts/rebuild-for-node.mjs",
+    "postinstall": "node scripts/rebuild-for-electron.mjs"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.2",
