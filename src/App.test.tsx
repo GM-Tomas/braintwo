@@ -87,7 +87,7 @@ describe('<App />', () => {
     it('renders the sidebar with title and status badge', async () => {
       render(<App />)
       expect(screen.getByText('BrainTwo')).toBeInTheDocument()
-      expect(await screen.findByText('Conectando...')).toBeInTheDocument()
+      expect(await screen.findByText('Conectando')).toBeInTheDocument()
     })
 
     it('reads version + platform from the IPC bridge', async () => {
@@ -99,21 +99,21 @@ describe('<App />', () => {
     })
 
     it.each([
-      ['connecting', 'Conectando...'],
-      ['open', 'Conectado']
+      ['connecting', 'Conectando'],
+      ['open', 'Al dia']
     ] as const)('on %s the sidebar shows %s', async (state, label) => {
       render(<App />)
-      await screen.findByText('Conectando...')
+      await screen.findByText('Conectando')
       act(() => h.emitConnectionState(state))
       expect(await screen.findByText(label)).toBeInTheDocument()
     })
 
-    it('on disconnected the sidebar status shows Reconectando…', async () => {
+    it('on disconnected the sidebar status shows Reconectando', async () => {
       render(<App />)
-      await screen.findByText('Conectando…')
+      await screen.findByText(/Conectando/)
       act(() => h.emitConnectionState('disconnected'))
       await waitFor(() => {
-        expect(screen.getAllByText('Reconectando...').length).toBeGreaterThan(0)
+        expect(screen.getAllByText('Reconectando').length).toBeGreaterThan(0)
       })
     })
   })
@@ -130,9 +130,7 @@ describe('<App />', () => {
       await waitFor(() => {
         expect(screen.queryByText(/Vinculá tu WhatsApp/)).not.toBeInTheDocument()
       })
-      expect(
-        screen.getByText(/Búsqueda semántica disponible desde la Etapa 5/)
-      ).toBeInTheDocument()
+      expect(screen.getByText('Proba preguntar')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Timeline' })).toBeInTheDocument()
       expect(window.localStorage.getItem(ONBOARDED_KEY)).toBe('1')
     })
@@ -140,13 +138,11 @@ describe('<App />', () => {
     it('after auto-routing, subsequent open events do NOT re-route', async () => {
       markOnboarded()
       render(<App />)
-      await screen.findByText('Conectando...')
+      await screen.findByText('Conectando')
 
       act(() => h.emitConnectionState('open'))
       await waitFor(() =>
-        expect(
-          screen.getByText(/Búsqueda semántica disponible desde la Etapa 5/)
-        ).toBeInTheDocument()
+        expect(screen.getByText('Proba preguntar')).toBeInTheDocument()
       )
 
       const user = userEvent.setup()
@@ -160,7 +156,7 @@ describe('<App />', () => {
     it('logged-out from app phase falls back to QR (skipping welcome)', async () => {
       markOnboarded()
       render(<App />)
-      await screen.findByText('Conectando...')
+      await screen.findByText('Conectando')
 
       act(() => h.emitConnectionState('logged-out'))
       expect(await screen.findByText(/Vinculá tu WhatsApp/)).toBeInTheDocument()
@@ -176,13 +172,11 @@ describe('<App />', () => {
 
     it('both nav buttons swap the view', async () => {
       render(<App />)
-      await screen.findByText('Conectando...')
+      await screen.findByText('Conectando')
       const user = userEvent.setup()
 
       await user.click(screen.getByRole('button', { name: 'Buscar' }))
-      expect(
-        screen.getByText(/Búsqueda semántica disponible desde la Etapa 5/)
-      ).toBeInTheDocument()
+      expect(screen.getByText('Proba preguntar')).toBeInTheDocument()
 
       await user.click(screen.getByRole('button', { name: 'Timeline' }))
       expect(screen.getByText(/Aún no hay mensajes/)).toBeInTheDocument()
@@ -190,7 +184,7 @@ describe('<App />', () => {
 
     it('does NOT expose an Onboarding nav button after onboarding', async () => {
       render(<App />)
-      await screen.findByText('Conectando...')
+      await screen.findByText('Conectando')
       expect(
         screen.queryByRole('button', { name: 'Onboarding' })
       ).not.toBeInTheDocument()
@@ -213,7 +207,7 @@ describe('<App />', () => {
         }
       }
       const { unmount } = render(<App />)
-      await screen.findByText('Conectando…')
+      await screen.findByText(/Conectando/)
       unmount()
       expect(offSpy).toHaveBeenCalled()
     })

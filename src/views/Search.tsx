@@ -1,35 +1,88 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ModelProgress, SearchResult } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { Icon } from '@/lib/icons'
 
 const SUGGESTIONS = [
-  '¿Qué medidas le pasé al carpintero?',
-  '¿Qué tengo pendiente esta semana?',
+  'Que medidas le pase al carpintero?',
+  'Que tengo pendiente esta semana?',
   'Ideas sobre BrainTwo',
-  'Resumen de la última reunión'
+  'Resumen de la ultima reunion'
 ]
+
+const VISIBLE_LIMIT = 80
 
 export function Search() {
   const [q, setQ] = useState('')
+  const [results, setResults] = useState<SearchResult[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [model, setModel] = useState<ModelProgress>({ status: 'idle' })
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     const t = setTimeout(() => inputRef.current?.focus(), 100)
-    return () => clearTimeout(t)
+    const off = window.braintwo.search.onModelProgress(setModel)
+    return () => {
+      clearTimeout(t)
+      off()
+    }
   }, [])
 
-  const focused = q.length > 0
+  useEffect(() => {
+    const clean = q.trim()
+    setError(null)
+    if (!clean) {
+      setLoading(false)
+      setResults([])
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    const t = setTimeout(() => {
+      void window.braintwo.search
+        .query(clean, 30)
+        .then((rows) => {
+          if (!cancelled) setResults(rows)
+        })
+        .catch((err: unknown) => {
+          if (!cancelled) {
+            setResults([])
+            setError(err instanceof Error ? err.message : 'No se pudo buscar')
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+    }, 300)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [q])
+
+  const formatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      }),
+    []
+  )
+
+  const focused = q.trim().length > 0
+  const visible = results.slice(0, VISIBLE_LIMIT)
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden animate-fade-in">
       <PageHeader
-        eyebrow="Búsqueda"
+        eyebrow="Busqueda"
         title="Preguntale a tu cerebro"
-        subtitle="Buscá en lenguaje natural. La IA entiende el contexto, no solo las palabras."
+        subtitle="Busca en lenguaje natural. La IA entiende contexto, no solo palabras exactas."
       />
 
       <div className="flex-1 overflow-y-auto px-14 py-8">
-        <div className="mx-auto max-w-[720px]">
+        <div className="mx-auto max-w-[780px]">
           <div
             className="flex items-center gap-3.5 rounded-[14px] border bg-bt-surf px-5 py-4 transition-colors duration-150"
             style={{
@@ -44,7 +97,7 @@ export function Search() {
               type="search"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Probá: ¿qué pendientes tengo de la reunión?"
+              placeholder="Proba: que pendientes tengo de la reunion?"
               aria-label="Buscar en BrainTwo"
               className="flex-1 bg-transparent text-[17px] text-bt-text outline-none placeholder:text-bt-dim"
             />
@@ -59,13 +112,34 @@ export function Search() {
             ) : null}
           </div>
 
+          <ModelStatus progress={model} />
+
           {!focused ? (
             <SuggestionsPanel onPick={(s) => setQ(s)} />
           ) : (
-            <ComingSoonPanel query={q} />
+            <ResultsPanel
+              loading={loading}
+              error={error}
+              results={visible}
+              hiddenCount={Math.max(0, results.length - visible.length)}
+              formatter={formatter}
+            />
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function ModelStatus({ progress }: { progress: ModelProgress }) {
+  if (progress.status === 'idle' || progress.status === 'ready') return null
+  const pct =
+    typeof progress.progress === 'number' ? `${Math.round(progress.progress * 100)}%` : null
+  return (
+    <div className="mt-3 rounded-[8px] border border-bt-border bg-white/[0.025] px-4 py-2 text-[12px] text-bt-muted">
+      {progress.status === 'downloading'
+        ? `Descargando modelo semantico${pct ? ` ${pct}` : ''}`
+        : progress.message ?? 'Busqueda local disponible'}
     </div>
   )
 }
@@ -74,7 +148,7 @@ function SuggestionsPanel({ onPick }: { onPick: (s: string) => void }) {
   return (
     <section className="mt-9">
       <div className="mb-3.5 text-[11px] uppercase tracking-eyebrow text-bt-dim">
-        Probá preguntar
+        Proba preguntar
       </div>
       <ul className="flex flex-col gap-1.5">
         {SUGGESTIONS.map((s) => (
@@ -90,27 +164,71 @@ function SuggestionsPanel({ onPick }: { onPick: (s: string) => void }) {
           </li>
         ))}
       </ul>
-      <p className="mt-7 text-[12px] leading-relaxed text-bt-dim">
-        Búsqueda semántica disponible desde la Etapa 5. Por ahora podés
-        ojear las búsquedas que tenés en mente.
-      </p>
     </section>
   )
 }
 
-function ComingSoonPanel({ query }: { query: string }) {
+function ResultsPanel({
+  loading,
+  error,
+  results,
+  hiddenCount,
+  formatter
+}: {
+  loading: boolean
+  error: string | null
+  results: SearchResult[]
+  hiddenCount: number
+  formatter: Intl.DateTimeFormat
+}) {
+  if (loading) {
+    return (
+      <div className="py-16 text-center text-[13px] text-bt-dim">
+        Buscando en tus mensajes...
+      </div>
+    )
+  }
+  if (error) {
+    return <div className="py-16 text-center text-[13px] text-bt-red">{error}</div>
+  }
+  if (results.length === 0) {
+    return (
+      <div className="py-16 text-center text-[13px] text-bt-dim">
+        No encontre resultados para esa busqueda.
+      </div>
+    )
+  }
   return (
     <section className="mt-7">
-      <div className="mb-1 text-[11px] uppercase tracking-eyebrow text-bt-dim">
-        Búsqueda
+      <div className="mb-3 text-[11px] uppercase tracking-eyebrow text-bt-dim">
+        Resultados
       </div>
-      <div className="rounded-[10px] border border-bt-border bg-bt-surf px-5 py-6 text-sm text-bt-muted">
-        <p>
-          Búsqueda semántica disponible desde la Etapa 5. Tu consulta —
-          <span className="text-bt-text"> "{query}" </span>— se va a resolver
-          contra los embeddings de tus mensajes apenas tengamos esa capa.
+      <ul className="divide-y divide-bt-border border-y border-bt-border">
+        {results.map((r) => (
+          <li key={r.id} className="py-4">
+            <div className="flex items-start justify-between gap-5">
+              <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed text-bt-text">
+                {r.text || 'Mensaje sin texto'}
+              </p>
+              <span className="shrink-0 rounded-full border border-bt-border px-2.5 py-1 text-[11px] text-bt-accent">
+                {Math.round(r.similarity * 100)}%
+              </span>
+            </div>
+            <div className="mt-2 flex items-center gap-2 text-[11.5px] text-bt-dim">
+              <time dateTime={new Date(r.timestamp).toISOString()}>
+                {formatter.format(new Date(r.timestamp))}
+              </time>
+              <span>|</span>
+              <span>{r.source}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {hiddenCount > 0 ? (
+        <p className="mt-3 text-[12px] text-bt-dim">
+          Mostrando los primeros {VISIBLE_LIMIT}; hay {hiddenCount} mas.
         </p>
-      </div>
+      ) : null}
     </section>
   )
 }

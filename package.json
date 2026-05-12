@@ -24,7 +24,7 @@
     "pretest:coverage": "node scripts/rebuild-for-node.mjs",
     "rebuild:electron": "node scripts/rebuild-for-electron.mjs",
     "rebuild:node": "node scripts/rebuild-for-node.mjs",
-    "postinstall": "node scripts/rebuild-for-electron.mjs"
+    "postinstall": "electron-builder install-app-deps && node scripts/rebuild-for-electron.mjs"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.7.2",

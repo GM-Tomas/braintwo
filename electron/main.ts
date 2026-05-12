@@ -1,8 +1,10 @@
 import {
   app,
   BrowserWindow,
+  Notification,
   Menu,
   Tray,
+  dialog,
   ipcMain,
   nativeImage,
   session,
@@ -11,9 +13,15 @@ import {
 import pino from 'pino'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { mkdirSync, renameSync, statSync } from 'node:fs'
 import { createWhatsAppService, type WhatsAppService } from './services/whatsapp'
 import type { WAConnectionState } from './services/whatsapp-state'
 import { openDatabase, type DbInstance } from './services/db'
+import { createEmbeddingService, type EmbeddingService } from './services/embeddings'
+import { createSearchService, type SearchService } from './services/search'
+import { importExportFile, type ImportProgress } from './services/export-parser'
+import { createSyncStatusTracker, type SyncStatusTracker } from './services/sync-status'
+import { readSettings, writeSettings } from './services/settings'
 import {
   createIngestPipeline,
   extractKind,
@@ -36,6 +44,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const isDev = !app.isPackaged
 const startedHidden = process.argv.includes('--hidden')
+const LOG_CAP_BYTES = 1_000_000
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -45,7 +54,13 @@ let lastConnectionState: WAConnectionState = 'disconnected'
 let lastQr: string | null = null
 let db: DbInstance | null = null
 let ingest: IngestPipeline | null = null
+let dbPath: string | null = null
+let embeddings: EmbeddingService | null = null
+let search: SearchService | null = null
+let syncStatus: SyncStatusTracker = createSyncStatusTracker()
 let messageBatcher: MessageBatcher<RecentMessage> | null = null
+let catchupTimer: ReturnType<typeof setTimeout> | null = null
+let catchupInserted = 0
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
@@ -110,6 +125,16 @@ function updateTrayStatus(status: string): void {
 function broadcast(channel: string, payload: unknown): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
   mainWindow.webContents.send(channel, payload)
+}
+
+function reportError(code: string, message: string, recoverable = true): void {
+  broadcast('app:error', { code, message, recoverable })
+}
+
+function publishSyncStatus(): void {
+  const status = syncStatus.get()
+  broadcast('sync:state-changed', status)
+  updateTrayStatus(status.label)
 }
 
 function createWindow(): void {
@@ -196,16 +221,54 @@ function showWindow(): void {
 }
 
 function openStorage(): void {
-  const dbPath = join(app.getPath('userData'), 'braintwo.db')
+  dbPath = join(app.getPath('userData'), 'braintwo.db')
   db = openDatabase(dbPath)
   const ingestLogger = isDev
     ? pino({ level: 'info', name: 'ingest' })
-    : undefined
+    : createFileLogger('ingest')
   ingest = createIngestPipeline(db, ingestLogger)
   ingestLogger?.info({ dbPath, count: ingest.count() }, 'storage opened')
+  embeddings = createEmbeddingService({
+    cacheDir: join(app.getPath('userData'), 'models'),
+    onProgress: (progress) => broadcast('search:model-progress', progress)
+  })
+  search = createSearchService({ db, embeddings })
+  void search.backfillMissing(50_000).catch((err: unknown) => {
+    reportError('search.backfill_failed', err instanceof Error ? err.message : String(err))
+  })
   messageBatcher = createMessageBatcher<RecentMessage>({
     broadcast: (batch) => broadcast('app:messages-batch', batch)
   })
+}
+
+function queueEmbedding(rowId: number, text: string): void {
+  if (!db || !embeddings || !text.trim()) return
+  void embeddings
+    .embed(text)
+    .then((vec) => db?.insertEmbedding(rowId, vec))
+    .catch((err: unknown) => {
+      reportError('search.embed_failed', err instanceof Error ? err.message : String(err))
+    })
+}
+
+function noteCatchupMessage(): void {
+  catchupInserted++
+  syncStatus.startCatchup()
+  publishSyncStatus()
+  if (catchupTimer) clearTimeout(catchupTimer)
+  catchupTimer = setTimeout(() => {
+    const count = catchupInserted
+    catchupInserted = 0
+    catchupTimer = null
+    syncStatus.finishCatchup(count)
+    publishSyncStatus()
+    if (count > 0 && Notification.isSupported()) {
+      new Notification({
+        title: 'BrainTwo',
+        body: `${count} mensajes nuevos sincronizados`
+      }).show()
+    }
+  }, 900)
 }
 
 function startWhatsApp(): void {
@@ -214,14 +277,16 @@ function startWhatsApp(): void {
   // counters, history-set deltas) to the terminal; in prod we stay silent.
   const waLogger = isDev
     ? pino({ level: 'info', name: 'wa' })
-    : pino({ level: 'silent' })
+    : createFileLogger('wa')
   whatsapp = createWhatsAppService({ authPath, logger: waLogger })
 
   whatsapp.on('connection-state', (state) => {
     lastConnectionState = state
     if (state === 'open') lastQr = null
+    syncStatus.setConnection(state)
     updateTrayStatus(statusLabel(state))
     broadcast('wa:connection-state', state)
+    publishSyncStatus()
   })
 
   whatsapp.on('qr', (qr) => {
@@ -252,9 +317,27 @@ function startWhatsApp(): void {
       media: extractMediaMeta(raw),
       fromMe: raw.key?.fromMe === true
     })
+    queueEmbedding(result.rowId, extractText(raw))
+    if (source === 'offline-sync' || source === 'history-sync') {
+      noteCatchupMessage()
+    }
   })
 
   void whatsapp.start()
+}
+
+function createFileLogger(name: string): pino.Logger {
+  const logDir = join(app.getPath('userData'), 'logs')
+  mkdirSync(logDir, { recursive: true })
+  const logPath = join(logDir, `${name}.log`)
+  try {
+    if (statSync(logPath).size > LOG_CAP_BYTES) {
+      renameSync(logPath, join(logDir, `${name}.1.log`))
+    }
+  } catch {
+    // No existing log yet.
+  }
+  return pino({ level: 'info', name }, pino.destination({ dest: logPath, sync: false }))
 }
 
 ipcMain.handle('app:open-window', () => {
@@ -274,6 +357,51 @@ ipcMain.handle('app:get-message-count', () => ingest?.count() ?? 0)
 
 ipcMain.handle('app:get-recent-messages', (_e, limit: number) => {
   return ingest?.recent(Math.max(0, Math.min(limit, 500))) ?? []
+})
+
+ipcMain.handle('app:get-sync-status', () => syncStatus.get())
+
+ipcMain.handle('settings:get', () => readSettings(app))
+
+ipcMain.handle('settings:set', (_e, patch: Parameters<typeof writeSettings>[1]) => {
+  return writeSettings(app, patch)
+})
+
+ipcMain.handle('db:stats', () => db?.stats(dbPath ?? undefined) ?? {
+  messages: 0,
+  embeddings: 0,
+  sizeBytes: 0,
+  lastIngestAt: null
+})
+
+ipcMain.handle('app:open-userdata-folder', async () => {
+  await shell.openPath(app.getPath('userData'))
+})
+
+ipcMain.handle('search:query', async (_e, text: string, k = 12) => {
+  return search?.query(text, k) ?? []
+})
+
+ipcMain.handle('export:import', async () => {
+  if (!db) {
+    throw new Error('Storage is not ready')
+  }
+  const selected = await dialog.showOpenDialog({
+    title: 'Importar export de WhatsApp',
+    properties: ['openFile'],
+    filters: [{ name: 'WhatsApp export', extensions: ['txt'] }]
+  })
+  if (selected.canceled || selected.filePaths.length === 0) {
+    return { processed: 0, total: 0, inserted: 0, skipped: 0, done: true } satisfies ImportProgress
+  }
+  const result = await importExportFile(selected.filePaths[0]!, {
+    db,
+    onProgress: (progress) => broadcast('sync:progress', progress)
+  })
+  void search?.backfillMissing(50_000).catch((err: unknown) => {
+    reportError('search.backfill_failed', err instanceof Error ? err.message : String(err))
+  })
+  return result
 })
 
 ipcMain.handle('wa:get-connection-state', () => lastConnectionState)

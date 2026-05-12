@@ -1,55 +1,54 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Search } from './Search'
+import { installBraintwoBridge } from '../test-utils/braintwo-bridge'
 
 describe('<Search />', () => {
-  it('renders the page header (eyebrow + title)', () => {
-    render(<Search />)
-    expect(screen.getByText('Búsqueda')).toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: /Preguntale a tu cerebro/ })
-    ).toBeInTheDocument()
+  beforeEach(() => {
+    installBraintwoBridge({
+      searchResults: [
+        {
+          id: 1,
+          wa_msg_id: 'a',
+          timestamp: 1700000000000,
+          text: 'Ideas sobre BrainTwo',
+          source: 'realtime',
+          kind: 'text',
+          distance: 0.12,
+          similarity: 0.88
+        }
+      ]
+    })
   })
 
-  it('shows the placeholder explaining Etapa 5', () => {
+  it('renders the page header', () => {
     render(<Search />)
+    expect(screen.getByText('Busqueda')).toBeInTheDocument()
     expect(
-      screen.getByText(/Búsqueda semántica disponible desde la Etapa 5/)
+      screen.getByRole('heading', { name: /Preguntale a tu cerebro/ })
     ).toBeInTheDocument()
   })
 
   it('focuses the search input on mount', async () => {
     render(<Search />)
     const input = screen.getByRole('searchbox', { name: /Buscar en BrainTwo/ })
-    // useEffect schedules focus on next tick; advance microtask + 100ms
     await new Promise((r) => setTimeout(r, 150))
     expect(input).toHaveFocus()
   })
 
-  it('lists the suggested questions when the input is empty', () => {
+  it('lists suggested questions when the input is empty', () => {
     render(<Search />)
-    expect(screen.getByText('Probá preguntar')).toBeInTheDocument()
+    expect(screen.getByText('Proba preguntar')).toBeInTheDocument()
     expect(screen.getByText('Ideas sobre BrainTwo')).toBeInTheDocument()
   })
 
-  it('clicking a suggestion fills the search input', async () => {
+  it('debounces and renders semantic results', async () => {
     render(<Search />)
     const user = userEvent.setup()
-    await user.click(screen.getByText('Ideas sobre BrainTwo'))
-    expect(
-      screen.getByRole('searchbox', { name: /Buscar en BrainTwo/ })
-    ).toHaveValue('Ideas sobre BrainTwo')
-  })
-
-  it('typing swaps from suggestions to the coming-soon panel', async () => {
-    render(<Search />)
-    const user = userEvent.setup()
-    const input = screen.getByRole('searchbox', { name: /Buscar en BrainTwo/ })
-    await user.click(input)
-    await user.keyboard('reunion')
-    expect(screen.queryByText('Probá preguntar')).not.toBeInTheDocument()
-    expect(screen.getByText(/"reunion"/)).toBeInTheDocument()
+    await user.type(screen.getByRole('searchbox', { name: /Buscar en BrainTwo/ }), 'brain')
+    await waitFor(() => expect(screen.getByText('88%')).toBeInTheDocument())
+    expect(screen.getByText('Ideas sobre BrainTwo')).toBeInTheDocument()
   })
 
   it('the limpiar button resets the input', async () => {

@@ -10,11 +10,12 @@ describe('<Sidebar />', () => {
     expect(screen.getByText('BrainTwo')).toBeInTheDocument()
   })
 
-  it('renders the two post-onboarding nav buttons with accessible names', () => {
+  it('renders the post-onboarding nav buttons with accessible names', () => {
     const setView = vi.fn()
     render(<Sidebar view="search" setView={setView} connectionState="open" />)
     expect(screen.getByRole('button', { name: 'Buscar' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Timeline' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Onboarding' })).not.toBeInTheDocument()
   })
 
@@ -42,7 +43,7 @@ describe('<Sidebar />', () => {
     ['connecting', 'Conectando...'],
     ['open', 'Conectado'],
     ['disconnected', 'Reconectando...'],
-    ['logged-out', 'Sesión cerrada']
+    ['logged-out', 'Sesion cerrada']
   ] as const)('shows the connection label for %s', (state, label) => {
     const setView = vi.fn()
     render(<Sidebar view="onboarding" setView={setView} connectionState={state} />)

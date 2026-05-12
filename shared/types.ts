@@ -1,4 +1,4 @@
-export type View = 'onboarding' | 'search' | 'timeline'
+export type View = 'onboarding' | 'search' | 'timeline' | 'settings'
 
 export type ConnectionState =
   | 'connecting'
@@ -7,6 +7,7 @@ export type ConnectionState =
   | 'idle'
   | 'disconnected'
   | 'logged-out'
+  | 'stale-primary'
 
 export type WAConnectionState =
   | 'connecting'
@@ -49,6 +50,51 @@ export interface RecentMessage {
   fromMe?: boolean
 }
 
+export interface SearchResult extends RecentMessage {
+  distance: number
+  similarity: number
+}
+
+export interface ModelProgress {
+  status: 'idle' | 'downloading' | 'ready' | 'fallback' | 'error'
+  message?: string
+  progress?: number
+}
+
+export interface ImportProgress {
+  processed: number
+  total: number
+  inserted: number
+  skipped: number
+  done: boolean
+}
+
+export interface DbStats {
+  messages: number
+  embeddings: number
+  sizeBytes: number
+  lastIngestAt: number | null
+}
+
+export interface SyncStatus {
+  state: ConnectionState
+  label: string
+  lastPrimaryActivityAt: number | null
+  stalePrimaryDays: number
+  newMessages: number
+}
+
+export interface UserSettings {
+  autostart: boolean
+  userDataPath: string
+}
+
+export interface AppErrorEvent {
+  code: string
+  message: string
+  recoverable: boolean
+}
+
 export interface BrainTwoBridge {
   platform: NodeJS.Platform
   versions: {
@@ -63,7 +109,22 @@ export interface BrainTwoBridge {
     getPlatform: () => Promise<NodeJS.Platform>
     getMessageCount: () => Promise<number>
     getRecentMessages: (limit: number) => Promise<RecentMessage[]>
+    getSyncStatus: () => Promise<SyncStatus>
+    getSettings: () => Promise<UserSettings>
+    setSettings: (settings: Partial<UserSettings>) => Promise<UserSettings>
+    getDbStats: () => Promise<DbStats>
+    openUserDataFolder: () => Promise<void>
     onMessagesBatch: (cb: (batch: RecentMessage[]) => void) => Unsubscribe
+    onSyncStateChanged: (cb: (status: SyncStatus) => void) => Unsubscribe
+    onError: (cb: (error: AppErrorEvent) => void) => Unsubscribe
+  }
+  search: {
+    query: (text: string, k?: number) => Promise<SearchResult[]>
+    onModelProgress: (cb: (progress: ModelProgress) => void) => Unsubscribe
+  }
+  export: {
+    importTxt: () => Promise<ImportProgress>
+    onProgress: (cb: (progress: ImportProgress) => void) => Unsubscribe
   }
   wa: {
     getConnectionState: () => Promise<WAConnectionState>

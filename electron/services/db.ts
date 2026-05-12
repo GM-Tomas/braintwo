@@ -1,5 +1,6 @@
 import Database, { type Database as DatabaseType } from 'better-sqlite3'
 import * as sqliteVec from 'sqlite-vec'
+import { statSync } from 'node:fs'
 
 export const VEC_DIM = 384
 
@@ -49,11 +50,25 @@ export interface SimilarResult {
   distance: number
 }
 
+export interface EmbeddableMessage {
+  id: number
+  text: string
+}
+
+export interface DbStats {
+  messages: number
+  embeddings: number
+  sizeBytes: number
+  lastIngestAt: number | null
+}
+
 export interface DbInstance {
   raw: DatabaseType
   insertMessage: (msg: NewMessage) => InsertResult
   insertEmbedding: (msgId: number, vec: Float32Array) => void
   searchSimilar: (queryVec: Float32Array, k: number) => SimilarResult[]
+  listMessagesWithoutEmbeddings: (limit: number) => EmbeddableMessage[]
+  stats: (filePath?: string) => DbStats
   countMessages: () => number
   countEmbeddings: () => number
   hasEmbedding: (msgId: number) => boolean
@@ -152,6 +167,19 @@ export function openDatabase(filePath: string): DbInstance {
     'SELECT COUNT(*) AS count FROM message_embeddings WHERE msg_id = ?'
   )
 
+  const unembeddedStmt = db.prepare<[number], EmbeddableMessage>(`
+    SELECT m.id, m.text
+    FROM messages m
+    LEFT JOIN message_embeddings e ON e.msg_id = m.id
+    WHERE e.msg_id IS NULL AND length(trim(m.text)) > 0
+    ORDER BY m.timestamp ASC, m.id ASC
+    LIMIT ?
+  `)
+
+  const lastIngestStmt = db.prepare<[], { last: number | null }>(
+    'SELECT MAX(created_at) AS last FROM messages'
+  )
+
   return {
     raw: db,
     insertMessage(msg) {
@@ -180,6 +208,27 @@ export function openDatabase(filePath: string): DbInstance {
     searchSimilar(queryVec, k) {
       if (k <= 0) return []
       return searchStmt.all(vecToBuffer(queryVec), k)
+    },
+    listMessagesWithoutEmbeddings(limit) {
+      if (limit <= 0) return []
+      return unembeddedStmt.all(Math.min(limit, 10_000))
+    },
+    stats(filePath) {
+      let sizeBytes = 0
+      if (filePath && filePath !== ':memory:') {
+        try {
+          sizeBytes = statSync(filePath).size
+        } catch {
+          sizeBytes = 0
+        }
+      }
+      const last = lastIngestStmt.get()?.last ?? null
+      return {
+        messages: countMsgStmt.get()?.count ?? 0,
+        embeddings: countEmbStmt.get()?.count ?? 0,
+        sizeBytes,
+        lastIngestAt: typeof last === 'number' ? last * 1000 : null
+      }
     },
     countMessages() {
       return countMsgStmt.get()?.count ?? 0

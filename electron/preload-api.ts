@@ -1,6 +1,15 @@
 import type { IpcRenderer, IpcRendererEvent } from 'electron'
 import type { WAConnectionState } from './services/whatsapp-state'
 import type { RecentMessage } from './services/ingest'
+import type {
+  AppErrorEvent,
+  DbStats,
+  ImportProgress,
+  ModelProgress,
+  SearchResult,
+  SyncStatus,
+  UserSettings
+} from '@shared/types'
 
 export type Unsubscribe = () => void
 
@@ -18,7 +27,22 @@ export interface BrainTwoApi {
     getPlatform: () => Promise<NodeJS.Platform>
     getMessageCount: () => Promise<number>
     getRecentMessages: (limit: number) => Promise<RecentMessage[]>
+    getSyncStatus: () => Promise<SyncStatus>
+    getSettings: () => Promise<UserSettings>
+    setSettings: (settings: Partial<UserSettings>) => Promise<UserSettings>
+    getDbStats: () => Promise<DbStats>
+    openUserDataFolder: () => Promise<void>
     onMessagesBatch: (cb: (batch: RecentMessage[]) => void) => Unsubscribe
+    onSyncStateChanged: (cb: (status: SyncStatus) => void) => Unsubscribe
+    onError: (cb: (error: AppErrorEvent) => void) => Unsubscribe
+  }
+  search: {
+    query: (text: string, k?: number) => Promise<SearchResult[]>
+    onModelProgress: (cb: (progress: ModelProgress) => void) => Unsubscribe
+  }
+  export: {
+    importTxt: () => Promise<ImportProgress>
+    onProgress: (cb: (progress: ImportProgress) => void) => Unsubscribe
   }
   wa: {
     getConnectionState: () => Promise<WAConnectionState>
@@ -78,7 +102,23 @@ export function createApi(
       getMessageCount: () => ipcRenderer.invoke('app:get-message-count'),
       getRecentMessages: (limit: number) =>
         ipcRenderer.invoke('app:get-recent-messages', limit),
-      onMessagesBatch: subscribe<RecentMessage[]>('app:messages-batch')
+      getSyncStatus: () => ipcRenderer.invoke('app:get-sync-status'),
+      getSettings: () => ipcRenderer.invoke('settings:get'),
+      setSettings: (settings: Partial<UserSettings>) =>
+        ipcRenderer.invoke('settings:set', settings),
+      getDbStats: () => ipcRenderer.invoke('db:stats'),
+      openUserDataFolder: () => ipcRenderer.invoke('app:open-userdata-folder'),
+      onMessagesBatch: subscribe<RecentMessage[]>('app:messages-batch'),
+      onSyncStateChanged: subscribe<SyncStatus>('sync:state-changed'),
+      onError: subscribe<AppErrorEvent>('app:error')
+    },
+    search: {
+      query: (text: string, k = 12) => ipcRenderer.invoke('search:query', text, k),
+      onModelProgress: subscribe<ModelProgress>('search:model-progress')
+    },
+    export: {
+      importTxt: () => ipcRenderer.invoke('export:import'),
+      onProgress: subscribe<ImportProgress>('sync:progress')
     },
     wa: {
       getConnectionState: () => ipcRenderer.invoke('wa:get-connection-state'),

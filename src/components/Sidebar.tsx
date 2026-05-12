@@ -1,5 +1,6 @@
-import type { View, WAConnectionState } from '@shared/types'
+import type { SyncStatus, View, WAConnectionState } from '@shared/types'
 import { BrainMark, Icon, type IconName } from '@/lib/icons'
+import { SyncStatusBadge } from './SyncStatusBadge'
 
 interface NavItem {
   id: View
@@ -9,27 +10,15 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { id: 'search', icon: 'search', label: 'Buscar' },
-  { id: 'timeline', icon: 'home', label: 'Timeline' }
+  { id: 'timeline', icon: 'home', label: 'Timeline' },
+  { id: 'settings', icon: 'settings', label: 'Settings' }
 ]
-
-const STATUS_DOT: Record<WAConnectionState, string> = {
-  connecting: 'bg-bt-dim',
-  open: 'bg-bt-accent shadow-bt-glow-teal',
-  disconnected: 'bg-bt-amber',
-  'logged-out': 'bg-bt-red'
-}
-
-const STATUS_LABEL: Record<WAConnectionState, string> = {
-  connecting: 'Conectando...',
-  open: 'Conectado',
-  disconnected: 'Reconectando...',
-  'logged-out': 'Sesión cerrada'
-}
 
 interface SidebarProps {
   view: View
   setView: (v: View) => void
   connectionState: WAConnectionState
+  syncStatus?: SyncStatus | null
   version?: string
   platform?: NodeJS.Platform | null
   onLogout?: () => void
@@ -39,6 +28,7 @@ export function Sidebar({
   view,
   setView,
   connectionState,
+  syncStatus,
   version,
   platform,
   onLogout
@@ -46,29 +36,9 @@ export function Sidebar({
   return (
     <aside
       className="flex w-[208px] shrink-0 flex-col border-r border-bt-border bg-[#070c14] px-4 py-5"
-      aria-label="Navegación principal"
+      aria-label="Navegacion principal"
     >
-      <section
-        className="mb-5 flex items-center gap-2.5 rounded-[8px] border border-bt-border bg-white/[0.025] px-3 py-2.5"
-        aria-label="Estado de conexión"
-        title={STATUS_LABEL[connectionState]}
-      >
-        <span
-          className={`h-2 w-2 rounded-full ${STATUS_DOT[connectionState]}`}
-          aria-hidden
-        />
-        <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-eyebrow text-bt-dim">
-            WhatsApp
-          </p>
-          <p
-            aria-live="polite"
-            className="truncate text-[13px] font-medium text-bt-text"
-          >
-            {STATUS_LABEL[connectionState]}
-          </p>
-        </div>
-      </section>
+      <SyncStatusBadge connectionState={connectionState} syncStatus={syncStatus} />
 
       <div className="mb-8 flex items-center gap-3 px-1" title="BrainTwo">
         <BrainMark size={30} />
@@ -116,12 +86,12 @@ export function Sidebar({
           <button
             type="button"
             onClick={onLogout}
-            aria-label="Cerrar sesión de WhatsApp"
-            title="Cerrar sesión de WhatsApp"
+            aria-label="Cerrar sesion de WhatsApp"
+            title="Cerrar sesion de WhatsApp"
             className="flex h-9 w-full items-center justify-center gap-2 rounded-[8px] border border-bt-border text-[12px] font-medium text-bt-muted transition-colors hover:border-bt-red/40 hover:bg-bt-red/10 hover:text-bt-text"
           >
             <Icon name="logout" size={16} />
-            <span>Cerrar sesión</span>
+            <span>Cerrar sesion</span>
           </button>
         )}
         <div className="mt-4 flex items-center justify-between gap-3 px-0.5 text-[11px] text-bt-dim">

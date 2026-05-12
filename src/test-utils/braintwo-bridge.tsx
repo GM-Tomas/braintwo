@@ -1,5 +1,15 @@
 import { vi } from 'vitest'
-import type { BrainTwoBridge, RecentMessage, WAConnectionState } from '@shared/types'
+import type {
+  AppErrorEvent,
+  BrainTwoBridge,
+  ConnectionState,
+  ImportProgress,
+  ModelProgress,
+  RecentMessage,
+  SearchResult,
+  SyncStatus,
+  WAConnectionState
+} from '@shared/types'
 
 export interface BridgeHandle {
   bridge: BrainTwoBridge
@@ -7,6 +17,10 @@ export interface BridgeHandle {
   emitQr: (qr: string) => void
   emitLoggedOut: () => void
   emitMessagesBatch: (batch: RecentMessage[]) => void
+  emitSyncStateChanged: (status: SyncStatus) => void
+  emitModelProgress: (progress: ModelProgress) => void
+  emitImportProgress: (progress: ImportProgress) => void
+  emitError: (error: AppErrorEvent) => void
   spies: {
     requestQr: ReturnType<typeof vi.fn>
     logout: ReturnType<typeof vi.fn>
@@ -18,6 +32,13 @@ export interface BridgeHandle {
     getCurrentQr: ReturnType<typeof vi.fn>
     getMessageCount: ReturnType<typeof vi.fn>
     getRecentMessages: ReturnType<typeof vi.fn>
+    getSyncStatus: ReturnType<typeof vi.fn>
+    getSettings: ReturnType<typeof vi.fn>
+    setSettings: ReturnType<typeof vi.fn>
+    getDbStats: ReturnType<typeof vi.fn>
+    openUserDataFolder: ReturnType<typeof vi.fn>
+    searchQuery: ReturnType<typeof vi.fn>
+    importTxt: ReturnType<typeof vi.fn>
   }
 }
 
@@ -28,6 +49,7 @@ export interface BridgeOpts {
   platform?: NodeJS.Platform
   initialMessageCount?: number
   initialRecent?: RecentMessage[]
+  searchResults?: SearchResult[]
 }
 
 export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
@@ -35,6 +57,10 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
   const qrListeners: ((qr: string) => void)[] = []
   const loggedOutListeners: (() => void)[] = []
   const batchListeners: ((batch: RecentMessage[]) => void)[] = []
+  const syncListeners: ((status: SyncStatus) => void)[] = []
+  const modelProgressListeners: ((progress: ModelProgress) => void)[] = []
+  const importProgressListeners: ((progress: ImportProgress) => void)[] = []
+  const errorListeners: ((error: AppErrorEvent) => void)[] = []
 
   const spies = {
     requestQr: vi.fn(async () => {}),
@@ -46,7 +72,37 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
     getConnectionState: vi.fn(async () => opts.initialState ?? 'connecting'),
     getCurrentQr: vi.fn(async () => opts.initialQr ?? null),
     getMessageCount: vi.fn(async () => opts.initialMessageCount ?? 0),
-    getRecentMessages: vi.fn(async () => opts.initialRecent ?? [])
+    getRecentMessages: vi.fn(async () => opts.initialRecent ?? []),
+    getSyncStatus: vi.fn(async () => ({
+      state: (opts.initialState === 'open' ? 'idle' : opts.initialState ?? 'connecting') as ConnectionState,
+      label: opts.initialState === 'open' ? 'Al dia' : 'Conectando',
+      lastPrimaryActivityAt: null,
+      stalePrimaryDays: 0,
+      newMessages: 0
+    })),
+    getSettings: vi.fn(async () => ({
+      autostart: true,
+      userDataPath: 'C:\\Users\\admin\\AppData\\Roaming\\BrainTwo'
+    })),
+    setSettings: vi.fn(async (patch) => ({
+      autostart: patch.autostart ?? true,
+      userDataPath: 'C:\\Users\\admin\\AppData\\Roaming\\BrainTwo'
+    })),
+    getDbStats: vi.fn(async () => ({
+      messages: opts.initialMessageCount ?? 0,
+      embeddings: 0,
+      sizeBytes: 0,
+      lastIngestAt: null
+    })),
+    openUserDataFolder: vi.fn(async () => {}),
+    searchQuery: vi.fn(async () => opts.searchResults ?? []),
+    importTxt: vi.fn(async () => ({
+      processed: 0,
+      total: 0,
+      inserted: 0,
+      skipped: 0,
+      done: true
+    }))
   }
 
   const bridge: BrainTwoBridge = {
@@ -61,11 +117,50 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
       getRecentMessages: spies.getRecentMessages as unknown as (
         limit: number
       ) => Promise<RecentMessage[]>,
+      getSyncStatus: spies.getSyncStatus,
+      getSettings: spies.getSettings,
+      setSettings: spies.setSettings,
+      getDbStats: spies.getDbStats,
+      openUserDataFolder: spies.openUserDataFolder,
       onMessagesBatch: (cb) => {
         batchListeners.push(cb)
         return () => {
           const i = batchListeners.indexOf(cb)
           if (i >= 0) batchListeners.splice(i, 1)
+        }
+      },
+      onSyncStateChanged: (cb) => {
+        syncListeners.push(cb)
+        return () => {
+          const i = syncListeners.indexOf(cb)
+          if (i >= 0) syncListeners.splice(i, 1)
+        }
+      },
+      onError: (cb) => {
+        errorListeners.push(cb)
+        return () => {
+          const i = errorListeners.indexOf(cb)
+          if (i >= 0) errorListeners.splice(i, 1)
+        }
+      }
+    },
+    search: {
+      query: spies.searchQuery,
+      onModelProgress: (cb) => {
+        modelProgressListeners.push(cb)
+        return () => {
+          const i = modelProgressListeners.indexOf(cb)
+          if (i >= 0) modelProgressListeners.splice(i, 1)
+        }
+      }
+    },
+    export: {
+      importTxt: spies.importTxt,
+      onProgress: (cb) => {
+        importProgressListeners.push(cb)
+        return () => {
+          const i = importProgressListeners.indexOf(cb)
+          if (i >= 0) importProgressListeners.splice(i, 1)
         }
       }
     },
@@ -106,6 +201,10 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
     emitQr: (qr) => qrListeners.forEach((l) => l(qr)),
     emitLoggedOut: () => loggedOutListeners.forEach((l) => l()),
     emitMessagesBatch: (batch) => batchListeners.forEach((l) => l(batch)),
+    emitSyncStateChanged: (status) => syncListeners.forEach((l) => l(status)),
+    emitModelProgress: (progress) => modelProgressListeners.forEach((l) => l(progress)),
+    emitImportProgress: (progress) => importProgressListeners.forEach((l) => l(progress)),
+    emitError: (error) => errorListeners.forEach((l) => l(error)),
     spies
   }
 }

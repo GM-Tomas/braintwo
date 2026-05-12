@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
-import type { WAConnectionState } from '@shared/types'
+import type { ImportProgress, WAConnectionState } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { Icon, BrainMark, type IconName } from '@/lib/icons'
 
@@ -100,6 +100,7 @@ export function Onboarding() {
   const [state, setState] = useState<WAConnectionState>('connecting')
   const [qr, setQr] = useState<string | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null)
 
   useEffect(() => {
     void window.braintwo.wa.getConnectionState().then((s) => setState(s))
@@ -110,10 +111,14 @@ export function Onboarding() {
       setQr(null)
       setQrDataUrl(null)
     })
+    const offProgress = window.braintwo.export.onProgress((progress) => {
+      setImportProgress(progress)
+    })
     return () => {
       offState()
       offQr()
       offLoggedOut()
+      offProgress()
     }
   }, [])
 
@@ -149,10 +154,57 @@ export function Onboarding() {
           <div className="flex flex-col gap-6">
             <Steps state={state} hasQr={!!qrDataUrl} />
             <SuccessNote state={state} />
+            <ImportHistoryPanel progress={importProgress} />
           </div>
         </div>
       </div>
     </div>
+  )
+}
+
+function ImportHistoryPanel({ progress }: { progress: ImportProgress | null }) {
+  const [busy, setBusy] = useState(false)
+  const pct = progress && progress.total > 0
+    ? Math.round((progress.processed / progress.total) * 100)
+    : 0
+
+  return (
+    <section className="rounded-[14px] border border-bt-border bg-bt-surf px-5 py-4">
+      <div className="mb-3 text-[11px] uppercase tracking-eyebrow text-bt-dim">
+        Historico completo
+      </div>
+      <ol className="space-y-2 text-sm leading-relaxed text-bt-muted">
+        <li>1. En WhatsApp abri el chat con vos mismo.</li>
+        <li>2. Usa Exportar chat y elegi sin medios.</li>
+        <li>3. Importa el .txt para sumar mensajes viejos.</li>
+      </ol>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true)
+          void window.braintwo.export.importTxt().finally(() => setBusy(false))
+        }}
+        className="mt-4 h-9 rounded-[8px] border border-bt-primary/30 px-4 text-[13px] font-semibold text-bt-text transition-colors hover:bg-bt-hover disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {busy ? 'Importando...' : 'Importar historico'}
+      </button>
+      {progress ? (
+        <div className="mt-4">
+          <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div
+              className="h-full bg-bt-accent transition-all"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <p className="mt-2 text-[12px] text-bt-dim">
+            {progress.done
+              ? `${progress.inserted} importados, ${progress.skipped} duplicados`
+              : `${progress.processed}/${progress.total} mensajes`}
+          </p>
+        </div>
+      ) : null}
+    </section>
   )
 }
 

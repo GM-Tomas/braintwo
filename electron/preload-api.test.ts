@@ -75,7 +75,11 @@ describe('preload-api createApi', () => {
       ['quit', 'app:quit'],
       ['getVersion', 'app:get-version'],
       ['getPlatform', 'app:get-platform'],
-      ['getMessageCount', 'app:get-message-count']
+      ['getMessageCount', 'app:get-message-count'],
+      ['getSyncStatus', 'app:get-sync-status'],
+      ['getSettings', 'settings:get'],
+      ['getDbStats', 'db:stats'],
+      ['openUserDataFolder', 'app:open-userdata-folder']
     ] as const)('%s → invoke(%s)', async (method, channel) => {
       const api = createApi(ipc, env)
       await api.app[method]()
@@ -86,6 +90,26 @@ describe('preload-api createApi', () => {
       const api = createApi(ipc, env)
       await api.app.getRecentMessages(25)
       expect(ipc.invoke).toHaveBeenCalledWith('app:get-recent-messages', 25)
+    })
+
+    it('setSettings forwards the settings patch', async () => {
+      const api = createApi(ipc, env)
+      await api.app.setSettings({ autostart: false })
+      expect(ipc.invoke).toHaveBeenCalledWith('settings:set', { autostart: false })
+    })
+  })
+
+  describe('search/export invokes correct channels', () => {
+    it('search.query forwards text and k', async () => {
+      const api = createApi(ipc, env)
+      await api.search.query('hola', 7)
+      expect(ipc.invoke).toHaveBeenCalledWith('search:query', 'hola', 7)
+    })
+
+    it('export.importTxt invokes export:import', async () => {
+      const api = createApi(ipc, env)
+      await api.export.importTxt()
+      expect(ipc.invoke).toHaveBeenCalledWith('export:import')
     })
   })
 
@@ -182,6 +206,50 @@ describe('preload-api createApi', () => {
       off()
       ipc._emit('app:messages-batch', batch)
       expect(cb).toHaveBeenCalledTimes(1)
+    })
+
+    it('onSyncStateChanged wires to sync:state-changed', () => {
+      const api = createApi(ipc, env)
+      const cb = vi.fn()
+      api.app.onSyncStateChanged(cb)
+      const status = {
+        state: 'idle',
+        label: 'Al dia',
+        lastPrimaryActivityAt: null,
+        stalePrimaryDays: 0,
+        newMessages: 0
+      }
+      ipc._emit('sync:state-changed', status)
+      expect(cb).toHaveBeenCalledWith(status)
+    })
+
+    it('onError wires to app:error', () => {
+      const api = createApi(ipc, env)
+      const cb = vi.fn()
+      api.app.onError(cb)
+      const error = { code: 'x', message: 'Boom', recoverable: true }
+      ipc._emit('app:error', error)
+      expect(cb).toHaveBeenCalledWith(error)
+    })
+
+    it('onModelProgress and import progress wire to their channels', () => {
+      const api = createApi(ipc, env)
+      const model = vi.fn()
+      const progress = vi.fn()
+      api.search.onModelProgress(model)
+      api.export.onProgress(progress)
+      ipc._emit('search:model-progress', { status: 'ready' })
+      ipc._emit('sync:progress', {
+        processed: 1,
+        total: 1,
+        inserted: 1,
+        skipped: 0,
+        done: true
+      })
+      expect(model).toHaveBeenCalledWith({ status: 'ready' })
+      expect(progress).toHaveBeenCalledWith(
+        expect.objectContaining({ processed: 1, done: true })
+      )
     })
   })
 })

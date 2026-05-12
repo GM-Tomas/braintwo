@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import type { View, WAConnectionState } from '@shared/types'
+import type { AppErrorEvent, SyncStatus, View, WAConnectionState } from '@shared/types'
 import { Onboarding, WelcomeCards } from './views/Onboarding'
 import { Search } from './views/Search'
 import { Timeline } from './views/Timeline'
+import { Settings } from './views/Settings'
 import { Sidebar } from './components/Sidebar'
 
 type Phase = 'welcome' | 'qr' | 'app'
@@ -43,13 +44,43 @@ export default function App() {
   const [version, setVersion] = useState<string>('')
   const [platform, setPlatform] = useState<NodeJS.Platform | null>(null)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
+  const [appError, setAppError] = useState<AppErrorEvent | null>(null)
 
   useEffect(() => {
     void window.braintwo.wa.getConnectionState().then(setWaState)
     void window.braintwo.app.getVersion().then(setVersion)
     void window.braintwo.app.getPlatform().then(setPlatform)
-    const off = window.braintwo.wa.onConnectionState(setWaState)
-    return () => off()
+    void window.braintwo.app.getSyncStatus().then(setSyncStatus)
+    const off = window.braintwo.wa.onConnectionState((state) => {
+      setWaState(state)
+      setSyncStatus((prev) =>
+        prev
+          ? {
+              ...prev,
+              state: state === 'open' ? 'idle' : state,
+              label:
+                state === 'open'
+                  ? 'Al dia'
+                  : state === 'disconnected'
+                    ? 'Reconectando'
+                    : state === 'logged-out'
+                      ? 'Sesion cerrada'
+                      : 'Conectando'
+            }
+          : prev
+      )
+    })
+    const offSync = window.braintwo.app.onSyncStateChanged(setSyncStatus)
+    const offError = window.braintwo.app.onError((err) => {
+      setAppError(err)
+      window.setTimeout(() => setAppError(null), 5000)
+    })
+    return () => {
+      off()
+      offSync()
+      offError()
+    }
   }, [])
 
   useEffect(() => {
@@ -101,6 +132,7 @@ export default function App() {
         view={view}
         setView={setView}
         connectionState={waState}
+        syncStatus={syncStatus}
         version={version}
         platform={platform}
         onLogout={() => setShowLogoutConfirm(true)}
@@ -109,7 +141,13 @@ export default function App() {
         {view === 'onboarding' && <Onboarding />}
         {view === 'search' && <Search />}
         {view === 'timeline' && <Timeline />}
+        {view === 'settings' && <Settings onLogout={() => setShowLogoutConfirm(true)} />}
       </main>
+      {appError && (
+        <div className="fixed bottom-5 right-5 z-50 max-w-[360px] rounded-[8px] border border-bt-red/40 bg-[#160b10] px-4 py-3 text-sm text-bt-text shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
+          {appError.message}
+        </div>
+      )}
       {showLogoutConfirm && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-6 backdrop-blur-[2px]"
