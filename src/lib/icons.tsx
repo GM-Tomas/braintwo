@@ -33,6 +33,7 @@ export type IconName =
   | 'file'
   | 'sticker'
   | 'help'
+  | 'chat'
 
 export function Icon({
   name,
@@ -212,6 +213,10 @@ function renderPath(
           <path d="M9.1 9a3 3 0 015.83 1c0 2-3 3-3 3" {...s} />
           <line x1="12" y1="17" x2="12.01" y2="17" {...s} />
         </>
+      )
+    case 'chat':
+      return (
+        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" {...s} />
       )
     default:
       return null

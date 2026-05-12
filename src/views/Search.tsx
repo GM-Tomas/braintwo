@@ -41,7 +41,7 @@ export function Search() {
     setLoading(true)
     const t = setTimeout(() => {
       void window.braintwo.search
-        .query(clean, 30)
+        .query(clean, 50)
         .then((rows) => {
           if (!cancelled) setResults(rows)
         })
@@ -194,7 +194,9 @@ function ResultsPanel({
   if (results.length === 0) {
     return (
       <div className="py-16 text-center text-[13px] text-bt-dim">
-        No encontre resultados para esa busqueda.
+        No hay mensajes lo suficientemente relevantes para esa busqueda.
+        <br />
+        <span className="text-[12px] opacity-60">Proba con mas contexto o palabras clave distintas.</span>
       </div>
     )
   }

@@ -55,6 +55,19 @@ export interface EmbeddableMessage {
   text: string
 }
 
+export interface KeywordResult {
+  id: number
+  text: string
+  timestamp: number
+}
+
+export interface MemoryResult {
+  id: number
+  content: string
+  createdAt: number
+  distance?: number
+}
+
 export interface DbStats {
   messages: number
   embeddings: number
@@ -66,8 +79,18 @@ export interface DbInstance {
   raw: DatabaseType
   insertMessage: (msg: NewMessage) => InsertResult
   insertEmbedding: (msgId: number, vec: Float32Array) => void
+  clearEmbeddings: () => void
   searchSimilar: (queryVec: Float32Array, k: number) => SimilarResult[]
+  searchKeyword: (query: string, limit: number) => KeywordResult[]
   listMessagesWithoutEmbeddings: (limit: number) => EmbeddableMessage[]
+  // AI memory
+  insertMemory: (content: string) => number
+  insertMemoryEmbedding: (memoryId: number, vec: Float32Array) => void
+  searchMemorySimilar: (queryVec: Float32Array, k: number) => MemoryResult[]
+  searchMemoryKeyword: (query: string, limit: number) => MemoryResult[]
+  listMemories: (limit: number) => MemoryResult[]
+  listUnembeddedMemories: (limit: number) => { id: number; content: string }[]
+  // Stats / misc
   stats: (filePath?: string) => DbStats
   countMessages: () => number
   countEmbeddings: () => number
@@ -89,7 +112,36 @@ const SCHEMA_STATEMENTS = [
   `CREATE VIRTUAL TABLE IF NOT EXISTS message_embeddings USING vec0(
      msg_id      INTEGER PRIMARY KEY,
      embedding   FLOAT[${VEC_DIM}]
-   )`
+   )`,
+  // Standalone FTS5 table (owns its own copy of text — simpler than external content).
+  `CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+     text,
+     tokenize='unicode61'
+   )`,
+  // Keep FTS index in sync when messages are inserted.
+  `CREATE TRIGGER IF NOT EXISTS messages_fts_ai
+     AFTER INSERT ON messages BEGIN
+       INSERT INTO messages_fts(rowid, text) VALUES (new.id, new.text);
+     END`,
+
+  // AI memory: the model annotates what it learns across conversations.
+  `CREATE TABLE IF NOT EXISTS ai_memory (
+     id         INTEGER PRIMARY KEY AUTOINCREMENT,
+     content    TEXT NOT NULL,
+     created_at INTEGER DEFAULT (unixepoch())
+   )`,
+  `CREATE VIRTUAL TABLE IF NOT EXISTS memory_embeddings USING vec0(
+     memory_id  INTEGER PRIMARY KEY,
+     embedding  FLOAT[${VEC_DIM}]
+   )`,
+  `CREATE VIRTUAL TABLE IF NOT EXISTS ai_memory_fts USING fts5(
+     content,
+     tokenize='unicode61'
+   )`,
+  `CREATE TRIGGER IF NOT EXISTS ai_memory_fts_ai
+     AFTER INSERT ON ai_memory BEGIN
+       INSERT INTO ai_memory_fts(rowid, content) VALUES (new.id, new.content);
+     END`
 ]
 
 // Idempotent column additions for users upgrading from earlier schemas.
@@ -147,6 +199,26 @@ export function openDatabase(filePath: string): DbInstance {
     `INSERT INTO message_embeddings(msg_id, embedding) VALUES (?, ?)`
   )
 
+  // One-time FTS backfill for rows that existed before the trigger was added.
+  try {
+    db.exec(`
+      INSERT INTO messages_fts(rowid, text)
+      SELECT m.id, m.text FROM messages m
+      WHERE m.id NOT IN (SELECT rowid FROM messages_fts)
+    `)
+  } catch {
+    // Non-fatal — FTS table may be empty on first open; best-effort.
+  }
+
+  const kwSearchStmt = db.prepare<[string, number], KeywordResult>(`
+    SELECT m.id, m.text, m.timestamp
+    FROM messages_fts
+    JOIN messages m ON m.id = messages_fts.rowid
+    WHERE messages_fts MATCH ?
+    ORDER BY rank
+    LIMIT ?
+  `)
+
   const searchStmt = db.prepare<[Buffer, number], SimilarResult>(`
     SELECT m.id, m.wa_msg_id, m.timestamp, m.text, m.source, m.kind, e.distance
     FROM message_embeddings e
@@ -180,6 +252,39 @@ export function openDatabase(filePath: string): DbInstance {
     'SELECT MAX(created_at) AS last FROM messages'
   )
 
+  // ── AI Memory statements ─────────────────────────────────────────────────────
+  const insertMemoryStmt = db.prepare(
+    'INSERT INTO ai_memory(content) VALUES (?)'
+  )
+  const insertMemEmbStmt = db.prepare(
+    'INSERT INTO memory_embeddings(memory_id, embedding) VALUES (?, ?)'
+  )
+  const searchMemSimilarStmt = db.prepare<[Buffer, number], { id: number; content: string; created_at: number; distance: number }>(`
+    SELECT m.id, m.content, m.created_at, e.distance
+    FROM memory_embeddings e
+    JOIN ai_memory m ON m.id = e.memory_id
+    WHERE e.embedding MATCH ? AND k = ?
+    ORDER BY e.distance
+  `)
+  const searchMemKwStmt = db.prepare<[string, number], { id: number; content: string; created_at: number }>(`
+    SELECT m.id, m.content, m.created_at
+    FROM ai_memory_fts
+    JOIN ai_memory m ON m.id = ai_memory_fts.rowid
+    WHERE ai_memory_fts MATCH ?
+    ORDER BY rank
+    LIMIT ?
+  `)
+  const listMemoriesStmt = db.prepare<[number], { id: number; content: string; created_at: number }>(
+    'SELECT id, content, created_at FROM ai_memory ORDER BY created_at DESC LIMIT ?'
+  )
+  const unembeddedMemoriesStmt = db.prepare<[number], { id: number; content: string }>(`
+    SELECT m.id, m.content FROM ai_memory m
+    LEFT JOIN memory_embeddings e ON e.memory_id = m.id
+    WHERE e.memory_id IS NULL
+    ORDER BY m.id ASC
+    LIMIT ?
+  `)
+
   return {
     raw: db,
     insertMessage(msg) {
@@ -204,6 +309,20 @@ export function openDatabase(filePath: string): DbInstance {
       // even for integer-valued JS numbers — better-sqlite3 binds JS
       // numbers as REAL by default.
       insertEmbStmt.run(BigInt(msgId), vecToBuffer(vec))
+    },
+    clearEmbeddings() {
+      db.exec('DELETE FROM message_embeddings')
+    },
+    searchKeyword(query, limit) {
+      if (!query.trim() || limit <= 0) return []
+      // Wrap in double-quotes for phrase search; escape any embedded double-quotes.
+      const safeQuery = `"${query.replace(/"/g, '""')}"`
+      try {
+        return kwSearchStmt.all(safeQuery, Math.min(limit, 100))
+      } catch {
+        // FTS5 MATCH throws on malformed queries (e.g. stray AND/OR operators).
+        return []
+      }
     },
     searchSimilar(queryVec, k) {
       if (k <= 0) return []
@@ -238,6 +357,45 @@ export function openDatabase(filePath: string): DbInstance {
     },
     hasEmbedding(msgId) {
       return (hasEmbStmt.get(msgId)?.count ?? 0) > 0
+    },
+    insertMemory(content) {
+      const r = insertMemoryStmt.run(content)
+      return Number(r.lastInsertRowid)
+    },
+    insertMemoryEmbedding(memoryId, vec) {
+      insertMemEmbStmt.run(BigInt(memoryId), vecToBuffer(vec))
+    },
+    searchMemorySimilar(queryVec, k) {
+      if (k <= 0) return []
+      return searchMemSimilarStmt.all(vecToBuffer(queryVec), k).map((r) => ({
+        id: r.id,
+        content: r.content,
+        createdAt: r.created_at * 1000,
+        distance: r.distance
+      }))
+    },
+    searchMemoryKeyword(query, limit) {
+      if (!query.trim() || limit <= 0) return []
+      const safeQuery = `"${query.replace(/"/g, '""')}"`
+      try {
+        return searchMemKwStmt.all(safeQuery, Math.min(limit, 50)).map((r) => ({
+          id: r.id,
+          content: r.content,
+          createdAt: r.created_at * 1000
+        }))
+      } catch {
+        return []
+      }
+    },
+    listMemories(limit) {
+      return listMemoriesStmt.all(Math.min(limit, 200)).map((r) => ({
+        id: r.id,
+        content: r.content,
+        createdAt: r.created_at * 1000
+      }))
+    },
+    listUnembeddedMemories(limit) {
+      return unembeddedMemoriesStmt.all(Math.min(limit, 500))
     },
     close() {
       db.close()

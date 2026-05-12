@@ -2,7 +2,10 @@ import type { IpcRenderer, IpcRendererEvent } from 'electron'
 import type { WAConnectionState } from './services/whatsapp-state'
 import type { RecentMessage } from './services/ingest'
 import type {
+  AiConfig,
+  AiChatResponse,
   AppErrorEvent,
+  ChatMessage,
   DbStats,
   ImportProgress,
   ModelProgress,
@@ -52,6 +55,11 @@ export interface BrainTwoApi {
     onConnectionState: (cb: (state: WAConnectionState) => void) => Unsubscribe
     onQr: (cb: (qr: string) => void) => Unsubscribe
     onLoggedOut: (cb: () => void) => Unsubscribe
+  }
+  ai: {
+    getConfig: () => Promise<AiConfig | null>
+    setConfig: (config: Partial<AiConfig>) => Promise<void>
+    send: (messages: ChatMessage[]) => Promise<AiChatResponse>
   }
 }
 
@@ -128,6 +136,11 @@ export function createApi(
       onConnectionState: subscribe<WAConnectionState>('wa:connection-state'),
       onQr: subscribe<string>('wa:qr'),
       onLoggedOut: subscribe<void>('wa:logged-out')
+    },
+    ai: {
+      getConfig: () => ipcRenderer.invoke('ai:get-config'),
+      setConfig: (config: Partial<AiConfig>) => ipcRenderer.invoke('ai:set-config', config),
+      send: (messages: ChatMessage[]) => ipcRenderer.invoke('ai:send', messages)
     }
   }
 }

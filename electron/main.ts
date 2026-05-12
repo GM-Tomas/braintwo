@@ -13,7 +13,7 @@ import {
 import pino from 'pino'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { mkdirSync, renameSync, statSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { createWhatsAppService, type WhatsAppService } from './services/whatsapp'
 import type { WAConnectionState } from './services/whatsapp-state'
 import { openDatabase, type DbInstance } from './services/db'
@@ -22,6 +22,9 @@ import { createSearchService, type SearchService } from './services/search'
 import { importExportFile, type ImportProgress } from './services/export-parser'
 import { createSyncStatusTracker, type SyncStatusTracker } from './services/sync-status'
 import { readSettings, writeSettings } from './services/settings'
+import { readAiConfig, writeAiConfig } from './services/ai-config'
+import { createAiChatService, type AiChatService } from './services/ai-chat'
+import type { AiConfig, ChatMessage } from '@shared/types'
 import {
   createIngestPipeline,
   extractKind,
@@ -57,6 +60,7 @@ let ingest: IngestPipeline | null = null
 let dbPath: string | null = null
 let embeddings: EmbeddingService | null = null
 let search: SearchService | null = null
+let aiChat: AiChatService | null = null
 let syncStatus: SyncStatusTracker = createSyncStatusTracker()
 let messageBatcher: MessageBatcher<RecentMessage> | null = null
 let catchupTimer: ReturnType<typeof setTimeout> | null = null
@@ -228,11 +232,37 @@ function openStorage(): void {
     : createFileLogger('ingest')
   ingest = createIngestPipeline(db, ingestLogger)
   ingestLogger?.info({ dbPath, count: ingest.count() }, 'storage opened')
+  const modelsDir = join(app.getPath('userData'), 'models')
+  // Version tag encodes the model AND the embedding prefix convention.
+  // Bump this string whenever either changes to trigger a full re-index.
+  const EMBEDDING_VERSION = 'multilingual-e5-small:passage:v1'
+  const versionFile = join(app.getPath('userData'), 'embedding_version.txt')
+  let storedVersion = ''
+  try { storedVersion = readFileSync(versionFile, 'utf8').trim() } catch { /* first run */ }
+  if (storedVersion !== EMBEDDING_VERSION && db.countEmbeddings() > 0) {
+    db.clearEmbeddings()
+  }
+  writeFileSync(versionFile, EMBEDDING_VERSION)
   embeddings = createEmbeddingService({
-    cacheDir: join(app.getPath('userData'), 'models'),
+    cacheDir: modelsDir,
     onProgress: (progress) => broadcast('search:model-progress', progress)
   })
   search = createSearchService({ db, embeddings })
+  aiChat = createAiChatService({
+    db,
+    search,
+    embed: (text) => embeddings!.embed(text, 'passage')
+  })
+  // Backfill embeddings for any memories stored without one (e.g. from a previous session).
+  void (async () => {
+    const unembedded = db.listUnembeddedMemories(200)
+    for (const m of unembedded) {
+      try {
+        const vec = await embeddings!.embed(m.content, 'passage')
+        db.insertMemoryEmbedding(m.id, vec)
+      } catch { /* best-effort */ }
+    }
+  })()
   void search.backfillMissing(50_000).catch((err: unknown) => {
     reportError('search.backfill_failed', err instanceof Error ? err.message : String(err))
   })
@@ -380,6 +410,20 @@ ipcMain.handle('app:open-userdata-folder', async () => {
 
 ipcMain.handle('search:query', async (_e, text: string, k = 12) => {
   return search?.query(text, k) ?? []
+})
+
+ipcMain.handle('ai:get-config', () => readAiConfig(app.getPath('userData')))
+
+ipcMain.handle('ai:set-config', (_e, patch: Partial<AiConfig>) => {
+  writeAiConfig(app.getPath('userData'), patch)
+})
+
+ipcMain.handle('ai:send', async (_e, messages: ChatMessage[]) => {
+  if (!aiChat) throw new Error('Storage not ready')
+  const config = readAiConfig(app.getPath('userData'))
+  if (!config?.apiKey) throw new Error('IA no configurada. Configurá un proveedor en Settings.')
+  const today = new Date().toISOString().split('T')[0]!
+  return aiChat.send(config, messages, today)
 })
 
 ipcMain.handle('export:import', async () => {

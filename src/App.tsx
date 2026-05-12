@@ -4,6 +4,7 @@ import { Onboarding, WelcomeCards } from './views/Onboarding'
 import { Search } from './views/Search'
 import { Timeline } from './views/Timeline'
 import { Settings } from './views/Settings'
+import { Chat } from './views/Chat'
 import { Sidebar } from './components/Sidebar'
 
 type Phase = 'welcome' | 'qr' | 'app'
@@ -141,6 +142,7 @@ export default function App() {
         {view === 'onboarding' && <Onboarding />}
         {view === 'search' && <Search />}
         {view === 'timeline' && <Timeline />}
+        {view === 'chat' && <Chat onNavigate={setView} />}
         {view === 'settings' && <Settings onLogout={() => setShowLogoutConfirm(true)} />}
       </main>
       {appError && (

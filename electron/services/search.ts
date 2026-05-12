@@ -17,6 +17,26 @@ export interface SearchServiceDeps {
   batchSize?: number
 }
 
+// Absolute floor calibrated for multilingual-e5-small with asymmetric query/passage encoding.
+// Empirically, unrelated short texts score ~0.82; genuine matches score 0.85+.
+const MIN_SIMILARITY = 0.83
+
+// When many results pass the floor, also require them to stand out from their own
+// average (mean + Z × σ). This catches cases where k-NN returns a cluster of
+// moderately-similar results that are all equally irrelevant.
+const ADAPTIVE_Z = 0.6
+
+function filterByRelevance(candidates: SearchResult[]): SearchResult[] {
+  const above = candidates.filter((r) => r.similarity >= MIN_SIMILARITY)
+  if (above.length < 4) return above
+  const mean = above.reduce((s, r) => s + r.similarity, 0) / above.length
+  const variance = above.reduce((s, r) => s + (r.similarity - mean) ** 2, 0) / above.length
+  const std = Math.sqrt(variance)
+  // Only apply adaptive filter when there is meaningful spread in the scores.
+  if (std < 0.015) return above
+  return above.filter((r) => r.similarity >= mean + ADAPTIVE_Z * std)
+}
+
 export function createSearchService(deps: SearchServiceDeps): SearchService {
   const schedule = deps.scheduler ?? ((cb) => setImmediate(cb))
   const batchSize = deps.batchSize ?? 50
@@ -31,8 +51,9 @@ export function createSearchService(deps: SearchServiceDeps): SearchService {
     async query(text, k = 12) {
       const clean = text.trim()
       if (!clean) return []
-      const queryVec = await deps.embeddings.embed(clean)
-      return deps.db.searchSimilar(queryVec, Math.max(1, Math.min(k, 50))).map(toSearchResult)
+      const queryVec = await deps.embeddings.embed(clean, 'query')
+      const candidates = deps.db.searchSimilar(queryVec, Math.max(1, Math.min(k, 50))).map(toSearchResult)
+      return filterByRelevance(candidates)
     },
 
     async backfillMissing(limit = 500) {

@@ -1,4 +1,4 @@
-export type View = 'onboarding' | 'search' | 'timeline' | 'settings'
+export type View = 'onboarding' | 'search' | 'timeline' | 'settings' | 'chat'
 
 export type ConnectionState =
   | 'connecting'
@@ -48,6 +48,7 @@ export interface RecentMessage {
   kind: MessageKind
   media?: MediaMeta | null
   fromMe?: boolean
+  createdAt?: number
 }
 
 export interface SearchResult extends RecentMessage {
@@ -95,6 +96,39 @@ export interface AppErrorEvent {
   recoverable: boolean
 }
 
+// ── AI Chat ────────────────────────────────────────────────────────────────
+
+export type AiProvider = 'anthropic' | 'openai-compat' | 'gemini'
+
+export interface AiConfig {
+  provider: AiProvider
+  apiKey: string
+  /** For openai-compat: base URL of the endpoint (e.g. http://localhost:11434/v1) */
+  baseUrl?: string
+  /** Model string. Empty = per-provider default. */
+  model?: string
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface RetrievedContext {
+  id: number
+  text: string
+  timestamp: number
+  similarity?: number
+}
+
+export interface AiChatResponse {
+  content: string
+  sources: RetrievedContext[]
+  action?: { action: 'navigate'; view: string }
+}
+
+// ── Bridge ─────────────────────────────────────────────────────────────────
+
 export interface BrainTwoBridge {
   platform: NodeJS.Platform
   versions: {
@@ -134,6 +168,11 @@ export interface BrainTwoBridge {
     onConnectionState: (cb: (state: WAConnectionState) => void) => Unsubscribe
     onQr: (cb: (qr: string) => void) => Unsubscribe
     onLoggedOut: (cb: () => void) => Unsubscribe
+  }
+  ai: {
+    getConfig: () => Promise<AiConfig | null>
+    setConfig: (config: Partial<AiConfig>) => Promise<void>
+    send: (messages: ChatMessage[]) => Promise<AiChatResponse>
   }
 }
 

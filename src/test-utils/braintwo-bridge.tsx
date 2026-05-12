@@ -102,7 +102,10 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
       inserted: 0,
       skipped: 0,
       done: true
-    }))
+    })),
+    aiGetConfig: vi.fn(async () => null),
+    aiSetConfig: vi.fn(async () => {}),
+    aiSend: vi.fn(async () => ({ content: 'respuesta mock', sources: [], action: undefined }))
   }
 
   const bridge: BrainTwoBridge = {
@@ -190,6 +193,11 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
           if (i >= 0) loggedOutListeners.splice(i, 1)
         }
       }
+    },
+    ai: {
+      getConfig: spies.aiGetConfig,
+      setConfig: spies.aiSetConfig,
+      send: spies.aiSend
     }
   }
 

@@ -8,10 +8,11 @@ export interface ModelProgress {
   progress?: number
 }
 
-export type Embedder = (text: string) => Promise<Float32Array> | Float32Array
+export type EmbedType = 'query' | 'passage'
+export type Embedder = (text: string, type?: EmbedType) => Promise<Float32Array> | Float32Array
 
 export interface EmbeddingService {
-  embed: (text: string) => Promise<Float32Array>
+  embed: (text: string, type?: EmbedType) => Promise<Float32Array>
   getStatus: () => ModelProgress
 }
 
@@ -55,13 +56,13 @@ export function createEmbeddingService(deps: EmbeddingServiceDeps): EmbeddingSer
   }
 
   return {
-    embed(text) {
+    embed(text, type = 'passage') {
       const task = queue.then(
         () =>
           new Promise<Float32Array>((resolve, reject) => {
             schedule(() => {
               void init()
-                .then((embedder) => Promise.resolve(embedder(text)))
+                .then((embedder) => Promise.resolve(embedder(text, type)))
                 .then(resolve, reject)
             })
           })
@@ -105,8 +106,8 @@ async function initTransformerEmbedder(
     }
   })
   publish({ status: 'ready', message: 'Modelo listo', progress: 1 })
-  return async (text: string) => {
-    const output = await pipe(`query: ${text}`, { pooling: 'mean', normalize: true })
+  return async (text: string, type: EmbedType = 'passage') => {
+    const output = await pipe(`${type}: ${text}`, { pooling: 'mean', normalize: true })
     return normalizeVector(output)
   }
 }
