@@ -12,6 +12,8 @@ export function statusLabel(state: WAConnectionState): string {
       return 'Reconectando…'
     case 'logged-out':
       return 'Sesión cerrada'
+    default:
+      return ''
   }
 }
 

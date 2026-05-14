@@ -49,11 +49,13 @@ export interface RecentMessage {
   media?: MediaMeta | null
   fromMe?: boolean
   createdAt?: number
+  contextNote?: string | null
 }
 
 export interface SearchResult extends RecentMessage {
   distance: number
   similarity: number
+  matchSource?: 'semantic' | 'keyword' | 'both'
 }
 
 export interface ModelProgress {

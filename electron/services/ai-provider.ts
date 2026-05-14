@@ -13,10 +13,25 @@ const DEFAULT_MODELS: Record<AiConfig['provider'], string> = {
 }
 
 export async function callProvider(args: ProviderCallArgs): Promise<string> {
-  switch (args.config.provider) {
-    case 'anthropic':     return callAnthropic(args)
-    case 'openai-compat': return callOpenAiCompat(args)
-    case 'gemini':        return callGemini(args)
+  try {
+    switch (args.config.provider) {
+      case 'anthropic':     return await callAnthropic(args)
+      case 'openai-compat': return await callOpenAiCompat(args)
+      case 'gemini':        return await callGemini(args)
+    }
+  } catch (err) {
+    // Wrap low-level network errors (ECONNRESET, ENOTFOUND, etc.) that manifest
+    // as "fetch failed" into a user-readable message. These usually mean the
+    // provider's API is temporarily unreachable or a rate limit closed the connection.
+    if (err instanceof TypeError && err.message === 'fetch failed') {
+      const cause = (err as { cause?: { code?: string } }).cause
+      const code = cause?.code ?? 'red de conexión'
+      throw new Error(
+        `No se pudo conectar con ${args.config.provider} (${code}). ` +
+        `Revisá tu conexión o esperá un momento si excediste el límite de solicitudes.`
+      )
+    }
+    throw err
   }
 }
 

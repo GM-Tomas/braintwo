@@ -74,5 +74,7 @@ export function labelFor(state: ConnectionState): string {
       return 'Sesion cerrada'
     case 'stale-primary':
       return 'Primary inactivo'
+    default:
+      return ''
   }
 }

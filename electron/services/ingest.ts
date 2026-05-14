@@ -201,7 +201,7 @@ export function createIngestPipeline(
   logger?: Logger
 ): IngestPipeline {
   const recentStmt = db.raw.prepare<[number], RecentMessageRow>(
-    `SELECT id, wa_msg_id, timestamp, text, source, kind, media_meta, from_me, created_at
+    `SELECT id, wa_msg_id, timestamp, text, source, kind, media_meta, from_me, created_at, context_note
        FROM messages
        ORDER BY timestamp DESC
        LIMIT ?`
@@ -284,6 +284,7 @@ interface RecentMessageRow {
   media_meta: string | null
   from_me: number | null
   created_at: number | null
+  context_note: string | null
 }
 
 function rowToRecent(row: RecentMessageRow): RecentMessage {
@@ -304,6 +305,7 @@ function rowToRecent(row: RecentMessageRow): RecentMessage {
     kind: row.kind ?? 'text',
     media,
     fromMe: row.from_me === 1,
-    createdAt: row.created_at != null ? row.created_at * 1000 : undefined
+    createdAt: row.created_at != null ? row.created_at * 1000 : undefined,
+    contextNote: row.context_note ?? null
   }
 }

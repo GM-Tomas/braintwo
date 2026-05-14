@@ -212,9 +212,9 @@ function ResultsPanel({
               <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed text-bt-text">
                 {r.text || 'Mensaje sin texto'}
               </p>
-              <span className="shrink-0 rounded-full border border-bt-border px-2.5 py-1 text-[11px] text-bt-accent">
-                {Math.round(r.similarity * 100)}%
-              </span>
+              <div className="flex shrink-0 items-center gap-2">
+                <MatchBadge source={r.matchSource} similarity={r.similarity} />
+              </div>
             </div>
             <div className="mt-2 flex items-center gap-2 text-[11.5px] text-bt-dim">
               <time dateTime={new Date(r.timestamp).toISOString()}>
@@ -232,5 +232,39 @@ function ResultsPanel({
         </p>
       ) : null}
     </section>
+  )
+}
+
+function MatchBadge({
+  source,
+  similarity
+}: {
+  source?: 'semantic' | 'keyword' | 'both'
+  similarity: number
+}) {
+  if (source === 'keyword') {
+    return (
+      <span className="rounded-full border border-bt-accent/30 px-2.5 py-1 text-[11px] text-bt-accent">
+        exacto
+      </span>
+    )
+  }
+  if (source === 'both') {
+    return (
+      <>
+        <span className="rounded-full border border-bt-accent/30 px-2.5 py-1 text-[11px] text-bt-accent">
+          exacto
+        </span>
+        <span className="rounded-full border border-bt-primary/30 px-2.5 py-1 text-[11px] text-bt-primary">
+          {Math.round(similarity * 100)}%
+        </span>
+      </>
+    )
+  }
+  // semantic only
+  return (
+    <span className="rounded-full border border-bt-primary/30 px-2.5 py-1 text-[11px] text-bt-primary">
+      {Math.round(similarity * 100)}%
+    </span>
   )
 }

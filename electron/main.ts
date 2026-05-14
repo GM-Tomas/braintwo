@@ -24,6 +24,7 @@ import { createSyncStatusTracker, type SyncStatusTracker } from './services/sync
 import { readSettings, writeSettings } from './services/settings'
 import { readAiConfig, writeAiConfig } from './services/ai-config'
 import { createAiChatService, type AiChatService } from './services/ai-chat'
+import { createContextService, type ContextService } from './services/context'
 import type { AiConfig, ChatMessage } from '@shared/types'
 import {
   createIngestPipeline,
@@ -61,6 +62,7 @@ let dbPath: string | null = null
 let embeddings: EmbeddingService | null = null
 let search: SearchService | null = null
 let aiChat: AiChatService | null = null
+let contextSvc: ContextService | null = null
 let syncStatus: SyncStatusTracker = createSyncStatusTracker()
 let messageBatcher: MessageBatcher<RecentMessage> | null = null
 let catchupTimer: ReturnType<typeof setTimeout> | null = null
@@ -253,6 +255,13 @@ function openStorage(): void {
     search,
     embed: (text) => embeddings!.embed(text, 'passage')
   })
+  contextSvc = createContextService({
+    db,
+    embeddings,
+    getAiConfig: () => readAiConfig(app.getPath('userData')),
+    onError: (msg) => reportError('context.generation_failed', msg)
+  })
+  void contextSvc.backfill()
   // Backfill embeddings for any memories stored without one (e.g. from a previous session).
   void (async () => {
     const unembedded = db.listUnembeddedMemories(200)
@@ -348,6 +357,7 @@ function startWhatsApp(): void {
       fromMe: raw.key?.fromMe === true
     })
     queueEmbedding(result.rowId, extractText(raw))
+    contextSvc?.queue(result.rowId, extractKind(raw), extractText(raw), extractMediaMeta(raw))
     if (source === 'offline-sync' || source === 'history-sync') {
       noteCatchupMessage()
     }

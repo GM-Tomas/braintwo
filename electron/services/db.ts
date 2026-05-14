@@ -53,12 +53,23 @@ export interface SimilarResult {
 export interface EmbeddableMessage {
   id: number
   text: string
+  context_note: string | null
 }
 
 export interface KeywordResult {
   id: number
+  wa_msg_id: string
   text: string
   timestamp: number
+  source: MessageSource
+  kind: MessageKind
+}
+
+export interface ContextableMessage {
+  id: number
+  text: string
+  kind: MessageKind
+  media_meta: string | null
 }
 
 export interface MemoryResult {
@@ -83,6 +94,9 @@ export interface DbInstance {
   searchSimilar: (queryVec: Float32Array, k: number) => SimilarResult[]
   searchKeyword: (query: string, limit: number) => KeywordResult[]
   listMessagesWithoutEmbeddings: (limit: number) => EmbeddableMessage[]
+  listMessagesWithoutContext: (limit: number) => ContextableMessage[]
+  updateContextNote: (id: number, note: string) => void
+  deleteEmbedding: (msgId: number) => void
   // AI memory
   insertMemory: (content: string) => number
   insertMemoryEmbedding: (memoryId: number, vec: Float32Array) => void
@@ -148,7 +162,8 @@ const SCHEMA_STATEMENTS = [
 const POST_MIGRATIONS = [
   { column: 'kind', sql: `ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'` },
   { column: 'media_meta', sql: `ALTER TABLE messages ADD COLUMN media_meta TEXT` },
-  { column: 'from_me', sql: `ALTER TABLE messages ADD COLUMN from_me INTEGER NOT NULL DEFAULT 0` }
+  { column: 'from_me', sql: `ALTER TABLE messages ADD COLUMN from_me INTEGER NOT NULL DEFAULT 0` },
+  { column: 'context_note', sql: `ALTER TABLE messages ADD COLUMN context_note TEXT` }
 ]
 
 export function applyPragmas(db: DatabaseType): void {
@@ -196,7 +211,7 @@ export function openDatabase(filePath: string): DbInstance {
   )
 
   const insertEmbStmt = db.prepare(
-    `INSERT INTO message_embeddings(msg_id, embedding) VALUES (?, ?)`
+    `INSERT OR IGNORE INTO message_embeddings(msg_id, embedding) VALUES (?, ?)`
   )
 
   // One-time FTS backfill for rows that existed before the trigger was added.
@@ -211,7 +226,7 @@ export function openDatabase(filePath: string): DbInstance {
   }
 
   const kwSearchStmt = db.prepare<[string, number], KeywordResult>(`
-    SELECT m.id, m.text, m.timestamp
+    SELECT m.id, m.wa_msg_id, m.text, m.timestamp, m.source, m.kind
     FROM messages_fts
     JOIN messages m ON m.id = messages_fts.rowid
     WHERE messages_fts MATCH ?
@@ -240,13 +255,29 @@ export function openDatabase(filePath: string): DbInstance {
   )
 
   const unembeddedStmt = db.prepare<[number], EmbeddableMessage>(`
-    SELECT m.id, m.text
+    SELECT m.id, m.text, m.context_note
     FROM messages m
     LEFT JOIN message_embeddings e ON e.msg_id = m.id
     WHERE e.msg_id IS NULL AND length(trim(m.text)) > 0
     ORDER BY m.timestamp ASC, m.id ASC
     LIMIT ?
   `)
+
+  const withoutContextStmt = db.prepare<[number], ContextableMessage>(`
+    SELECT id, text, kind, media_meta
+    FROM messages
+    WHERE context_note IS NULL
+    ORDER BY timestamp DESC
+    LIMIT ?
+  `)
+
+  const updateContextStmt = db.prepare<[string, number], void>(
+    `UPDATE messages SET context_note = ? WHERE id = ?`
+  )
+
+  const deleteEmbStmt = db.prepare<[bigint], void>(
+    `DELETE FROM message_embeddings WHERE msg_id = ?`
+  )
 
   const lastIngestStmt = db.prepare<[], { last: number | null }>(
     'SELECT MAX(created_at) AS last FROM messages'
@@ -331,6 +362,16 @@ export function openDatabase(filePath: string): DbInstance {
     listMessagesWithoutEmbeddings(limit) {
       if (limit <= 0) return []
       return unembeddedStmt.all(Math.min(limit, 10_000))
+    },
+    listMessagesWithoutContext(limit) {
+      if (limit <= 0) return []
+      return withoutContextStmt.all(Math.min(limit, 10_000))
+    },
+    updateContextNote(id, note) {
+      updateContextStmt.run(note, id)
+    },
+    deleteEmbedding(msgId) {
+      deleteEmbStmt.run(BigInt(msgId))
     },
     stats(filePath) {
       let sizeBytes = 0
