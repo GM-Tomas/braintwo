@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #060a12;
+  color: #e8eef8;
+  font-family: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #4a5d75;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(74, 93, 117, 0.3);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(74, 93, 117, 0.7);
+}
+
+/* Keyboard hint pill */
+kbd {
+  font-family: 'Outfit', sans-serif;
+  font-size: 10px;
+  color: #7a92b0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(122, 146, 176, 0.2);
+  border-radius: 4px;
+  padding: 2px 6px;
+  letter-spacing: 0.05em;
+}
+
+/* Subtle gradient text helper for the wordmark */
+.bt-grad-text {
+  background: linear-gradient(135deg, #1a8fe3, #2ec4a5);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}

@@ -1,71 +1,65 @@
 # BrainTwo
 
-> Tu segundo cerebro, local y privado. Capturá ideas desde WhatsApp, buscalas con lenguaje natural.
+BrainTwo is a local desktop memory layer for your WhatsApp self-chat. It pairs as a linked device, stores messages in SQLite, imports full `.txt` exports, builds local embeddings, and lets you search your timeline semantically.
 
-## Qué hace
+## Features
 
-- Captura mensajes de texto, audios e imágenes desde tu chat de WhatsApp
-- Transcribe audios automáticamente con Gemini
-- Categoriza notas con IA
-- Búsqueda semántica RAG en lenguaje natural
-- Todo corre en tu disco — sin servidores, sin suscripciones ocultas
+- WhatsApp linked-device onboarding with QR, reconnect, tray, autostart, and hide-on-close.
+- Realtime, offline catch-up, history-sync, and `.txt` export ingest with deterministic deduplication.
+- Timeline filters for text, audio, image, video, document, sticker, and imported messages.
+- Local semantic search backed by `sqlite-vec` and a serialized embedding queue.
+- Settings page for DB stats, user-data folder, export reimport, autostart, and logout.
+- Sync status badge, catch-up notifications, stale-primary warning, and user-facing main-process errors.
 
-## Requisitos
-
-- Node.js 18+
-- Una cuenta de Google AI Studio (para la API key de Gemini)
-
-## Instalación
+## Development
 
 ```bash
-git clone https://github.com/tu-usuario/braintwo
-cd braintwo
 npm install
-npm start
+npm run dev
 ```
 
-## Configuración
+Useful checks:
 
-1. Al abrir la app, escaneá el QR con WhatsApp para vincular tu sesión
-2. Ir a **Configuración** y pegar tu Gemini API key
-   - Obtenela gratis en [aistudio.google.com](https://aistudio.google.com/app/apikey)
-3. Configurar el nombre del chat donde te mandás notas a vos mismo
-
-## Estructura del proyecto
-
-```
-braintwo/
-├── main.js          ← proceso principal Electron
-├── preload.js       ← puente seguro Node ↔ renderer
-├── src/
-│   ├── db.js        ← SQLite + sqlite-vec (base local)
-│   ├── whatsapp.js  ← captura con whatsapp-web.js
-│   ├── sync.js      ← orquestador de ingesta
-│   └── ai.js        ← Gemini API (embeddings, RAG, transcripción)
-└── renderer/
-    ├── onboarding.html
-    ├── notes.html
-    ├── config.html
-    ├── css/
-    └── js/
+```bash
+npm run typecheck
+npm test
+npm run build
 ```
 
-## Modelo de negocio
+On Windows PowerShell with script execution disabled, run the `.cmd` shims instead:
 
-- **Tier gratuito (BYOK):** traés tu propia API key de Gemini
-- **Tier Pro ($8–12/mes):** IA llave en mano, sin configurar nada *(próximamente)*
+```bash
+npm.cmd run typecheck
+npm.cmd test
+```
 
-## Roadmap v0 → v1
+## Semantic Search Model
 
-- [x] Onboarding con QR
-- [x] Ingesta de texto, audio e imagen
-- [x] Búsqueda semántica RAG
-- [x] Configuración de API key
-- [ ] Sync en segundo plano (sistema tray)
-- [ ] Filtros por fecha y tipo
-- [ ] Multi-chat
-- [ ] Exportar a Markdown
+BrainTwo is wired for `Xenova/multilingual-e5-small` via `@xenova/transformers` and caches model files under the app user-data folder in `models/`. If the transformer package or model is unavailable, the app falls back to a deterministic local vectorizer so search, tests, and offline development still work.
 
----
+The model is not packaged into the installer; it downloads on first use when the transformer runtime is available.
 
-Construido con Electron, whatsapp-web.js, SQLite, sqlite-vec y Gemini API.
+## Importing WhatsApp History
+
+WhatsApp linked devices only provide recent history. To load older messages:
+
+1. Open the chat with yourself in WhatsApp.
+2. Choose export chat.
+3. Select no media.
+4. Import the generated `.txt` from BrainTwo onboarding or Settings.
+
+Repeated imports are safe because export message IDs are deterministic.
+
+## Packaging
+
+```bash
+npm run package
+```
+
+`electron-builder.yml` targets Windows NSIS, macOS DMG, and Linux AppImage. Native dependencies are rebuilt by the install/build scripts.
+
+## Troubleshooting
+
+- If `better-sqlite3` ABI errors appear after changing Electron or Node, remove `.abi` and rerun the dev/test command.
+- If linked devices log out, open WhatsApp on the primary phone. WhatsApp can revoke linked devices after long primary-phone inactivity.
+- If the first semantic search is slow, the model may be downloading into the user-data cache.

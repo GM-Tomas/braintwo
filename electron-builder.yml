@@ -1,0 +1,28 @@
+appId: com.syntropy.braintwo
+productName: BrainTwo
+copyright: Copyright © 2026 Syntropy
+directories:
+  output: dist
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+extraResources:
+  - from: build
+    to: build
+    filter:
+      - '*.png'
+asar: true
+win:
+  target: nsis
+  artifactName: BrainTwo-${version}-setup.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+mac:
+  target: dmg
+  category: public.app-category.productivity
+linux:
+  target: AppImage
+  category: Utility
