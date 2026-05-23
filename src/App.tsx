@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AppErrorEvent, SyncStatus, View, WAConnectionState } from '@shared/types'
-import { Onboarding, WelcomeCards } from './views/Onboarding'
+import { Onboarding, FTU } from './views/Onboarding'
 import { Search } from './views/Search'
 import { Timeline } from './views/Timeline'
 import { Settings } from './views/Settings'
@@ -31,7 +31,6 @@ function writeFlag(key: string, value: boolean): void {
 
 function initialPhase(): Phase {
   if (readFlag(ONBOARDED_KEY)) return 'app'
-  if (readFlag(FTU_KEY)) return 'qr'
   return 'welcome'
 }
 
@@ -53,6 +52,18 @@ export default function App() {
     void window.braintwo.app.getVersion().then(setVersion)
     void window.braintwo.app.getPlatform().then(setPlatform)
     void window.braintwo.app.getSyncStatus().then(setSyncStatus)
+    // If a QR is already waiting and the user was previously onboarded
+    // (session dropped), switch to the QR screen immediately.
+    // During FTU ('welcome' phase), keep the user on the welcome screen.
+    void window.braintwo.wa.getCurrentQr().then((qr) => {
+      if (qr) {
+        setPhase((prev) => {
+          if (prev !== 'app') return prev
+          setView('onboarding')
+          return 'qr'
+        })
+      }
+    })
     const off = window.braintwo.wa.onConnectionState((state) => {
       setWaState(state)
       setSyncStatus((prev) =>
@@ -72,6 +83,15 @@ export default function App() {
           : prev
       )
     })
+    // A QR arriving while in the main app means the session is gone and the
+    // user must re-authenticate — switch to the pairing screen.
+    const offQr = window.braintwo.wa.onQr(() => {
+      setPhase((prev) => {
+        if (prev !== 'app') return prev
+        setView('onboarding')
+        return 'qr'
+      })
+    })
     const offSync = window.braintwo.app.onSyncStateChanged(setSyncStatus)
     const offError = window.braintwo.app.onError((err) => {
       setAppError(err)
@@ -79,6 +99,7 @@ export default function App() {
     })
     return () => {
       off()
+      offQr()
       offSync()
       offError()
     }
@@ -97,31 +118,17 @@ export default function App() {
     }
     if (waState === 'logged-out') {
       setPhase(readFlag(ONBOARDED_KEY) || readFlag(FTU_KEY) ? 'qr' : 'welcome')
+      writeFlag(ONBOARDED_KEY, false)
       setView('onboarding')
       setShowLogoutConfirm(false)
     }
   }, [waState, autoRouted, phase])
 
-  if (phase === 'welcome') {
+  if (phase === 'welcome' || phase === 'qr') {
     return (
       <div className="flex h-full bg-bt-bg text-bt-text font-sans">
         <main className="flex flex-1 flex-col overflow-hidden">
-          <WelcomeCards
-            onContinue={() => {
-              writeFlag(FTU_KEY, true)
-              setPhase('qr')
-            }}
-          />
-        </main>
-      </div>
-    )
-  }
-
-  if (phase === 'qr') {
-    return (
-      <div className="flex h-full bg-bt-bg text-bt-text font-sans">
-        <main className="flex flex-1 flex-col overflow-hidden">
-          <Onboarding />
+          <FTU startAtQr={phase === 'qr'} />
         </main>
       </div>
     )

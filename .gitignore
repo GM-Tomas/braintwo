@@ -12,3 +12,4 @@ logs/
 .vite/
 *.tsbuildinfo
 .abi/
+.claude/

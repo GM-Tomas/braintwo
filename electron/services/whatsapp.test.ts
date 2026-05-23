@@ -248,10 +248,11 @@ describe('whatsapp service', () => {
         connection: 'close',
         lastDisconnect: { error: { output: { statusCode: LOGGED_OUT_CODE } } }
       })
-      expect(onLoggedOut).toHaveBeenCalledTimes(1)
-      // rmAuth scheduled (called async, so wait one tick)
+      // State transition and 'logged-out' event fire AFTER rmAuth resolves,
+      // so the renderer can never race a new connect() against a partial delete.
       await Promise.resolve()
       expect(h.deps.rmAuth).toHaveBeenCalledWith('/tmp/auth-test')
+      expect(onLoggedOut).toHaveBeenCalledTimes(1)
       expect(h.reconnectCalls.length).toBe(0)
       expect(h.service.getState()).toBe('logged-out')
     })
