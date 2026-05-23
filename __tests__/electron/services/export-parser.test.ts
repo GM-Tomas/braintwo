@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { openDatabase, type DbInstance } from './db'
+import { openDatabase, type DbInstance } from '../../../electron/services/db'
 import {
   ingestFromExport,
   parseWhatsAppExport,
   syntheticExportId
-} from './export-parser'
+} from '../../../electron/services/export-parser'
 
 describe('WhatsApp export parser', () => {
   let db: DbInstance

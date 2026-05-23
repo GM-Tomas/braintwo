@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, act, waitFor } from '@testing-library/react'
-import { Timeline, mergeRecent } from './Timeline'
+import { Timeline, mergeRecent } from '../../../src/views/Timeline'
 import {
   installBraintwoBridge,
   type BridgeHandle
@@ -262,7 +262,7 @@ describe('<Timeline />', () => {
         ]
       })
       render(<Timeline />)
-      expect(await screen.findByText(/2\.4 MB/)).toBeInTheDocument()
+      expect(await screen.findByText(/2\.38 MB/)).toBeInTheDocument()
     })
 
     it('renders "Sin contenido textual" when media is null', async () => {
@@ -341,7 +341,7 @@ describe('<Timeline />', () => {
   it('unsubscribes from messages-batch on unmount', () => {
     const off = vi.fn()
     const original = h.bridge.app.onMessagesBatch
-    h.bridge.app.onMessagesBatch = (cb) => {
+    h.bridge.app.onMessagesBatch = (cb: any) => {
       const real = original(cb)
       return () => {
         off()

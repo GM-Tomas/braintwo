@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { openDatabase, type DbInstance } from './db'
-import { createEmbeddingService, deterministicEmbedder } from './embeddings'
-import { createSearchService } from './search'
+import { openDatabase, type DbInstance } from '../../../electron/services/db'
+import { createEmbeddingService, deterministicEmbedder } from '../../../electron/services/embeddings'
+import { createSearchService } from '../../../electron/services/search'
 
 describe('search service', () => {
   let db: DbInstance

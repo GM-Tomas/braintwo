@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { createWhatsAppService, type WhatsAppDeps } from './whatsapp'
-import { LOGGED_OUT_CODE } from './whatsapp-state'
+import { createWhatsAppService, type WhatsAppDeps } from '../../../electron/services/whatsapp'
+import { LOGGED_OUT_CODE } from '../../../electron/services/whatsapp-state'
 
 interface FakeSocket {
   ev: { on: ReturnType<typeof vi.fn> }
@@ -155,7 +155,7 @@ describe('whatsapp service', () => {
         authStateFactory: async () => ({ state: { creds: {}, keys: {} }, saveCreds: async () => {} }),
         versionFactory: async () => ({ version: [2, 3000, 0] }),
         browser: ['x', 'y', 'z'],
-        makeKeyStore: (k) => k,
+        makeKeyStore: (k: any) => k,
         rmAuth: async () => {},
         scheduleReconnect: () => null,
         cancelReconnect: () => {}
@@ -383,7 +383,7 @@ describe('whatsapp service', () => {
         }),
         versionFactory: async () => ({ version: [2, 3000, 0] }),
         browser: ['x', 'y', 'z'],
-        makeKeyStore: (k) => k,
+        makeKeyStore: (k: any) => k,
         rmAuth: async () => {},
         scheduleReconnect: (cb, ms) => {
           reconnectCalls.push({ cb, ms })
@@ -714,7 +714,7 @@ describe('whatsapp service', () => {
         }),
         versionFactory: async () => ({ version: [2, 3000, 0] }),
         browser: ['x', 'y', 'z'],
-        makeKeyStore: (k) => k,
+        makeKeyStore: (k: any) => k,
         rmAuth: async () => {}
       })
       try {
@@ -743,7 +743,7 @@ describe('whatsapp service', () => {
         }),
         versionFactory: async () => ({ version: [2, 3000, 0] }),
         browser: ['x', 'y', 'z'],
-        makeKeyStore: (k) => k,
+        makeKeyStore: (k: any) => k,
         rmAuth: async () => {}
       })
       await service.start()

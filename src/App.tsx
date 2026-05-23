@@ -31,6 +31,7 @@ function writeFlag(key: string, value: boolean): void {
 
 function initialPhase(): Phase {
   if (readFlag(ONBOARDED_KEY)) return 'app'
+  if (readFlag(FTU_KEY)) return 'qr'
   return 'welcome'
 }
 

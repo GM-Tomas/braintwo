@@ -6,7 +6,7 @@ import {
   pickTrayIconName,
   buildTrayMenuTemplate,
   createMessageBatcher
-} from './main-helpers'
+} from '../../electron/main-helpers'
 
 describe('main-helpers', () => {
   describe('statusLabel', () => {
@@ -118,7 +118,7 @@ describe('main-helpers', () => {
       let scheduled: (() => void) | null = null
       const batcher = createMessageBatcher<number>({
         broadcast,
-        scheduler: (cb) => {
+        scheduler: (cb: any) => {
           scheduled = cb
           return null
         }
@@ -142,7 +142,7 @@ describe('main-helpers', () => {
       const calls: (() => void)[] = []
       const batcher = createMessageBatcher<string>({
         broadcast,
-        scheduler: (cb) => {
+        scheduler: (cb: any) => {
           calls.push(cb)
           return null
         }

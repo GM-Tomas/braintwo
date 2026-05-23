@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, act, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Onboarding, FTU } from './Onboarding'
+import { Onboarding, FTU } from '../../../src/views/Onboarding'
 import {
   installBraintwoBridge,
   type BridgeHandle
@@ -119,9 +119,9 @@ describe('<Onboarding />', () => {
       h = installBraintwoBridge({ initialState: 'disconnected' })
     })
 
-    it('shows "Reconectando…" status', async () => {
+    it('shows "No se pudo conectar" status', async () => {
       render(<Onboarding />)
-      expect(await screen.findByText(/Reconectando…/)).toBeInTheDocument()
+      expect(await screen.findByText(/No se pudo conectar/)).toBeInTheDocument()
     })
   })
 
@@ -251,21 +251,21 @@ describe('<Onboarding />', () => {
         q: h.bridge.wa.onQr,
         l: h.bridge.wa.onLoggedOut
       }
-      h.bridge.wa.onConnectionState = (cb) => {
+      h.bridge.wa.onConnectionState = (cb: any) => {
         const real = orig.s(cb)
         return () => {
           offState()
           real()
         }
       }
-      h.bridge.wa.onQr = (cb) => {
+      h.bridge.wa.onQr = (cb: any) => {
         const real = orig.q(cb)
         return () => {
           offQr()
           real()
         }
       }
-      h.bridge.wa.onLoggedOut = (cb) => {
+      h.bridge.wa.onLoggedOut = (cb: any) => {
         const real = orig.l(cb)
         return () => {
           offLogout()

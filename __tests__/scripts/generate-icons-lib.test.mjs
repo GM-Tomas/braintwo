@@ -9,7 +9,7 @@ import {
   BRAND_BG,
   BRAND_PRIMARY,
   BRAND_ACCENT
-} from './generate-icons-lib.mjs'
+} from '../../scripts/generate-icons-lib.mjs'
 
 describe('generate-icons-lib', () => {
   describe('crc32', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { PageHeader } from './PageHeader'
+import { PageHeader } from '../../../src/components/PageHeader'
 
 describe('<PageHeader />', () => {
   it('renders the title as an h1', () => {

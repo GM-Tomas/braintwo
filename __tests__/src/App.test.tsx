@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, act, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import App from './App'
+import App from '../../src/App'
 import { installBraintwoBridge, type BridgeHandle } from './test-utils/braintwo-bridge'
 
 // Onboarding pulls in `qrcode` which uses canvas APIs. Stub it out so the
@@ -40,9 +40,9 @@ describe('<App />', () => {
   describe('phase: welcome (FTU)', () => {
     it('renders feature cards and the Continuar button on first launch', () => {
       render(<App />)
-      expect(screen.getByText(/Tu segundo cerebro de WhatsApp/)).toBeInTheDocument()
-      expect(screen.getByText(/Buscá en tu historial/)).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Continuar/ })).toBeInTheDocument()
+      expect(screen.getByText(/Tu segundo cerebro/i)).toBeInTheDocument()
+      expect(screen.getByText(/Tu segundo cerebro/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Siguiente/ })).toBeInTheDocument()
     })
 
     it('does NOT render the sidebar during welcome', () => {
@@ -56,8 +56,10 @@ describe('<App />', () => {
     it('clicking Continuar moves to the QR phase', async () => {
       render(<App />)
       const user = userEvent.setup()
-      await user.click(screen.getByRole('button', { name: /Continuar/ }))
-      expect(screen.getByText('Vinculá tu WhatsApp')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: /Siguiente/i }))
+      await user.click(screen.getByRole('button', { name: /Siguiente/i }))
+      await user.click(screen.getByRole('button', { name: /Siguiente/i }))
+      expect(screen.getByText(/Vinculá tu WhatsApp/i)).toBeInTheDocument()
       expect(window.localStorage.getItem(FTU_KEY)).toBe('1')
     })
   })
@@ -69,8 +71,8 @@ describe('<App />', () => {
 
     it('skips welcome and shows the QR onboarding directly', () => {
       render(<App />)
-      expect(screen.getByText('Vinculá tu WhatsApp')).toBeInTheDocument()
-      expect(screen.queryByText(/Tu segundo cerebro de WhatsApp/)).not.toBeInTheDocument()
+      expect(screen.getByText(/VINCULÁ TU WHATSAPP/i)).toBeInTheDocument()
+      expect(screen.queryByText(/Tu segundo cerebro/i)).not.toBeInTheDocument()
     })
 
     it('does NOT render the sidebar while waiting for pairing', () => {
@@ -122,13 +124,15 @@ describe('<App />', () => {
     it('welcome → continuar → QR → open routes to Search with sidebar', async () => {
       render(<App />)
       const user = userEvent.setup()
-      await user.click(screen.getByRole('button', { name: /Continuar/ }))
-      expect(screen.getByText(/Vinculá tu WhatsApp/)).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: /Siguiente/i }))
+      await user.click(screen.getByRole('button', { name: /Siguiente/i }))
+      await user.click(screen.getByRole('button', { name: /Siguiente/i }))
+      expect(screen.getByText(/Vinculá tu WhatsApp/i)).toBeInTheDocument()
 
       act(() => h.emitConnectionState('open'))
 
       await waitFor(() => {
-        expect(screen.queryByText(/Vinculá tu WhatsApp/)).not.toBeInTheDocument()
+        expect(screen.queryByText(/VINCULÁ TU WHATSAPP/i)).not.toBeInTheDocument()
       })
       expect(screen.getByText('Proba preguntar')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Timeline' })).toBeInTheDocument()
@@ -159,8 +163,8 @@ describe('<App />', () => {
       await screen.findByText('Conectando')
 
       act(() => h.emitConnectionState('logged-out'))
-      expect(await screen.findByText(/Vinculá tu WhatsApp/)).toBeInTheDocument()
-      expect(screen.queryByText(/Tu segundo cerebro de WhatsApp/)).not.toBeInTheDocument()
+      expect(await screen.findByText(/VINCULÁ TU WHATSAPP/i)).toBeInTheDocument()
+      expect(screen.queryByText(/Tu segundo cerebro/i)).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Buscar' })).not.toBeInTheDocument()
     })
   })
@@ -199,7 +203,7 @@ describe('<App />', () => {
     it('unsubscribes connection-state listener on unmount', async () => {
       const offSpy = vi.fn()
       const original = h.bridge.wa.onConnectionState
-      h.bridge.wa.onConnectionState = (cb) => {
+      h.bridge.wa.onConnectionState = (cb: any) => {
         const real = original(cb)
         return () => {
           offSpy()

@@ -11,7 +11,7 @@ import {
   VEC_DIM,
   type DbInstance,
   type NewMessage
-} from './db'
+} from '../../../electron/services/db'
 
 function makeVec(seed = 0): Float32Array {
   const v = new Float32Array(VEC_DIM)

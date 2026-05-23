@@ -71,6 +71,8 @@ export interface RecentMessage {
   kind: MessageKind
   media: MediaMeta | null
   fromMe: boolean
+  createdAt?: number
+  contextNote?: string | null
 }
 
 export type IngestSkipReason = 'no-id' | 'empty' | 'duplicate'

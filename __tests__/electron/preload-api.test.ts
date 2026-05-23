@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { createApi, type PreloadEnv } from './preload-api'
+import { createApi, type PreloadEnv } from '../../electron/preload-api'
 
 interface FakeIpc {
   invoke: ReturnType<typeof vi.fn>

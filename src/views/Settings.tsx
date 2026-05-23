@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { AiConfig, AiProvider, DbStats, UserSettings } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { Icon } from '@/lib/icons'
-
+import { formatBytes } from '@/lib/format'
 export function Settings({ onLogout }: { onLogout: () => void }) {
   const [settings, setSettings] = useState<UserSettings | null>(null)
   const [stats, setStats] = useState<DbStats | null>(null)
@@ -209,8 +209,3 @@ function Stat({ label, value }: { label: string; value: string }) {
   )
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}

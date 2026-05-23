@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ModelProgress, SearchResult } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { Icon } from '@/lib/icons'
+import { useDateFormatter } from '@/hooks/useDateFormatter'
+import { useIpcSubscription } from '@/hooks/useIpcSubscription'
 
 const SUGGESTIONS = [
   'Que medidas le pase al carpintero?',
@@ -20,12 +22,12 @@ export function Search() {
   const [model, setModel] = useState<ModelProgress>({ status: 'idle' })
   const inputRef = useRef<HTMLInputElement | null>(null)
 
+  useIpcSubscription(window.braintwo.search.onModelProgress, setModel)
+
   useEffect(() => {
     const t = setTimeout(() => inputRef.current?.focus(), 100)
-    const off = window.braintwo.search.onModelProgress(setModel)
     return () => {
       clearTimeout(t)
-      off()
     }
   }, [])
 
@@ -61,14 +63,7 @@ export function Search() {
     }
   }, [q])
 
-  const formatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short'
-      }),
-    []
-  )
+  const formatter = useDateFormatter({ dateStyle: 'medium', timeStyle: 'short' })
 
   const focused = q.trim().length > 0
   const visible = results.slice(0, VISIBLE_LIMIT)

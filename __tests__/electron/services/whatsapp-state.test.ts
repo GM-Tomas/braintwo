@@ -8,7 +8,7 @@ import {
   normalizeJid,
   LOGGED_OUT_CODE,
   type RawConnectionUpdate
-} from './whatsapp-state'
+} from '../../../electron/services/whatsapp-state'
 
 describe('whatsapp-state', () => {
   describe('isLoggedOutCode', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
-import { Icon, BrainMark, type IconName } from './icons'
+import { Icon, BrainMark, type IconName } from '../../../src/lib/icons'
 
 const ALL_ICONS: IconName[] = [
   'home',

@@ -4,8 +4,8 @@ import {
   extractText,
   extractTimestampMs,
   type WAMessageLike
-} from './ingest'
-import { openDatabase, type DbInstance } from './db'
+} from '../../../electron/services/ingest'
+import { openDatabase, type DbInstance } from '../../../electron/services/db'
 
 const baseMsg = (overrides: Partial<WAMessageLike> = {}): WAMessageLike => ({
   key: { id: 'wa-1', remoteJid: '123@s.whatsapp.net', fromMe: true },

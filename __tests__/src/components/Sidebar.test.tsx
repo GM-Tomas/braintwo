@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Sidebar } from './Sidebar'
+import { Sidebar } from '../../../src/components/Sidebar'
 
 describe('<Sidebar />', () => {
   it('exposes the BrainTwo wordmark accessibly (sr-only)', () => {

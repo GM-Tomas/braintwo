@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { readSettings, writeSettings } from './settings'
+import { readSettings, writeSettings } from '../../../electron/services/settings'
 
 describe('settings service', () => {
   it('reads autostart and userData path', () => {

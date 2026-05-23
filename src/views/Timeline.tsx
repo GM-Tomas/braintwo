@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MessageKind, MessageSource, RecentMessage } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { Icon, type IconName } from '@/lib/icons'
-
+import { formatBytes, formatDuration } from '@/lib/format'
+import { useDateFormatter } from '@/hooks/useDateFormatter'
+import { useIpcSubscription } from '@/hooks/useIpcSubscription'
 const RECENT_LIMIT = 50
 
 const SOURCE_LABEL: Record<MessageSource, string> = {
@@ -93,18 +95,16 @@ export function Timeline() {
     void window.braintwo.app.getRecentMessages(RECENT_LIMIT).then((rows) => {
       if (mounted) setMessages(rows)
     })
-
-    const off = window.braintwo.app.onMessagesBatch((batch) => {
-      if (!mounted || batch.length === 0) return
-      setCount((prev) => prev + batch.length)
-      setMessages((prev) => mergeRecent(batch, prev, RECENT_LIMIT))
-    })
-
     return () => {
       mounted = false
-      off()
     }
   }, [])
+
+  useIpcSubscription(window.braintwo.app.onMessagesBatch, (batch) => {
+    if (batch.length === 0) return
+    setCount((prev) => prev + batch.length)
+    setMessages((prev) => mergeRecent(batch, prev, RECENT_LIMIT))
+  })
 
   // Close panel when Escape is pressed
   useEffect(() => {
@@ -116,16 +116,9 @@ export function Timeline() {
     return () => window.removeEventListener('keydown', handler)
   }, [selected])
 
-  const formatter = useMemo(
-    () =>
-      new Intl.DateTimeFormat(undefined, {
-        dateStyle: 'short',
-        timeStyle: 'short'
-      }),
-    []
-  )
+  const formatter = useDateFormatter({ dateStyle: 'short', timeStyle: 'short' })
 
-  const visible = useMemo(
+  const visible = useMemo<RecentMessage[]>(
     () =>
       filter === 'all'
         ? messages
@@ -170,12 +163,12 @@ export function Timeline() {
                   <FilteredEmpty kind={filter as MessageKind} />
                 ) : (
                   <ul className="w-full">
-                    {visible.map((m) => (
+                    {(visible as RecentMessage[]).map((m: RecentMessage) => (
                       <NoteRow
                         key={m.id}
                         message={m}
                         formatted={formatter.format(new Date(m.timestamp))}
-                        isSelected={selected?.id === m.id}
+                        isSelected={selected ? (selected as RecentMessage).id === m.id : false}
                         onClick={() => setSelected(m)}
                       />
                     ))}
@@ -359,10 +352,7 @@ function MessageDetailPanel({
   const panelRef = useRef<HTMLDivElement>(null)
   const style = KIND_STYLE[message.kind] ?? KIND_STYLE.other
 
-  const longFormatter = new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'long',
-    timeStyle: 'medium'
-  })
+  const longFormatter = useDateFormatter({ dateStyle: 'long', timeStyle: 'short' })
 
   const rows: { label: string; value: React.ReactNode }[] = [
     { label: 'ID SQLite', value: message.id },
@@ -514,18 +504,6 @@ function mediaSummary(message: RecentMessage): string {
   if (m.ptt) parts.push('Nota de voz')
   if (m.transcript) parts.push(`"${m.transcript.slice(0, 60)}…"`)
   return parts.length ? parts.join(' · ') : 'Sin descripción'
-}
-
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function kindCounts(list: RecentMessage[]): Record<MessageKind, number> {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { ErrorBoundary } from './ErrorBoundary'
+import { ErrorBoundary } from '../../../src/components/ErrorBoundary'
 
 function Bomb({ message = 'kaboom' }: { message?: string }): never {
   throw new Error(message)

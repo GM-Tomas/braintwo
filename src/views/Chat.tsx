@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AiChatResponse, AiConfig, ChatMessage, RetrievedContext, View } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { Icon } from '@/lib/icons'
+import { useDateFormatter } from '@/hooks/useDateFormatter'
 
 interface ChatProps {
   onNavigate: (view: View) => void
@@ -260,7 +261,7 @@ function MessageBubble({
 }
 
 function SourcesList({ sources }: { sources: RetrievedContext[] }) {
-  const fmt = new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' })
+  const fmt = useDateFormatter({ dateStyle: 'short', timeStyle: 'short' })
   return (
     <ul className="mt-2 flex flex-col gap-1.5">
       {sources.map((s, i) => (

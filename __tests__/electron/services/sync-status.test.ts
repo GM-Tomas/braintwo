@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createSyncStatusTracker } from './sync-status'
+import { createSyncStatusTracker } from '../../../electron/services/sync-status'
 
 describe('sync status tracker', () => {
   it('maps an open WhatsApp connection to idle sync status', () => {

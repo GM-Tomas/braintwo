@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Search } from './Search'
+import { Search } from '../../../src/views/Search'
 import { installBraintwoBridge } from '../test-utils/braintwo-bridge'
 
 describe('<Search />', () => {

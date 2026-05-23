@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { VEC_DIM } from './db'
-import { createEmbeddingService, deterministicEmbedder } from './embeddings'
+import { VEC_DIM } from '../../../electron/services/db'
+import { createEmbeddingService, deterministicEmbedder } from '../../../electron/services/embeddings'
 
 describe('embedding service', () => {
   it('produces deterministic 384-dim fallback vectors', () => {
@@ -28,7 +28,7 @@ describe('embedding service', () => {
     const order: string[] = []
     const service = createEmbeddingService({
       cacheDir: 'models',
-      embedder: async (text) => {
+      embedder: async (text: any) => {
         order.push(`start:${text}`)
         await Promise.resolve()
         order.push(`end:${text}`)
