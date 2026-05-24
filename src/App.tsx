@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
-import type { AppErrorEvent, SyncStatus, View, WAConnectionState } from '@shared/types'
+import type { AppErrorEvent, View, WAConnectionState } from '@shared/types'
 import { Onboarding, FTU } from './views/Onboarding'
 import { Search } from './views/Search'
 import { Timeline } from './views/Timeline'
 import { Settings } from './views/Settings'
 import { Chat } from './views/Chat'
 import { Sidebar } from './components/Sidebar'
+import { useDependencies } from '@/core/infrastructure/DependenciesContext'
+import { ConnectionEntity } from '@shared/domain/connection.entity'
 
 type Phase = 'welcome' | 'qr' | 'app'
 
@@ -36,6 +38,7 @@ function initialPhase(): Phase {
 }
 
 export default function App() {
+  const { connectionService, settingsRepository } = useDependencies()
   const [phase, setPhase] = useState<Phase>(() => initialPhase())
   const [view, setView] = useState<View>(() =>
     readFlag(ONBOARDED_KEY) ? 'search' : 'onboarding'
@@ -45,18 +48,16 @@ export default function App() {
   const [version, setVersion] = useState<string>('')
   const [platform, setPlatform] = useState<NodeJS.Platform | null>(null)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
-  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
+  const [syncStatus, setSyncStatus] = useState<ConnectionEntity | null>(null)
   const [appError, setAppError] = useState<AppErrorEvent | null>(null)
 
   useEffect(() => {
-    void window.braintwo.wa.getConnectionState().then(setWaState)
-    void window.braintwo.app.getVersion().then(setVersion)
-    void window.braintwo.app.getPlatform().then(setPlatform)
-    void window.braintwo.app.getSyncStatus().then(setSyncStatus)
-    // If a QR is already waiting and the user was previously onboarded
-    // (session dropped), switch to the QR screen immediately.
-    // During FTU ('welcome' phase), keep the user on the welcome screen.
-    void window.braintwo.wa.getCurrentQr().then((qr) => {
+    void connectionService.getConnectionState().then(setWaState)
+    void settingsRepository.getVersion().then(setVersion)
+    void settingsRepository.getPlatform().then((p) => setPlatform(p as NodeJS.Platform))
+    void connectionService.getSyncStatus().then(setSyncStatus)
+    
+    void connectionService.getCurrentQr().then((qr) => {
       if (qr) {
         setPhase((prev) => {
           if (prev !== 'app') return prev
@@ -65,12 +66,12 @@ export default function App() {
         })
       }
     })
-    const off = window.braintwo.wa.onConnectionState((state) => {
+
+    const off = connectionService.onConnectionState((state) => {
       setWaState(state)
       setSyncStatus((prev) =>
         prev
-          ? {
-              ...prev,
+          ? new ConnectionEntity({
               state: state === 'open' ? 'idle' : state,
               label:
                 state === 'open'
@@ -79,32 +80,36 @@ export default function App() {
                     ? 'Reconectando'
                     : state === 'logged-out'
                       ? 'Sesion cerrada'
-                      : 'Conectando'
-            }
+                      : 'Conectando',
+              lastPrimaryActivityAt: prev.lastPrimaryActivityAt,
+              stalePrimaryDays: prev.stalePrimaryDays,
+              newMessages: prev.newMessages
+            })
           : prev
       )
     })
-    // A QR arriving while in the main app means the session is gone and the
-    // user must re-authenticate — switch to the pairing screen.
-    const offQr = window.braintwo.wa.onQr(() => {
+
+    const offQr = connectionService.onQr(() => {
       setPhase((prev) => {
         if (prev !== 'app') return prev
         setView('onboarding')
         return 'qr'
       })
     })
-    const offSync = window.braintwo.app.onSyncStateChanged(setSyncStatus)
-    const offError = window.braintwo.app.onError((err) => {
+
+    const offSync = connectionService.onSyncStateChanged(setSyncStatus)
+    const offError = connectionService.onError((err) => {
       setAppError(err)
       window.setTimeout(() => setAppError(null), 5000)
     })
+
     return () => {
       off()
       offQr()
       offSync()
       offError()
     }
-  }, [])
+  }, [connectionService, settingsRepository])
 
   useEffect(() => {
     if (waState === 'open') {
@@ -191,7 +196,7 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   setShowLogoutConfirm(false)
-                  void window.braintwo.wa.logout()
+                  void connectionService.logout()
                 }}
                 className="h-9 rounded-[8px] bg-bt-red px-4 text-[13px] font-semibold text-white transition-colors hover:bg-bt-red/90"
               >

@@ -1,28 +1,31 @@
 import { useState, useEffect } from 'react'
-import type { WAConnectionState, SyncStatus, AppErrorEvent } from '@shared/types'
+import { useDependencies } from '@/core/infrastructure/DependenciesContext'
+import { ConnectionEntity } from '@shared/domain/connection.entity'
+import type { WAConnectionState, AppErrorEvent } from '@shared/types'
 
 export function useConnection() {
+  const { connectionService } = useDependencies()
   const [waState, setWaState] = useState<WAConnectionState>('connecting')
-  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
+  const [syncStatus, setSyncStatus] = useState<ConnectionEntity | null>(null)
   const [appError, setAppError] = useState<AppErrorEvent | null>(null)
 
   useEffect(() => {
     let mounted = true
 
-    void window.braintwo.wa.getConnectionState().then(state => {
+    void connectionService.getConnectionState().then((state) => {
       if (mounted) setWaState(state)
     })
-    
-    void window.braintwo.app.getSyncStatus().then(status => {
+
+    void connectionService.getSyncStatus().then((status) => {
       if (mounted) setSyncStatus(status)
     })
 
-    const offWa = window.braintwo.wa.onConnectionState((state) => {
+    const offWa = connectionService.onConnectionState((state) => {
+      if (!mounted) return
       setWaState(state)
       setSyncStatus((prev) =>
         prev
-          ? {
-              ...prev,
+          ? new ConnectionEntity({
               state: state === 'open' ? 'idle' : state,
               label:
                 state === 'open'
@@ -31,17 +34,21 @@ export function useConnection() {
                     ? 'Reconectando'
                     : state === 'logged-out'
                       ? 'Sesion cerrada'
-                      : 'Conectando'
-            }
+                      : 'Conectando',
+              lastPrimaryActivityAt: prev.lastPrimaryActivityAt,
+              stalePrimaryDays: prev.stalePrimaryDays,
+              newMessages: prev.newMessages
+            })
           : prev
       )
     })
 
-    const offSync = window.braintwo.app.onSyncStateChanged((status) => {
-      setSyncStatus(status)
+    const offSync = connectionService.onSyncStateChanged((status) => {
+      if (mounted) setSyncStatus(status)
     })
-    
-    const offError = window.braintwo.app.onError((err) => {
+
+    const offError = connectionService.onError((err) => {
+      if (!mounted) return
       setAppError(err)
       window.setTimeout(() => setAppError(null), 5000)
     })
@@ -52,7 +59,7 @@ export function useConnection() {
       offSync()
       offError()
     }
-  }, [])
+  }, [connectionService])
 
   return { waState, syncStatus, appError }
 }
