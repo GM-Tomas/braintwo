@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { RetrievedContext } from '@shared/types'
 import { useDateFormatter } from '@/hooks/useDateFormatter'
 import { Icon } from '@/lib/icons'
@@ -10,6 +11,32 @@ interface SourcesListProps {
 
 export function SourcesList({ sources, onOpenMessage, onFeedbackGood }: SourcesListProps) {
   const fmt = useDateFormatter({ dateStyle: 'short', timeStyle: 'short' })
+  const [accepted, setAccepted] = useState<Set<number>>(new Set())
+  const [feedbackSent, setFeedbackSent] = useState<Set<number>>(new Set())
+
+  function handleFeedback(id: number) {
+    if (!onFeedbackGood || accepted.has(id)) return
+    setAccepted((prev) => {
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+    setFeedbackSent((prev) => {
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+    onFeedbackGood(id)
+
+    setTimeout(() => {
+      setFeedbackSent((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+    }, 2500)
+  }
+
   return (
     <ul className="mt-2 flex flex-col gap-1.5">
       {sources.map((s, i) => (
@@ -32,14 +59,23 @@ export function SourcesList({ sources, onOpenMessage, onFeedbackGood }: SourcesL
             </span>
           </button>
           {onFeedbackGood && (
-            <button
-              type="button"
-              onClick={() => onFeedbackGood(s.id)}
-              title="Buena respuesta: aumentar contexto con este chat"
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-bt-muted hover:bg-bt-hover hover:text-bt-accent transition-all"
-            >
-              <Icon name="check" size={13} />
-            </button>
+            <div className="flex h-6 items-center shrink-0">
+              {feedbackSent.has(s.id) ? (
+                <span className="flex items-center gap-1 text-[11px] font-medium text-bt-accent animate-fade-in">
+                  <Icon name="check" size={12} />
+                  Enviado
+                </span>
+              ) : accepted.has(s.id) ? null : (
+                <button
+                  type="button"
+                  onClick={() => handleFeedback(s.id)}
+                  title="Buena respuesta: mejorar contexto"
+                  className="flex h-6 w-6 items-center justify-center rounded-full text-bt-muted transition-all hover:bg-bt-hover hover:text-bt-accent"
+                >
+                  <Icon name="check" size={13} />
+                </button>
+              )}
+            </div>
           )}
         </li>
       ))}

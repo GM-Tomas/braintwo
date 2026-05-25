@@ -2,6 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Default Dark Theme */
+  --bt-bg: #060a12;
+  --bt-surf: #0c1422;
+  --bt-hover: #101d2e;
+  --bt-sidebar-bg: #070c14;
+  --bt-border: rgba(255, 255, 255, 0.06);
+  --bt-border-strong: rgba(255, 255, 255, 0.12);
+  --bt-faint: rgba(255, 255, 255, 0.04);
+  --bt-text: #e8eef8;
+  --bt-muted: #7a92b0;
+  --bt-dim: #4a5d75;
+  --bt-primary: #1a8fe3;
+  --bt-accent: #2ec4a5;
+  --bt-amber: #e8b84e;
+  --bt-red: #e85d5d;
+
+  --bt-primary-faint: rgba(26, 143, 227, 0.18);
+  --bt-accent-faint: rgba(46, 196, 165, 0.18);
+
+  --bt-scrollbar-thumb: rgba(74, 93, 117, 0.3);
+  --bt-scrollbar-thumb-hover: rgba(74, 93, 117, 0.7);
+  --bt-kbd-border: rgba(122, 146, 176, 0.2);
+
+  --bt-shadow-modal: 0 30px 80px rgba(0, 0, 0, 0.5);
+
+  /* Send button & Nav active shadow */
+  --bt-send-btn-bg: var(--bt-primary);
+  --bt-send-btn-bg-hover: rgba(26, 143, 227, 0.9);
+  --bt-nav-active-shadow: inset 0 0 0 1px rgba(26, 143, 227, 0.25);
+}
+
+.light {
+  /* Light Theme (Apto Daltónicos, Fondos Blancos y Marcos/Textbox Naranja) */
+  --bt-bg: #ffffff; /* La mayoría blanco */
+  --bt-surf: #fdf2e9; /* Adentro de los marcos: naranja con opacidad/tenue (suavizado) */
+  --bt-hover: #fef8f4; /* Hover naranja-crema muy suave */
+  --bt-sidebar-bg: #ffffff; /* Sidebar blanco como estaba inicialmente */
+  --bt-border: rgba(234, 88, 12, 0.22); /* Bordes naranja translúcidos con opacidad */
+  --bt-border-strong: rgba(234, 88, 12, 0.38); /* Bordes fuertes más definidos */
+  --bt-faint: rgba(234, 88, 12, 0.06);
+  --bt-text: #000000; /* Letras bien negras */
+  --bt-muted: #1e293b; /* Textos secundarios oscuros */
+  --bt-dim: #475569; /* Textos terciarios y placeholders oscuros */
+  
+  /* Alto contraste y apto para daltonismo (Naranja vibrante como acento) */
+  --bt-primary: #1d4ed8;
+  --bt-accent: #ea580c;
+  --bt-amber: #b45309;
+  --bt-red: #dc2626;
+
+  --bt-primary-faint: rgba(29, 78, 216, 0.1);
+  --bt-accent-faint: rgba(234, 88, 12, 0.1);
+
+  --bt-scrollbar-thumb: rgba(234, 88, 12, 0.25);
+  --bt-scrollbar-thumb-hover: rgba(234, 88, 12, 0.45);
+  --bt-kbd-border: rgba(234, 88, 12, 0.3);
+
+  --bt-shadow-modal: 0 30px 80px rgba(76, 31, 0, 0.1);
+
+  /* Send button & Nav active shadow */
+  --bt-send-btn-bg: var(--bt-accent); /* Naranja para el botón enviar en Light mode */
+  --bt-send-btn-bg-hover: rgba(234, 88, 12, 0.9);
+  --bt-nav-active-shadow: inset 0 0 0 1px rgba(234, 88, 12, 0.6), 0 0 10px rgba(234, 88, 12, 0.26); /* Sombreado naranja más marcado */
+}
+
 html,
 body,
 #root {
@@ -10,8 +76,8 @@ body,
 
 body {
   margin: 0;
-  background-color: #060a12;
-  color: #e8eef8;
+  background-color: var(--bt-bg);
+  color: var(--bt-text);
   font-family: 'Outfit', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-feature-settings: 'cv11', 'ss01';
   -webkit-font-smoothing: antialiased;
@@ -21,7 +87,7 @@ body {
 
 input::placeholder,
 textarea::placeholder {
-  color: #4a5d75;
+  color: var(--bt-dim);
 }
 
 ::-webkit-scrollbar {
@@ -32,20 +98,20 @@ textarea::placeholder {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(74, 93, 117, 0.3);
+  background: var(--bt-scrollbar-thumb);
   border-radius: 99px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(74, 93, 117, 0.7);
+  background: var(--bt-scrollbar-thumb-hover);
 }
 
 /* Keyboard hint pill */
 kbd {
   font-family: 'Outfit', sans-serif;
   font-size: 10px;
-  color: #7a92b0;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(122, 146, 176, 0.2);
+  color: var(--bt-muted);
+  background: var(--bt-faint);
+  border: 1px solid var(--bt-kbd-border);
   border-radius: 4px;
   padding: 2px 6px;
   letter-spacing: 0.05em;
@@ -53,7 +119,7 @@ kbd {
 
 /* Subtle gradient text helper for the wordmark */
 .bt-grad-text {
-  background: linear-gradient(135deg, #1a8fe3, #2ec4a5);
+  background: linear-gradient(135deg, var(--bt-primary), var(--bt-accent));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;

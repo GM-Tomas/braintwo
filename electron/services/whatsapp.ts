@@ -281,10 +281,10 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
   }
 
   private handleConnectionUpdate(
-    update: Parameters<typeof deriveTransition>[0]
-  ): void {
-    if (this.stopped) return
-    const t = deriveTransition(update)
+     update: Parameters<typeof deriveTransition>[0]
+   ): void {
+     if (this.stopped) return
+     const t = deriveTransition(update, this.state)
 
     if (t.qr) {
       this.currentQr = t.qr

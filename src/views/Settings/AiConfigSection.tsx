@@ -1,51 +1,197 @@
-import { useCallback, useEffect, useState } from 'react'
-import type { AiConfig, AiProvider } from '@shared/types'
+import { useEffect, useState } from 'react'
+import type { AiConfig, AiProvider, AiConfigProfile } from '@shared/types'
 import { useDependencies } from '@/core/infrastructure/DependenciesContext'
 import { Icon } from '@/lib/icons'
 
 export function AiConfigSection() {
   const { aiService } = useDependencies()
-  const [aiDraft, setAiDraft] = useState<Partial<AiConfig>>({})
-  const [aiSaving, setAiSaving] = useState(false)
-  const [aiSaved, setAiSaved] = useState(false)
+  const [profiles, setProfiles] = useState<AiConfigProfile[]>([])
+  const [activeProfileId, setActiveProfileId] = useState<string>('')
+  const [aiDraft, setAiDraft] = useState<Partial<AiConfigProfile>>({})
 
   useEffect(() => {
     void aiService.getConfig().then((cfg) => {
       if (cfg) {
-        // Initialize providers object and ensure current provider settings are saved in the map
-        const provider = cfg.provider
-        const providers = cfg.providers ?? {}
-        if (provider && !providers[provider]) {
-          providers[provider] = {
+        const loadedProfiles = cfg.profiles ?? []
+        let currentActiveId = cfg.activeProfileId ?? ''
+
+        // Migrate from old single profile config if no profiles exist
+        if (loadedProfiles.length === 0) {
+          const defaultId = 'profile-default'
+          const defaultName = cfg.provider
+            ? `Perfil ${cfg.provider === 'anthropic' ? 'Anthropic' : cfg.provider === 'gemini' ? 'Gemini' : cfg.provider === 'deepseek' ? 'DeepSeek' : cfg.provider === 'opencode-zen' ? 'OpenCode' : 'Otro'}`
+            : 'Perfil 1'
+          
+          const providers = cfg.providers ?? {}
+          if (cfg.provider && !providers[cfg.provider]) {
+            providers[cfg.provider] = {
+              apiKey: cfg.apiKey ?? '',
+              baseUrl: cfg.baseUrl ?? '',
+              model: cfg.model ?? ''
+            }
+          }
+
+          const initialProfile: AiConfigProfile = {
+            id: defaultId,
+            name: defaultName,
+            provider: cfg.provider ?? 'openai-compat',
             apiKey: cfg.apiKey ?? '',
             baseUrl: cfg.baseUrl ?? '',
-            model: cfg.model ?? ''
+            model: cfg.model ?? '',
+            providers
           }
+          setProfiles([initialProfile])
+          setActiveProfileId(defaultId)
+          setAiDraft(initialProfile)
+        } else {
+          setProfiles(loadedProfiles)
+          if (!currentActiveId || !loadedProfiles.some(p => p.id === currentActiveId)) {
+            currentActiveId = loadedProfiles[0]!.id
+          }
+          setActiveProfileId(currentActiveId)
+          const activeProfile = loadedProfiles.find(p => p.id === currentActiveId)!
+          setAiDraft(activeProfile)
         }
-        setAiDraft({
-          ...cfg,
-          providers
-        })
+      } else {
+        const defaultId = 'profile-default'
+        const initialProfile: AiConfigProfile = {
+          id: defaultId,
+          name: 'Perfil 1',
+          provider: 'openai-compat',
+          apiKey: '',
+          baseUrl: '',
+          model: '',
+          providers: {}
+        }
+        setProfiles([initialProfile])
+        setActiveProfileId(defaultId)
+        setAiDraft(initialProfile)
       }
     })
   }, [aiService])
 
-  const saveAiConfig = useCallback(() => {
-    if (!aiDraft.provider) return
-    setAiSaving(true)
-    void aiService.setConfig(aiDraft).then(() => {
-      setAiSaving(false)
-      setAiSaved(true)
-      setTimeout(() => setAiSaved(false), 2000)
+  const handleProfileSelect = (profileId: string) => {
+    const selected = profiles.find((p) => p.id === profileId)
+    if (!selected) return
+
+    setActiveProfileId(profileId)
+    setAiDraft(selected)
+
+    // Persist active selection instantly to the main config so background services pick it up
+    const updatedConfig: AiConfig = {
+      provider: selected.provider,
+      apiKey: selected.apiKey,
+      baseUrl: selected.baseUrl,
+      model: selected.model,
+      providers: selected.providers,
+      activeProfileId: profileId,
+      profiles: profiles
+    }
+    void aiService.setConfig(updatedConfig)
+  }
+
+  const updateAndSave = (patch: Partial<AiConfigProfile>) => {
+    setAiDraft((prev) => {
+      const nextDraft = { ...prev, ...patch }
+      
+      setProfiles((prevProfiles) => {
+        const nextProfiles = prevProfiles.map((p) => {
+          if (p.id === activeProfileId) {
+            return {
+              ...p,
+              ...patch
+            }
+          }
+          return p
+        })
+
+        // Save immediately
+        const updatedConfig: AiConfig = {
+          provider: nextDraft.provider ?? 'openai-compat',
+          apiKey: nextDraft.apiKey ?? '',
+          baseUrl: nextDraft.baseUrl ?? '',
+          model: nextDraft.model ?? '',
+          providers: nextDraft.providers ?? {},
+          activeProfileId: activeProfileId,
+          profiles: nextProfiles
+        }
+        void aiService.setConfig(updatedConfig)
+
+        return nextProfiles
+      })
+
+      return nextDraft
     })
-  }, [aiDraft, aiService])
+  }
+
+  const createNewProfile = () => {
+    const nextNumber = profiles.length + 1
+    const newId = `profile-${Date.now()}`
+    const newProfile: AiConfigProfile = {
+      id: newId,
+      name: `Perfil ${nextNumber}`,
+      provider: 'openai-compat',
+      apiKey: '',
+      baseUrl: '',
+      model: '',
+      providers: {}
+    }
+
+    const updatedProfiles = [...profiles, newProfile]
+    setProfiles(updatedProfiles)
+    setActiveProfileId(newId)
+    setAiDraft(newProfile)
+
+    const updatedConfig: AiConfig = {
+      provider: newProfile.provider,
+      apiKey: newProfile.apiKey,
+      baseUrl: newProfile.baseUrl,
+      model: newProfile.model,
+      providers: newProfile.providers,
+      activeProfileId: newId,
+      profiles: updatedProfiles
+    }
+    void aiService.setConfig(updatedConfig)
+  }
+
+  const deleteCurrentProfile = () => {
+    if (profiles.length <= 1) return
+    const currentProfile = profiles.find((p) => p.id === activeProfileId)
+    if (!currentProfile) return
+
+    const ok = confirm(`¿Estás seguro de que querés eliminar el perfil "${currentProfile.name}"?`)
+    if (!ok) return
+
+    const updatedProfiles = profiles.filter((p) => p.id !== activeProfileId)
+    const nextActiveProfile = updatedProfiles[0]!
+    const nextActiveId = nextActiveProfile.id
+
+    setProfiles(updatedProfiles)
+    setActiveProfileId(nextActiveId)
+    setAiDraft(nextActiveProfile)
+
+    const updatedConfig: AiConfig = {
+      provider: nextActiveProfile.provider,
+      apiKey: nextActiveProfile.apiKey,
+      baseUrl: nextActiveProfile.baseUrl,
+      model: nextActiveProfile.model,
+      providers: nextActiveProfile.providers,
+      activeProfileId: nextActiveId,
+      profiles: updatedProfiles
+    }
+    void aiService.setConfig(updatedConfig)
+  }
+
+  const handleProfileNameChange = (newName: string) => {
+    updateAndSave({ name: newName })
+  }
 
   const handleProviderChange = (newProvider: AiProvider) => {
     setAiDraft((prev) => {
       const providers = prev.providers ?? {}
       const savedForProvider = providers[newProvider] ?? { apiKey: '', baseUrl: '', model: '' }
-      return {
-        ...prev,
+      
+      const patch: Partial<AiConfigProfile> = {
         provider: newProvider,
         apiKey: savedForProvider.apiKey ?? '',
         baseUrl: savedForProvider.baseUrl ?? '',
@@ -55,13 +201,64 @@ export function AiConfigSection() {
           [newProvider]: savedForProvider
         }
       }
+
+      const nextDraft = { ...prev, ...patch }
+
+      setProfiles((prevProfiles) => {
+        const nextProfiles = prevProfiles.map((p) => {
+          if (p.id === activeProfileId) {
+            return {
+              ...p,
+              ...patch
+            }
+          }
+          return p
+        })
+
+        const updatedConfig: AiConfig = {
+          provider: nextDraft.provider ?? 'openai-compat',
+          apiKey: nextDraft.apiKey ?? '',
+          baseUrl: nextDraft.baseUrl ?? '',
+          model: nextDraft.model ?? '',
+          providers: nextDraft.providers ?? {},
+          activeProfileId: activeProfileId,
+          profiles: nextProfiles
+        }
+        void aiService.setConfig(updatedConfig)
+
+        return nextProfiles
+      })
+
+      return nextDraft
     })
   }
 
   const handleFieldChange = (field: 'apiKey' | 'baseUrl' | 'model', value: string) => {
     setAiDraft((prev) => {
       const currentProvider = prev.provider
-      if (!currentProvider) return { ...prev, [field]: value }
+      if (!currentProvider) {
+        const patch = { [field]: value }
+        const nextDraft = { ...prev, ...patch }
+        
+        setProfiles((prevProfiles) => {
+          const nextProfiles = prevProfiles.map((p) => {
+            if (p.id === activeProfileId) return { ...p, ...patch }
+            return p
+          })
+          const updatedConfig: AiConfig = {
+            provider: nextDraft.provider ?? 'openai-compat',
+            apiKey: nextDraft.apiKey ?? '',
+            baseUrl: nextDraft.baseUrl ?? '',
+            model: nextDraft.model ?? '',
+            providers: nextDraft.providers ?? {},
+            activeProfileId: activeProfileId,
+            profiles: nextProfiles
+          }
+          void aiService.setConfig(updatedConfig)
+          return nextProfiles
+        })
+        return nextDraft
+      }
 
       const providers = prev.providers ?? {}
       const providerConfig = providers[currentProvider] ?? { apiKey: '', baseUrl: '', model: '' }
@@ -70,14 +267,35 @@ export function AiConfigSection() {
         [field]: value
       }
 
-      return {
-        ...prev,
+      const patch: Partial<AiConfigProfile> = {
         [field]: value,
         providers: {
           ...providers,
           [currentProvider]: updatedProviderConfig
         }
       }
+
+      const nextDraft = { ...prev, ...patch }
+
+      setProfiles((prevProfiles) => {
+        const nextProfiles = prevProfiles.map((p) => {
+          if (p.id === activeProfileId) return { ...p, ...patch }
+          return p
+        })
+        const updatedConfig: AiConfig = {
+          provider: nextDraft.provider ?? 'openai-compat',
+          apiKey: nextDraft.apiKey ?? '',
+          baseUrl: nextDraft.baseUrl ?? '',
+          model: nextDraft.model ?? '',
+          providers: nextDraft.providers ?? {},
+          activeProfileId: activeProfileId,
+          profiles: nextProfiles
+        }
+        void aiService.setConfig(updatedConfig)
+        return nextProfiles
+      })
+
+      return nextDraft
     })
   }
 
@@ -101,12 +319,67 @@ export function AiConfigSection() {
 
   return (
     <section className="col-span-full rounded-[8px] border border-bt-border bg-bt-surf p-5">
-      <h2 className="text-[15px] font-semibold text-bt-text">Asistente IA</h2>
-      <p className="mt-1 text-[12px] text-bt-muted">
-        Configurá el proveedor de lenguaje para el Chat IA. La API key se guarda localmente.
-      </p>
+      <div className="mb-4">
+        <h2 className="text-[15px] font-semibold text-bt-text">Asistente IA</h2>
+        <p className="mt-1 text-[12px] text-bt-muted">
+          Configurá tus perfiles de proveedores para el Chat IA. Las claves se guardan localmente.
+        </p>
+      </div>
+
+      {/* Profile selector tabs */}
+      <div className="flex flex-wrap items-center gap-2 mb-6 border-b border-bt-border pb-4">
+        {profiles.map((p) => {
+          const isActive = p.id === activeProfileId
+          return (
+            <div
+              key={p.id}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[20px] text-[13px] font-medium transition-all cursor-pointer border ${
+                isActive
+                  ? 'bg-bt-hover text-bt-text border-bt-border shadow-bt-nav-active'
+                  : 'bg-bt-bg text-bt-muted border-transparent hover:bg-bt-hover/60 hover:text-bt-text'
+              }`}
+              onClick={() => handleProfileSelect(p.id)}
+            >
+              <span>{p.name}</span>
+              {isActive && profiles.length > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    deleteCurrentProfile()
+                  }}
+                  title="Eliminar perfil"
+                  className="ml-1 flex h-4 w-4 items-center justify-center rounded-full hover:bg-bt-border hover:text-bt-red transition-colors"
+                >
+                  <Icon name="x" size={10} />
+                </button>
+              )}
+            </div>
+          )
+        })}
+        {/* Add Profile Pill */}
+        <button
+          type="button"
+          onClick={createNewProfile}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-[20px] text-[13px] font-medium bg-bt-bg text-bt-primary hover:bg-bt-hover border border-dashed border-bt-primary/40 hover:border-bt-primary transition-all"
+        >
+          <Icon name="plus" size={12} className="shrink-0" />
+          <span>Nuevo perfil</span>
+        </button>
+      </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-1 sm:col-span-2">
+          <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">Nombre del Perfil</span>
+          <input
+            type="text"
+            value={aiDraft.name ?? ''}
+            onChange={(e) => handleProfileNameChange(e.target.value)}
+            placeholder="Ej: OpenAI Rápido, Claude..."
+            className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/50"
+          />
+        </label>
+
         <label className="flex flex-col gap-1">
           <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">Proveedor</span>
           <select
@@ -168,21 +441,10 @@ export function AiConfigSection() {
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={saveAiConfig}
-        disabled={aiSaving || !aiDraft.provider}
-        className="mt-4 inline-flex h-9 items-center gap-2 rounded-[8px] bg-bt-primary px-5 text-[13px] font-medium text-white transition-colors hover:bg-bt-primary/90 disabled:opacity-40"
-      >
-        {aiSaved ? (
-          <>
-            <Icon name="check" size={14} />
-            Guardado
-          </>
-        ) : (
-          'Guardar'
-        )}
-      </button>
+      <div className="mt-6 flex items-center gap-2 text-[12px] text-bt-dim">
+        <span className="h-1.5 w-1.5 rounded-full bg-bt-accent animate-pulse" />
+        <span>Los cambios se guardan automáticamente.</span>
+      </div>
     </section>
   )
 }

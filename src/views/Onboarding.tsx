@@ -68,7 +68,7 @@ export function FTU({ startAtQr = false }: { startAtQr?: boolean }) {
     void QRCode.toDataURL(qr, {
       width: 240,
       margin: 1,
-      color: { dark: '#060a12', light: '#e8eef8' },
+      color: { dark: '#0f172a', light: '#ffffff' },
     }).then((url) => {
       if (!cancelled) setQrDataUrl(url)
     })
@@ -115,7 +115,7 @@ export function FTU({ startAtQr = false }: { startAtQr?: boolean }) {
             type="button"
             onClick={advance}
             className="rounded-[10px] px-8 py-3 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
-            style={{ background: 'linear-gradient(135deg,#1a8fe3,#2ec4a5)' }}
+            style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
           >
             Siguiente
           </button>
@@ -146,7 +146,7 @@ function FTUFeatureCard({ step }: { step: FTUFeature }) {
     <div className="flex flex-col items-center gap-8 text-center">
       <div
         className="flex h-[72px] w-[72px] items-center justify-center rounded-[20px] border border-bt-border-strong"
-        style={{ background: 'linear-gradient(135deg,rgba(26,143,227,0.18),rgba(46,196,165,0.18))' }}
+        style={{ background: 'linear-gradient(135deg,var(--bt-primary-faint),var(--bt-accent-faint))' }}
         aria-hidden
       >
         <Icon name={step.icon} size={34} className="text-bt-accent" strokeWidth={1.4} />
@@ -188,7 +188,7 @@ function FTUQrCard({
               type="button"
               onClick={() => void window.braintwo.wa.requestQr()}
               className="rounded-[8px] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg,#1a8fe3,#2ec4a5)' }}
+              style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
             >
               Generar QR de nuevo
             </button>
@@ -203,7 +203,7 @@ function FTUQrCard({
               type="button"
               onClick={() => void window.braintwo.wa.requestQr()}
               className="rounded-[8px] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg,#1a8fe3,#2ec4a5)' }}
+              style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
             >
               Reintentar
             </button>
@@ -256,7 +256,7 @@ export function Onboarding() {
     void QRCode.toDataURL(qr, {
       width: 280,
       margin: 1,
-      color: { dark: '#060a12', light: '#e8eef8' }
+      color: { dark: '#0f172a', light: '#ffffff' }
     }).then((url) => {
       if (!cancelled) setQrDataUrl(url)
     })
@@ -345,7 +345,7 @@ function PairingPanel({ state, qrDataUrl }: PanelProps) {
         <div className="flex h-[280px] w-full flex-col items-center justify-center gap-4">
           <div
             className="flex h-20 w-20 items-center justify-center rounded-full"
-            style={{ background: 'linear-gradient(135deg,#1a8fe3,#2ec4a5)' }}
+            style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
           >
             <Icon name="check" size={32} strokeWidth={2.5} className="text-white" />
           </div>
@@ -366,7 +366,7 @@ function PairingPanel({ state, qrDataUrl }: PanelProps) {
           <button
             type="button"
             className="rounded-[10px] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
-            style={{ background: 'linear-gradient(135deg,#1a8fe3,#2ec4a5)' }}
+            style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
             onClick={() => void window.braintwo.wa.requestQr()}
           >
             Generar QR de nuevo
@@ -400,7 +400,7 @@ function PairingPanel({ state, qrDataUrl }: PanelProps) {
           <button
             type="button"
             className="rounded-[10px] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
-            style={{ background: 'linear-gradient(135deg,#1a8fe3,#2ec4a5)' }}
+            style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
             onClick={() => void window.braintwo.wa.requestQr()}
           >
             Reintentar
@@ -468,7 +468,7 @@ function Step({ n, children }: { n: number; children: React.ReactNode }) {
       <span
         aria-hidden
         className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-bt-border text-[11px] font-semibold text-bt-text"
-        style={{ background: 'linear-gradient(135deg,#1a8fe320,#2ec4a520)' }}
+        style={{ background: 'linear-gradient(135deg,var(--bt-primary-faint),var(--bt-accent-faint))' }}
       >
         {n}
       </span>

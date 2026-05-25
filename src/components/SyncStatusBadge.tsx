@@ -19,10 +19,12 @@ const FALLBACK_LABEL: Record<WAConnectionState, string> = {
 
 export function SyncStatusBadge({
   connectionState,
-  syncStatus
+  syncStatus,
+  collapsed
 }: {
   connectionState: WAConnectionState
   syncStatus?: SyncStatus | null
+  collapsed?: boolean
 }) {
   const state = syncStatus?.state ?? connectionState
   const label = syncStatus?.label ?? FALLBACK_LABEL[connectionState]
@@ -30,6 +32,18 @@ export function SyncStatusBadge({
     syncStatus?.state === 'stale-primary'
       ? `Primary phone inactivo hace ${syncStatus.stalePrimaryDays} dias`
       : null
+
+  if (collapsed) {
+    return (
+      <section
+        className="mb-5 flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] border border-bt-border bg-white/[0.025]"
+        aria-label="Estado de sincronizacion"
+        title={`WhatsApp: ${warning ?? label}`}
+      >
+        <span className={`h-2.5 w-2.5 rounded-full ${DOT[state] ?? DOT.connecting}`} aria-hidden />
+      </section>
+    )
+  }
 
   return (
     <section

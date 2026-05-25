@@ -20,7 +20,7 @@ export function StartupSection({ settings, onSettingsChange }: StartupSectionPro
             const autostart = e.target.checked
             void settingsRepository.setSettings({ autostart }).then(onSettingsChange)
           }}
-          className="h-4 w-4 accent-[#1a8fe3]"
+          className="h-4 w-4 accent-bt-primary"
         />
       </label>
     </section>

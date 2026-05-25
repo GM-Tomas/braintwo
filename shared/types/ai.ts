@@ -6,6 +6,18 @@ export interface ProviderSpecificConfig {
   model?: string
 }
 
+export interface AiConfigProfile {
+  id: string
+  name: string
+  provider: AiProvider
+  apiKey: string
+  baseUrl?: string
+  model?: string
+  providers?: {
+    [key in AiProvider]?: ProviderSpecificConfig
+  }
+}
+
 export interface AiConfig {
   provider: AiProvider
   apiKey: string
@@ -17,6 +29,8 @@ export interface AiConfig {
   providers?: {
     [key in AiProvider]?: ProviderSpecificConfig
   }
+  activeProfileId?: string
+  profiles?: AiConfigProfile[]
 }
 
 export interface ChatMessage {

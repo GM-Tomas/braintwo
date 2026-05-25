@@ -61,26 +61,14 @@ export function Chat({ onNavigate }: ChatProps) {
     }
   }, [input, loading, messages, aiService])
 
-  const handleFeedbackGood = useCallback(async (sourceId: number) => {
+  const handleFeedbackGood = useCallback((sourceId: number) => {
     if (loading || messages.length < 2) return
-
     const historyToReSend = messages.slice(0, -1)
-
-    setLoading(true)
-    setError(null)
-    setSourcesOpen(false)
-    setLastResponse(null)
-
-    try {
-      const res = await aiService.send(historyToReSend, sourceId)
+    void aiService.send(historyToReSend, sourceId).then((res) => {
       setMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: res.content }])
       setLastResponse(res)
       if (res.sources.length > 0) setSourcesOpen(true)
-    } catch (err) {
-      setError(parseAiError(err))
-    } finally {
-      setLoading(false)
-    }
+    }).catch(() => { /* silent — feedback is best-effort */ })
   }, [loading, messages, aiService])
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -187,9 +175,9 @@ export function Chat({ onNavigate }: ChatProps) {
             onClick={() => void send()}
             disabled={loading || !input.trim() || !hasConfig}
             aria-label="Enviar mensaje"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-bt-primary text-white transition-colors hover:bg-bt-primary/90 disabled:opacity-40"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-bt-send-btn text-white transition-colors hover:bg-bt-send-btn-hover disabled:opacity-40"
           >
-            <Icon name="chev" size={18} className="rotate-90" />
+            <Icon name="send" size={18} className="rotate-45 -translate-x-[2px] translate-y-[1px]" />
           </button>
         </div>
       </div>

@@ -50,6 +50,31 @@ export default function App() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [syncStatus, setSyncStatus] = useState<ConnectionEntity | null>(null)
   const [appError, setAppError] = useState<AppErrorEvent | null>(null)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem('braintwo:theme')
+      return (saved === 'light' || saved === 'dark') ? saved : 'dark'
+    } catch {
+      return 'dark'
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('braintwo:theme', theme)
+    } catch {
+      // ignore
+    }
+    if (theme === 'light') {
+      document.documentElement.classList.add('light')
+    } else {
+      document.documentElement.classList.remove('light')
+    }
+  }, [theme])
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'))
+  }
 
   useEffect(() => {
     void connectionService.getConnectionState().then(setWaState)
@@ -150,6 +175,8 @@ export default function App() {
         version={version}
         platform={platform}
         onLogout={() => setShowLogoutConfirm(true)}
+        theme={theme}
+        toggleTheme={toggleTheme}
       />
       <main className="flex flex-1 flex-col overflow-hidden">
         {view === 'onboarding' && <Onboarding />}
@@ -159,7 +186,7 @@ export default function App() {
         {view === 'settings' && <Settings onLogout={() => setShowLogoutConfirm(true)} />}
       </main>
       {appError && (
-        <div className="fixed bottom-5 right-5 z-50 max-w-[360px] rounded-[8px] border border-bt-red/40 bg-[#160b10] px-4 py-3 text-sm text-bt-text shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
+        <div className="fixed bottom-5 right-5 z-50 max-w-[360px] rounded-[8px] border border-bt-red/40 bg-bt-surf px-4 py-3 text-sm text-bt-text shadow-bt-modal">
           {appError.message}
         </div>
       )}
@@ -172,7 +199,7 @@ export default function App() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="logout-title"
-            className="w-full max-w-[360px] rounded-[8px] border border-bt-border bg-[#0a101b] p-5 shadow-[0_20px_80px_rgba(0,0,0,0.45)]"
+            className="w-full max-w-[360px] rounded-[8px] border border-bt-border bg-bt-surf p-5 shadow-bt-modal"
           >
             <h2
               id="logout-title"
