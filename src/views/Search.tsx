@@ -86,7 +86,7 @@ export function Search() {
                 : 'var(--bt-border)'
             }}
           >
-            <Icon name="search" size={20} className="text-bt-primary" />
+            <Icon name="search" size={20} className="text-bt-brand" />
             <input
               ref={inputRef}
               type="search"
@@ -151,7 +151,7 @@ function SuggestionsPanel({ onPick }: { onPick: (s: string) => void }) {
             <button
               type="button"
               onClick={() => onPick(s)}
-              className="group flex w-full items-center gap-3 rounded-[10px] border border-bt-border bg-transparent px-[18px] py-3.5 text-left text-[14.5px] text-bt-muted transition-colors duration-150 hover:border-bt-primary/30 hover:text-bt-text"
+              className="group flex w-full items-center gap-3 rounded-[10px] border border-bt-border bg-transparent px-[18px] py-3.5 text-left text-[14.5px] text-bt-muted transition-colors duration-150 hover:border-bt-brand/30 hover:text-bt-text"
             >
               <Icon name="bolt" size={14} className="text-bt-accent" />
               <span>{s}</span>
@@ -250,7 +250,7 @@ function MatchBadge({
         <span className="rounded-full border border-bt-accent/30 px-2.5 py-1 text-[11px] text-bt-accent">
           exacto
         </span>
-        <span className="rounded-full border border-bt-primary/30 px-2.5 py-1 text-[11px] text-bt-primary">
+        <span className="rounded-full border border-bt-brand/30 px-2.5 py-1 text-[11px] text-bt-brand">
           {Math.round(similarity * 100)}%
         </span>
       </>
@@ -258,7 +258,7 @@ function MatchBadge({
   }
   // semantic only
   return (
-    <span className="rounded-full border border-bt-primary/30 px-2.5 py-1 text-[11px] text-bt-primary">
+    <span className="rounded-full border border-bt-brand/30 px-2.5 py-1 text-[11px] text-bt-brand">
       {Math.round(similarity * 100)}%
     </span>
   )

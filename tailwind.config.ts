@@ -25,7 +25,8 @@ export default {
           amber: 'var(--bt-amber)',
           red: 'var(--bt-red)',
           'send-btn': 'var(--bt-send-btn-bg)',
-          'send-btn-hover': 'var(--bt-send-btn-bg-hover)'
+          'send-btn-hover': 'var(--bt-send-btn-bg-hover)',
+          brand: 'var(--bt-brand)'
         }
       },
       fontFamily: {
