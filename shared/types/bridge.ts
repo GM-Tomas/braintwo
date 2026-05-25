@@ -41,6 +41,7 @@ export interface BrainTwoBridge {
     getPlatform: () => Promise<NodeJS.Platform>
     getMessageCount: () => Promise<number>
     getRecentMessages: (limit: number) => Promise<RecentMessage[]>
+    getMessageById: (id: number) => Promise<RecentMessage | null>
     getSyncStatus: () => Promise<SyncStatus>
     getSettings: () => Promise<UserSettings>
     setSettings: (settings: Partial<UserSettings>) => Promise<UserSettings>
@@ -70,7 +71,7 @@ export interface BrainTwoBridge {
   ai: {
     getConfig: () => Promise<AiConfig | null>
     setConfig: (config: Partial<AiConfig>) => Promise<void>
-    send: (messages: ChatMessage[]) => Promise<AiChatResponse>
+    send: (messages: ChatMessage[], goodSourceId?: number) => Promise<AiChatResponse>
   }
 }
 

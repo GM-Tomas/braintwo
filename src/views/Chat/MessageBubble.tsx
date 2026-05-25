@@ -17,6 +17,8 @@ interface MessageBubbleProps {
   sourcesOpen: boolean
   onToggleSources: () => void
   onNavigate: (view: View) => void
+  onOpenMessage: (id: number) => void
+  onFeedbackGood?: (sourceId: number) => void
 }
 
 export function MessageBubble({
@@ -24,7 +26,9 @@ export function MessageBubble({
   response,
   sourcesOpen,
   onToggleSources,
-  onNavigate
+  onNavigate,
+  onOpenMessage,
+  onFeedbackGood
 }: MessageBubbleProps) {
   const isUser = msg.role === 'user'
 
@@ -63,7 +67,7 @@ export function MessageBubble({
                     ? 'Ocultar fuentes'
                     : `${response.sources.length} mensaje${response.sources.length !== 1 ? 's' : ''} consultado${response.sources.length !== 1 ? 's' : ''}`}
                 </button>
-                {sourcesOpen && <SourcesList sources={response.sources} />}
+                {sourcesOpen && <SourcesList sources={response.sources} onOpenMessage={onOpenMessage} onFeedbackGood={onFeedbackGood} />}
               </div>
             )}
             {response.action?.action === 'navigate' && (

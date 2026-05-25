@@ -10,7 +10,7 @@ export class IpcAiService implements IAiService {
     return window.braintwo.ai.setConfig(config)
   }
 
-  async send(messages: ChatMessage[]): Promise<AiChatResponse> {
-    return window.braintwo.ai.send(messages)
+  async send(messages: ChatMessage[], goodSourceId?: number): Promise<AiChatResponse> {
+    return window.braintwo.ai.send(messages, goodSourceId)
   }
 }

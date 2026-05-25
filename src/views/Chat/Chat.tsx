@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AiChatResponse, AiConfig, ChatMessage, View } from '@shared/types'
+import type { MessageEntity } from '@shared/domain/message.entity'
 import { PageHeader } from '../../components/PageHeader'
 import { Icon } from '@/lib/icons'
 import { useDependencies } from '@/core/infrastructure/DependenciesContext'
 import { AssistantAvatar, MessageBubble } from './MessageBubble'
+import { MessageDetail } from '../Timeline/MessageDetail'
 
 interface ChatProps {
   onNavigate: (view: View) => void
 }
 
 export function Chat({ onNavigate }: ChatProps) {
-  const { aiService } = useDependencies()
+  const { aiService, messageRepository } = useDependencies()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -18,6 +20,7 @@ export function Chat({ onNavigate }: ChatProps) {
   const [lastResponse, setLastResponse] = useState<AiChatResponse | null>(null)
   const [config, setConfig] = useState<AiConfig | null>(null)
   const [sourcesOpen, setSourcesOpen] = useState(false)
+  const [detailMessage, setDetailMessage] = useState<MessageEntity | null>(null)
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
@@ -58,6 +61,28 @@ export function Chat({ onNavigate }: ChatProps) {
     }
   }, [input, loading, messages, aiService])
 
+  const handleFeedbackGood = useCallback(async (sourceId: number) => {
+    if (loading || messages.length < 2) return
+
+    const historyToReSend = messages.slice(0, -1)
+
+    setLoading(true)
+    setError(null)
+    setSourcesOpen(false)
+    setLastResponse(null)
+
+    try {
+      const res = await aiService.send(historyToReSend, sourceId)
+      setMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: res.content }])
+      setLastResponse(res)
+      if (res.sources.length > 0) setSourcesOpen(true)
+    } catch (err) {
+      setError(parseAiError(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [loading, messages, aiService])
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -65,8 +90,13 @@ export function Chat({ onNavigate }: ChatProps) {
     }
   }
 
+  async function openSource(id: number) {
+    const msg = await messageRepository.getMessageById(id)
+    if (msg) setDetailMessage(msg)
+  }
+
   return (
-    <div className="flex flex-1 flex-col overflow-hidden animate-fade-in">
+    <div className="relative flex flex-1 flex-col overflow-hidden animate-fade-in">
       <PageHeader
         eyebrow="IA"
         title="Chat IA"
@@ -110,6 +140,8 @@ export function Chat({ onNavigate }: ChatProps) {
                 sourcesOpen={sourcesOpen}
                 onToggleSources={() => setSourcesOpen((o) => !o)}
                 onNavigate={onNavigate}
+                onOpenMessage={(id) => void openSource(id)}
+                onFeedbackGood={isLast && isAssistant ? handleFeedbackGood : undefined}
               />
             )
           })}
@@ -161,6 +193,12 @@ export function Chat({ onNavigate }: ChatProps) {
           </button>
         </div>
       </div>
+
+      {detailMessage && (
+        <div className="absolute inset-0 z-10 flex bg-bt-bg animate-fade-in">
+          <MessageDetail message={detailMessage} onClose={() => setDetailMessage(null)} />
+        </div>
+      )}
     </div>
   )
 }

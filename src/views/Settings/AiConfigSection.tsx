@@ -11,7 +11,22 @@ export function AiConfigSection() {
 
   useEffect(() => {
     void aiService.getConfig().then((cfg) => {
-      if (cfg) setAiDraft(cfg)
+      if (cfg) {
+        // Initialize providers object and ensure current provider settings are saved in the map
+        const provider = cfg.provider
+        const providers = cfg.providers ?? {}
+        if (provider && !providers[provider]) {
+          providers[provider] = {
+            apiKey: cfg.apiKey ?? '',
+            baseUrl: cfg.baseUrl ?? '',
+            model: cfg.model ?? ''
+          }
+        }
+        setAiDraft({
+          ...cfg,
+          providers
+        })
+      }
     })
   }, [aiService])
 
@@ -25,12 +40,64 @@ export function AiConfigSection() {
     })
   }, [aiDraft, aiService])
 
+  const handleProviderChange = (newProvider: AiProvider) => {
+    setAiDraft((prev) => {
+      const providers = prev.providers ?? {}
+      const savedForProvider = providers[newProvider] ?? { apiKey: '', baseUrl: '', model: '' }
+      return {
+        ...prev,
+        provider: newProvider,
+        apiKey: savedForProvider.apiKey ?? '',
+        baseUrl: savedForProvider.baseUrl ?? '',
+        model: savedForProvider.model ?? '',
+        providers: {
+          ...providers,
+          [newProvider]: savedForProvider
+        }
+      }
+    })
+  }
+
+  const handleFieldChange = (field: 'apiKey' | 'baseUrl' | 'model', value: string) => {
+    setAiDraft((prev) => {
+      const currentProvider = prev.provider
+      if (!currentProvider) return { ...prev, [field]: value }
+
+      const providers = prev.providers ?? {}
+      const providerConfig = providers[currentProvider] ?? { apiKey: '', baseUrl: '', model: '' }
+      const updatedProviderConfig = {
+        ...providerConfig,
+        [field]: value
+      }
+
+      return {
+        ...prev,
+        [field]: value,
+        providers: {
+          ...providers,
+          [currentProvider]: updatedProviderConfig
+        }
+      }
+    })
+  }
+
   const modelPlaceholder =
     aiDraft.provider === 'anthropic'
       ? 'claude-haiku-4-5'
       : aiDraft.provider === 'gemini'
         ? 'gemini-2.0-flash'
-        : 'gpt-4o-mini'
+        : aiDraft.provider === 'deepseek'
+          ? 'deepseek-v4-pro'
+          : aiDraft.provider === 'opencode-zen'
+            ? 'big-pickle'
+            : 'gpt-4o-mini'
+
+  const baseUrlPlaceholder =
+    aiDraft.provider === 'deepseek'
+      ? 'https://api.deepseek.com'
+      : aiDraft.provider === 'opencode-zen'
+        ? 'https://opencode.ai/zen/v1'
+        : 'http://localhost:11434/v1'
 
   return (
     <section className="col-span-full rounded-[8px] border border-bt-border bg-bt-surf p-5">
@@ -44,15 +111,15 @@ export function AiConfigSection() {
           <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">Proveedor</span>
           <select
             value={aiDraft.provider ?? ''}
-            onChange={(e) =>
-              setAiDraft((d) => ({ ...d, provider: e.target.value as AiProvider }))
-            }
+            onChange={(e) => handleProviderChange(e.target.value as AiProvider)}
             className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text outline-none focus:border-bt-primary/50"
           >
             <option value="">Seleccionar…</option>
             <option value="anthropic">Anthropic (Claude)</option>
-            <option value="openai-compat">OpenAI / Groq / Ollama</option>
             <option value="gemini">Google Gemini</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="opencode-zen">OpenCode Zen</option>
+            <option value="openai-compat">Otro (OpenAI-compatible)</option>
           </select>
         </label>
 
@@ -61,7 +128,7 @@ export function AiConfigSection() {
           <input
             type="text"
             value={aiDraft.model ?? ''}
-            onChange={(e) => setAiDraft((d) => ({ ...d, model: e.target.value }))}
+            onChange={(e) => handleFieldChange('model', e.target.value)}
             placeholder={modelPlaceholder}
             className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/50"
           />
@@ -72,23 +139,29 @@ export function AiConfigSection() {
           <input
             type="password"
             value={aiDraft.apiKey ?? ''}
-            onChange={(e) => setAiDraft((d) => ({ ...d, apiKey: e.target.value }))}
-            placeholder="sk-… / AIza… / gsk_…"
+            onChange={(e) => handleFieldChange('apiKey', e.target.value)}
+            placeholder={
+              aiDraft.provider === 'deepseek'
+                ? 'sk-…'
+                : aiDraft.provider === 'opencode-zen'
+                  ? 'Tu API Key de Zen…'
+                  : 'sk-… / AIza… / gsk_…'
+            }
             autoComplete="off"
             className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/50"
           />
         </label>
 
-        {aiDraft.provider === 'openai-compat' && (
+        {['openai-compat', 'deepseek', 'opencode-zen'].includes(aiDraft.provider ?? '') && (
           <label className="flex flex-col gap-1 sm:col-span-2">
             <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">
-              Base URL
+              Base URL {aiDraft.provider !== 'openai-compat' && '(Opcional)'}
             </span>
             <input
               type="url"
               value={aiDraft.baseUrl ?? ''}
-              onChange={(e) => setAiDraft((d) => ({ ...d, baseUrl: e.target.value }))}
-              placeholder="http://localhost:11434/v1"
+              onChange={(e) => handleFieldChange('baseUrl', e.target.value)}
+              placeholder={baseUrlPlaceholder}
               className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/50"
             />
           </label>

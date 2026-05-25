@@ -109,6 +109,7 @@ export interface DbInstance {
   countMessages: () => number
   countEmbeddings: () => number
   hasEmbedding: (msgId: number) => boolean
+  getSurroundingMessages: (msgId: number, limit: number) => { id: number; text: string; timestamp: number }[]
   close: () => void
 }
 
@@ -283,6 +284,26 @@ export function openDatabase(filePath: string): DbInstance {
     'SELECT MAX(created_at) AS last FROM messages'
   )
 
+  const getMsgStmt = db.prepare<[number], { id: number; text: string; timestamp: number }>(
+    'SELECT id, text, timestamp FROM messages WHERE id = ?'
+  )
+
+  const surroundingBeforeStmt = db.prepare<[number, number, number, number], { id: number; text: string; timestamp: number }>(`
+    SELECT id, text, timestamp
+    FROM messages
+    WHERE timestamp < ? OR (timestamp = ? AND id < ?)
+    ORDER BY timestamp DESC, id DESC
+    LIMIT ?
+  `)
+
+  const surroundingAfterStmt = db.prepare<[number, number, number, number], { id: number; text: string; timestamp: number }>(`
+    SELECT id, text, timestamp
+    FROM messages
+    WHERE timestamp > ? OR (timestamp = ? AND id > ?)
+    ORDER BY timestamp ASC, id ASC
+    LIMIT ?
+  `)
+
   // ── AI Memory statements ─────────────────────────────────────────────────────
   const insertMemoryStmt = db.prepare(
     'INSERT INTO ai_memory(content) VALUES (?)'
@@ -437,6 +458,18 @@ export function openDatabase(filePath: string): DbInstance {
     },
     listUnembeddedMemories(limit) {
       return unembeddedMemoriesStmt.all(Math.min(limit, 500))
+    },
+    getSurroundingMessages(msgId, limit) {
+      const target = getMsgStmt.get(msgId)
+      if (!target) return []
+
+      const before = surroundingBeforeStmt.all(target.timestamp, target.timestamp, msgId, limit)
+      const after = surroundingAfterStmt.all(target.timestamp, target.timestamp, msgId, limit)
+
+      // before is in DESC order, reverse to chronological (ASC) order
+      before.reverse()
+
+      return [...before, target, ...after]
     },
     close() {
       db.close()

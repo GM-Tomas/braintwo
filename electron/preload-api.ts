@@ -30,6 +30,7 @@ export interface BrainTwoApi {
     getPlatform: () => Promise<NodeJS.Platform>
     getMessageCount: () => Promise<number>
     getRecentMessages: (limit: number) => Promise<RecentMessage[]>
+    getMessageById: (id: number) => Promise<RecentMessage | null>
     getSyncStatus: () => Promise<SyncStatus>
     getSettings: () => Promise<UserSettings>
     setSettings: (settings: Partial<UserSettings>) => Promise<UserSettings>
@@ -59,7 +60,7 @@ export interface BrainTwoApi {
   ai: {
     getConfig: () => Promise<AiConfig | null>
     setConfig: (config: Partial<AiConfig>) => Promise<void>
-    send: (messages: ChatMessage[]) => Promise<AiChatResponse>
+    send: (messages: ChatMessage[], goodSourceId?: number) => Promise<AiChatResponse>
   }
 }
 
@@ -110,6 +111,7 @@ export function createApi(
       getMessageCount: () => ipcRenderer.invoke('app:get-message-count'),
       getRecentMessages: (limit: number) =>
         ipcRenderer.invoke('app:get-recent-messages', limit),
+      getMessageById: (id: number) => ipcRenderer.invoke('app:get-message-by-id', id),
       getSyncStatus: () => ipcRenderer.invoke('app:get-sync-status'),
       getSettings: () => ipcRenderer.invoke('settings:get'),
       setSettings: (settings: Partial<UserSettings>) =>
@@ -140,7 +142,7 @@ export function createApi(
     ai: {
       getConfig: () => ipcRenderer.invoke('ai:get-config'),
       setConfig: (config: Partial<AiConfig>) => ipcRenderer.invoke('ai:set-config', config),
-      send: (messages: ChatMessage[]) => ipcRenderer.invoke('ai:send', messages)
+      send: (messages: ChatMessage[], goodSourceId?: number) => ipcRenderer.invoke('ai:send', messages, goodSourceId)
     }
   }
 }

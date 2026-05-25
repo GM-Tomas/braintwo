@@ -11,17 +11,22 @@ export interface AiChatDeps {
 }
 
 export interface AiChatService {
-  send(config: AiConfig, history: ChatMessage[], today: string): Promise<AiChatResponse>
+  send(
+    config: AiConfig,
+    history: ChatMessage[],
+    today: string,
+    goodSourceId?: number
+  ): Promise<AiChatResponse>
 }
 
 // How many results per query term, per retrieval path.
-const VEC_K_PER_QUERY = 8
-const KW_PER_QUERY = 5
-const MEM_K = 5
+const VEC_K_PER_QUERY = 15
+const KW_PER_QUERY = 10
+const MEM_K = 8
 
 export function createAiChatService(deps: AiChatDeps): AiChatService {
   return {
-    async send(config, history, today) {
+    async send(config, history, today, goodSourceId) {
       const lastUserMsg = [...history].reverse().find((m) => m.role === 'user')
       const question = lastUserMsg?.content ?? ''
 
@@ -73,15 +78,29 @@ export function createAiChatService(deps: AiChatDeps): AiChatService {
 
       // ── Step 3: Build system prompt ────────────────────────────────────
       const stats = deps.db.stats()
-      const systemPrompt = buildSystemPrompt(stats, merged, memories, queries, today)
+      const surroundingContext = goodSourceId !== undefined
+        ? deps.db.getSurroundingMessages(goodSourceId, 5)
+        : undefined
+      const systemPrompt = buildSystemPrompt(stats, merged, memories, queries, today, surroundingContext)
 
       // ── Step 4: Call LLM ───────────────────────────────────────────────
       const rawContent = await callProvider({ config, systemPrompt, messages: history })
 
       // ── Step 5: Parse action + remember blocks ─────────────────────────
-      const { content, action, remember } = parseBlocks(rawContent)
+      const { content, action, remember, sources: relevantIndices } = parseBlocks(rawContent)
 
-      // ── Step 6: Persist memory async (non-blocking) ────────────────────
+      // ── Step 6: Filter sources based on what the LLM found pertinent ─────
+      let filteredSources: RetrievedContext[] = merged
+      if (relevantIndices !== undefined) {
+        filteredSources = relevantIndices
+          .map((idx): RetrievedContext | undefined => {
+            const src = merged[idx - 1]
+            return src ? { ...src, index: idx } : undefined
+          })
+          .filter((s): s is RetrievedContext => s !== undefined)
+      }
+
+      // ── Step 7: Persist memory async (non-blocking) ────────────────────
       if (remember) {
         try {
           const memId = deps.db.insertMemory(remember)
@@ -91,7 +110,7 @@ export function createAiChatService(deps: AiChatDeps): AiChatService {
         } catch { /* non-fatal */ }
       }
 
-      return { content, sources: merged, action }
+      return { content, sources: filteredSources, action }
     }
   }
 }
@@ -135,7 +154,8 @@ function buildSystemPrompt(
   sources: RetrievedContext[],
   memories: MemoryResult[],
   searchedTerms: string[],
-  today: string
+  today: string,
+  surroundingContext?: { id: number; text: string; timestamp: number }[]
 ): string {
   const lastSync = stats.lastIngestAt
     ? new Date(stats.lastIngestAt).toLocaleDateString()
@@ -144,9 +164,31 @@ function buildSystemPrompt(
     stats.embeddings < stats.messages
       ? ` (${stats.messages - stats.embeddings} sin indexar aún)`
       : ' (totalmente indexado)'
+
+  // Generate calendar reference for today
+  const todayDate = new Date(today + 'T12:00:00')
+  const weekdayNames = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+  const todayDayName = weekdayNames[todayDate.getDay()]!
+
+  const calendarLines: string[] = []
+  for (let i = -7; i <= 7; i++) {
+    const day = new Date(todayDate)
+    day.setDate(todayDate.getDate() + i)
+    const yyyy = day.getFullYear()
+    const mm = String(day.getMonth() + 1).padStart(2, '0')
+    const dd = String(day.getDate()).padStart(2, '0')
+    const dateStr = `${dd}/${mm}/${yyyy}`
+    const name = weekdayNames[day.getDay()]!
+    const isTodayStr = i === 0 ? ' (hoy)' : ''
+    calendarLines.push(`- ${name} ${dateStr}${isTodayStr}`)
+  }
+  const calendarBlock = calendarLines.join('\n')
+
   const dbContext =
     `Base de conocimiento: ${stats.messages} mensajes${embeddingNote}. ` +
-    `Última sincronización: ${lastSync}. Hoy: ${today}.`
+    `Última sincronización: ${lastSync}.\n` +
+    `Fecha de hoy: ${today} (${todayDayName}).\n` +
+    `Calendario de referencia de la semana actual y próxima (-7 a +7 días):\n${calendarBlock}`
 
   const sourceBlock = sources.length
     ? sources
@@ -166,12 +208,24 @@ function buildSystemPrompt(
 
   const termsLine = `Términos buscados: ${searchedTerms.map((t) => `"${t}"`).join(', ')}`
 
+  let surroundingBlock = ''
+  if (surroundingContext && surroundingContext.length > 0) {
+    const lines = surroundingContext.map((msg) => {
+      const date = new Date(msg.timestamp).toLocaleDateString('es-AR', {
+        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      })
+      const isTarget = sources.some((s) => s.id === msg.id) ? ' [MENSAJE DE REFERENCIA]' : ''
+      return `- ${date} — ${msg.text}${isTarget}`
+    }).join('\n')
+    surroundingBlock = `\nCONTEXTO DE CONVERSACIÓN AMPLIADO (mensajes del chat alrededor del mensaje útil):\n${lines}\n`
+  }
+
   return `Sos BrainTwo, un asistente de IA personal integrado en la app BrainTwo.
 BrainTwo captura los mensajes que el usuario se envía a sí mismo en WhatsApp.
 
 ${dbContext}
 ${termsLine}
-
+${surroundingBlock}
 MEMORIAS APRENDIDAS (contexto acumulado de conversaciones anteriores):
 ${memoryBlock}
 
@@ -191,6 +245,12 @@ Si en la conversación descubrís algo relevante sobre el usuario (preferencias,
 {"remember": "frase concisa de lo aprendido"}
 Usalo con criterio, solo cuando sea información genuinamente útil para futuras conversaciones.
 
+FUENTES UTILIZADAS:
+Al final de tu respuesta, en una línea propia, debés incluir obligatoriamente un bloque JSON que liste los números de índice (los números [N] de la sección MENSAJES PERSONALES RECUPERADOS) de los mensajes que realmente usaste o considerás pertinentes para la respuesta, por ejemplo:
+{"sources": [1, 5]}
+Si no usaste ningún mensaje o considerás que ninguno es pertinente para responder la pregunta, debés incluir:
+{"sources": []}
+
 NAVEGACIÓN:
 Para sugerir ir a otra sección, incluí en línea propia:
 {"action":"navigate","view":"search"}
@@ -203,10 +263,15 @@ function parseBlocks(raw: string): {
   content: string
   action?: { action: 'navigate'; view: string }
   remember?: string
+  sources?: number[]
 } {
+  if (!raw || typeof raw !== 'string') {
+    return { content: '' }
+  }
   let content = raw
   let action: { action: 'navigate'; view: string } | undefined
   let remember: string | undefined
+  let sources: number[] | undefined
 
   // Extract all standalone JSON lines (lines that are only a JSON object).
   content = content.replace(/^\s*(\{[^{}\n]+\})\s*$/gm, (line, json: string) => {
@@ -220,9 +285,13 @@ function parseBlocks(raw: string): {
         remember = parsed.remember.trim()
         return ''
       }
+      if (Array.isArray(parsed.sources)) {
+        sources = parsed.sources.filter((item): item is number => typeof item === 'number')
+        return ''
+      }
     } catch { /* not parseable — keep the line */ }
     return line
   }).trim()
 
-  return { content, action, remember }
+  return { content, action, remember, sources }
 }

@@ -11,4 +11,8 @@ export class SqliteMessageRepository implements IMessageRepository {
   getRecentMessages(limit: number): RecentMessage[] {
     return this.ingest.recent(limit)
   }
+
+  getMessageById(id: number): RecentMessage | null {
+    return this.ingest.getById(id)
+  }
 }

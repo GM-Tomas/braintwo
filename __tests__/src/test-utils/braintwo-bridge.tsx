@@ -32,6 +32,7 @@ export interface BridgeHandle {
     getCurrentQr: ReturnType<typeof vi.fn>
     getMessageCount: ReturnType<typeof vi.fn>
     getRecentMessages: ReturnType<typeof vi.fn>
+    getMessageById: ReturnType<typeof vi.fn>
     getSyncStatus: ReturnType<typeof vi.fn>
     getSettings: ReturnType<typeof vi.fn>
     setSettings: ReturnType<typeof vi.fn>
@@ -73,6 +74,7 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
     getCurrentQr: vi.fn(async () => opts.initialQr ?? null),
     getMessageCount: vi.fn(async () => opts.initialMessageCount ?? 0),
     getRecentMessages: vi.fn(async () => opts.initialRecent ?? []),
+    getMessageById: vi.fn(async () => null),
     getSyncStatus: vi.fn(async () => ({
       state: (opts.initialState === 'open' ? 'idle' : opts.initialState ?? 'connecting') as ConnectionState,
       label: opts.initialState === 'open' ? 'Al dia' : 'Conectando',
@@ -120,6 +122,9 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
       getRecentMessages: spies.getRecentMessages as unknown as (
         limit: number
       ) => Promise<RecentMessage[]>,
+      getMessageById: spies.getMessageById as unknown as (
+        id: number
+      ) => Promise<RecentMessage | null>,
       getSyncStatus: spies.getSyncStatus,
       getSettings: spies.getSettings,
       setSettings: spies.setSettings,

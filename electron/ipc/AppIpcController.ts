@@ -37,6 +37,11 @@ export class AppIpcController {
       return getMessageRepo().getRecentMessages(Math.max(0, Math.min(limit, 500)) || 50)
     })
 
+    ipcMain.handle('app:get-message-by-id', (_e, id: number) => {
+      if (!context.ingest.value) return null
+      return getMessageRepo().getMessageById(id)
+    })
+
     ipcMain.handle('app:get-sync-status', () => {
       return context.syncStatus.get()
     })

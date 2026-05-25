@@ -12,6 +12,11 @@ export class IpcMessageRepository implements IMessageRepository {
     return raw.map((msg) => new MessageEntity(msg))
   }
 
+  async getMessageById(id: number): Promise<MessageEntity | null> {
+    const raw = await window.braintwo.app.getMessageById(id)
+    return raw ? new MessageEntity(raw) : null
+  }
+
   onMessagesBatch(cb: (batch: MessageEntity[]) => void): Unsubscribe {
     return window.braintwo.app.onMessagesBatch((rawBatch) => {
       cb(rawBatch.map((msg) => new MessageEntity(msg)))

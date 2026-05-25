@@ -1,4 +1,10 @@
-export type AiProvider = 'anthropic' | 'openai-compat' | 'gemini'
+export type AiProvider = 'anthropic' | 'openai-compat' | 'gemini' | 'deepseek' | 'opencode-zen'
+
+export interface ProviderSpecificConfig {
+  apiKey: string
+  baseUrl?: string
+  model?: string
+}
 
 export interface AiConfig {
   provider: AiProvider
@@ -7,6 +13,10 @@ export interface AiConfig {
   baseUrl?: string
   /** Model string. Empty = per-provider default. */
   model?: string
+  /** Per-provider settings saved so switching providers doesn't wipe credentials */
+  providers?: {
+    [key in AiProvider]?: ProviderSpecificConfig
+  }
 }
 
 export interface ChatMessage {
@@ -19,6 +29,7 @@ export interface RetrievedContext {
   text: string
   timestamp: number
   similarity?: number
+  index?: number
 }
 
 export interface AiChatResponse {
