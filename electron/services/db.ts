@@ -113,10 +113,10 @@ export interface DbInstance {
   updateContextNote: (id: number, note: string) => void
   deleteEmbedding: (msgId: number) => void
   // AI memory
-  insertMemory: (content: string) => number
+  insertMemory: (content: string, chatId?: number) => number
   insertMemoryEmbedding: (memoryId: number, vec: Float32Array) => void
-  searchMemorySimilar: (queryVec: Float32Array, k: number) => MemoryResult[]
-  searchMemoryKeyword: (query: string, limit: number) => MemoryResult[]
+  searchMemorySimilar: (queryVec: Float32Array, k: number, chatId?: number) => MemoryResult[]
+  searchMemoryKeyword: (query: string, limit: number, chatId?: number) => MemoryResult[]
   listMemories: (limit: number) => MemoryResult[]
   listUnembeddedMemories: (limit: number) => { id: number; content: string }[]
   // Chat history
@@ -165,6 +165,7 @@ const SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS ai_memory (
      id         INTEGER PRIMARY KEY AUTOINCREMENT,
      content    TEXT NOT NULL,
+     chat_id    INTEGER,
      created_at INTEGER DEFAULT (unixepoch())
    )`,
   `CREATE VIRTUAL TABLE IF NOT EXISTS memory_embeddings USING vec0(
@@ -225,6 +226,10 @@ export function applyMigrations(db: DatabaseType): void {
   const cols = new Set(listColumns(db, 'messages'))
   for (const m of POST_MIGRATIONS) {
     if (!cols.has(m.column)) db.exec(m.sql)
+  }
+  const memCols = new Set(listColumns(db, 'ai_memory'))
+  if (!memCols.has('chat_id')) {
+    db.exec('ALTER TABLE ai_memory ADD COLUMN chat_id INTEGER')
   }
 }
 
@@ -344,23 +349,23 @@ export function openDatabase(filePath: string): DbInstance {
 
   // ── AI Memory statements ─────────────────────────────────────────────────────
   const insertMemoryStmt = db.prepare(
-    'INSERT INTO ai_memory(content) VALUES (?)'
+    'INSERT INTO ai_memory(content, chat_id) VALUES (?, ?)'
   )
   const insertMemEmbStmt = db.prepare(
     'INSERT INTO memory_embeddings(memory_id, embedding) VALUES (?, ?)'
   )
-  const searchMemSimilarStmt = db.prepare<[Buffer, number], { id: number; content: string; created_at: number; distance: number }>(`
+  const searchMemSimilarStmt = db.prepare<[Buffer, number, number | null], { id: number; content: string; created_at: number; distance: number }>(`
     SELECT m.id, m.content, m.created_at, e.distance
     FROM memory_embeddings e
     JOIN ai_memory m ON m.id = e.memory_id
-    WHERE e.embedding MATCH ? AND k = ?
+    WHERE e.embedding MATCH ? AND k = ? AND (m.chat_id = ? OR m.chat_id IS NULL)
     ORDER BY e.distance
   `)
-  const searchMemKwStmt = db.prepare<[string, number], { id: number; content: string; created_at: number }>(`
+  const searchMemKwStmt = db.prepare<[string, number | null, number], { id: number; content: string; created_at: number }>(`
     SELECT m.id, m.content, m.created_at
     FROM ai_memory_fts
     JOIN ai_memory m ON m.id = ai_memory_fts.rowid
-    WHERE ai_memory_fts MATCH ?
+    WHERE ai_memory_fts MATCH ? AND (m.chat_id = ? OR m.chat_id IS NULL)
     ORDER BY rank
     LIMIT ?
   `)
@@ -477,27 +482,27 @@ export function openDatabase(filePath: string): DbInstance {
     hasEmbedding(msgId) {
       return (hasEmbStmt.get(msgId)?.count ?? 0) > 0
     },
-    insertMemory(content) {
-      const r = insertMemoryStmt.run(content)
+    insertMemory(content, chatId) {
+      const r = insertMemoryStmt.run(content, chatId ?? null)
       return Number(r.lastInsertRowid)
     },
     insertMemoryEmbedding(memoryId, vec) {
       insertMemEmbStmt.run(BigInt(memoryId), vecToBuffer(vec))
     },
-    searchMemorySimilar(queryVec, k) {
+    searchMemorySimilar(queryVec, k, chatId) {
       if (k <= 0) return []
-      return searchMemSimilarStmt.all(vecToBuffer(queryVec), k).map((r) => ({
+      return searchMemSimilarStmt.all(vecToBuffer(queryVec), k, chatId ?? null).map((r) => ({
         id: r.id,
         content: r.content,
         createdAt: r.created_at * 1000,
         distance: r.distance
       }))
     },
-    searchMemoryKeyword(query, limit) {
+    searchMemoryKeyword(query, limit, chatId) {
       if (!query.trim() || limit <= 0) return []
       const safeQuery = `"${query.replace(/"/g, '""')}"`
       try {
-        return searchMemKwStmt.all(safeQuery, Math.min(limit, 50)).map((r) => ({
+        return searchMemKwStmt.all(safeQuery, chatId ?? null, Math.min(limit, 50)).map((r) => ({
           id: r.id,
           content: r.content,
           createdAt: r.created_at * 1000

@@ -37,8 +37,8 @@
 .light {
   /* Light Theme (Apto Daltónicos, Fondos Blancos y Marcos/Textbox Naranja) */
   --bt-bg: #ffffff; /* La mayoría blanco */
-  --bt-surf: #fdf2e9; /* Adentro de los marcos: naranja con opacidad/tenue (suavizado) */
-  --bt-hover: #fef8f4; /* Hover naranja-crema muy suave */
+  --bt-surf: #fae3d0; /* Adentro de los marcos: naranja con opacidad/tenue más visible */
+  --bt-hover: #fdf1e7; /* Hover naranja-crema suave */
   --bt-sidebar-bg: #ffffff; /* Sidebar blanco como estaba inicialmente */
   --bt-border: rgba(234, 88, 12, 0.22); /* Bordes naranja translúcidos con opacidad */
   --bt-border-strong: rgba(234, 88, 12, 0.38); /* Bordes fuertes más definidos */

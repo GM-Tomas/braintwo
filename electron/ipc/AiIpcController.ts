@@ -13,12 +13,12 @@ export class AiIpcController {
       writeAiConfig(context.app.getPath('userData'), patch)
     })
 
-    ipcMain.handle('ai:send', async (_e, messages: ChatMessage[], goodSourceId?: number) => {
+    ipcMain.handle('ai:send', async (_e, messages: ChatMessage[], goodSourceId?: number, chatId?: number) => {
       if (!context.aiChat.value) throw new Error('Storage not ready')
       const config = readAiConfig(context.app.getPath('userData'))
       if (!config?.apiKey) throw new Error('IA no configurada. Configurá un proveedor en Settings.')
       const today = new Date().toISOString().split('T')[0]!
-      return context.aiChat.value.send(config, messages, today, goodSourceId)
+      return context.aiChat.value.send(config, messages, today, goodSourceId, chatId)
     })
 
     ipcMain.handle('ai:list-chats', () => {

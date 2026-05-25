@@ -62,7 +62,7 @@ export interface BrainTwoApi {
   ai: {
     getConfig: () => Promise<AiConfig | null>
     setConfig: (config: Partial<AiConfig>) => Promise<void>
-    send: (messages: ChatMessage[], goodSourceId?: number) => Promise<AiChatResponse>
+    send: (messages: ChatMessage[], goodSourceId?: number, chatId?: number) => Promise<AiChatResponse>
     listChats: () => Promise<DbChat[]>
     getChatMessages: (chatId: number) => Promise<DbChatMessage[]>
     createChat: (title: string) => Promise<number>
@@ -151,7 +151,7 @@ export function createApi(
     ai: {
       getConfig: () => ipcRenderer.invoke('ai:get-config'),
       setConfig: (config: Partial<AiConfig>) => ipcRenderer.invoke('ai:set-config', config),
-      send: (messages: ChatMessage[], goodSourceId?: number) => ipcRenderer.invoke('ai:send', messages, goodSourceId),
+      send: (messages: ChatMessage[], goodSourceId?: number, chatId?: number) => ipcRenderer.invoke('ai:send', messages, goodSourceId, chatId),
       listChats: () => ipcRenderer.invoke('ai:list-chats'),
       getChatMessages: (chatId: number) => ipcRenderer.invoke('ai:get-chat-messages', chatId),
       createChat: (title: string) => ipcRenderer.invoke('ai:create-chat', title),

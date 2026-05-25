@@ -3,7 +3,7 @@ import type { AiConfig, ChatMessage, AiChatResponse, DbChat, DbChatMessage } fro
 export interface IAiService {
   getConfig(): Promise<AiConfig | null>
   setConfig(config: Partial<AiConfig>): Promise<void>
-  send(messages: ChatMessage[], goodSourceId?: number): Promise<AiChatResponse>
+  send(messages: ChatMessage[], goodSourceId?: number, chatId?: number): Promise<AiChatResponse>
   listChats(): Promise<DbChat[]>
   getChatMessages(chatId: number): Promise<DbChatMessage[]>
   createChat(title: string): Promise<number>

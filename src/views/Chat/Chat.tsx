@@ -122,7 +122,7 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
     setLastResponse(null)
 
     try {
-      const res = await aiService.send(nextHistory)
+      const res = await aiService.send(nextHistory, undefined, currentChatId)
 
       // Save assistant message to database
       const serializedSources = res.sources.length > 0 ? JSON.stringify(res.sources) : null
@@ -144,7 +144,7 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
   const handleFeedbackGood = useCallback((sourceId: number) => {
     if (loading || messages.length < 2 || activeChatId === null) return
     const historyToReSend = messages.slice(0, -1)
-    void aiService.send(historyToReSend, sourceId).then(async (res) => {
+    void aiService.send(historyToReSend, sourceId, activeChatId).then(async (res) => {
       try {
         await aiService.deleteLastMessage(activeChatId)
         const serializedSources = res.sources.length > 0 ? JSON.stringify(res.sources) : null

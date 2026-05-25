@@ -15,7 +15,8 @@ export interface AiChatService {
     config: AiConfig,
     history: ChatMessage[],
     today: string,
-    goodSourceId?: number
+    goodSourceId?: number,
+    chatId?: number
   ): Promise<AiChatResponse>
 }
 
@@ -26,7 +27,7 @@ const MEM_K = 8
 
 export function createAiChatService(deps: AiChatDeps): AiChatService {
   return {
-    async send(config, history, today, goodSourceId) {
+    async send(config, history, today, goodSourceId, chatId) {
       const lastUserMsg = [...history].reverse().find((m) => m.role === 'user')
       const question = lastUserMsg?.content ?? ''
 
@@ -44,14 +45,14 @@ export function createAiChatService(deps: AiChatDeps): AiChatService {
         (async () => {
           try {
             const queryVec = await deps.embed(question)
-            return deps.db.searchMemorySimilar(queryVec, MEM_K)
+            return deps.db.searchMemorySimilar(queryVec, MEM_K, chatId)
           } catch {
             return [] as MemoryResult[]
           }
         })()
       ])
 
-      const memKwHits = queries.flatMap((q) => deps.db.searchMemoryKeyword(q, 3))
+      const memKwHits = queries.flatMap((q) => deps.db.searchMemoryKeyword(q, 3, chatId))
 
       // Deduplicate messages by id (vector hits have priority / carry similarity).
       const seenMsgs = new Set<number>()
@@ -103,10 +104,17 @@ export function createAiChatService(deps: AiChatDeps): AiChatService {
       // ── Step 7: Persist memory async (non-blocking) ────────────────────
       if (remember) {
         try {
-          const memId = deps.db.insertMemory(remember)
+          const memId = deps.db.insertMemory(remember, chatId)
           void deps.embed(remember).then((vec) => {
             try { deps.db.insertMemoryEmbedding(memId, vec) } catch { /* ignore duplicate */ }
           })
+        } catch { /* non-fatal */ }
+      }
+
+      // ── Step 8: Enrich context of the selected message (Option A) ──────
+      if (goodSourceId !== undefined) {
+        try {
+          void enrichSourceMessageContext(config, goodSourceId, question, history, deps)
         } catch { /* non-fatal */ }
       }
 
@@ -294,4 +302,53 @@ function parseBlocks(raw: string): {
   }).trim()
 
   return { content, action, remember, sources }
+}
+
+// ── Context Enrichment Helper (Option A) ──────────────────────────────────────
+
+async function enrichSourceMessageContext(
+  config: AiConfig,
+  msgId: number,
+  question: string,
+  history: ChatMessage[],
+  deps: AiChatDeps
+): Promise<void> {
+  try {
+    const msgs = deps.db.getSurroundingMessages(msgId, 0)
+    const msg = msgs[0]
+    if (!msg) return
+
+    const systemPrompt = `Sos un asistente que ayuda a indexar mensajes personales.
+Tu tarea es escribir una nota de contexto breve y específica (máximo 150 caracteres) en español que explique por qué este mensaje es relevante para la consulta del usuario o qué información adicional/aclaración aporta esta conversación al mensaje original.
+Esto se usará para enriquecer su búsqueda semántica futura.
+Responde únicamente con la frase, sin explicaciones ni comillas.`
+
+    const chatHistorySnippet = history
+      .slice(-4)
+      .map((h) => `${h.role === 'user' ? 'Usuario' : 'Asistente'}: ${h.content}`)
+      .join('\n')
+
+    const userPrompt = `Mensaje de WhatsApp original: "${msg.text}"
+Consulta actual del usuario: "${question}"
+Conversación reciente:
+${chatHistorySnippet}`
+
+    const rawNote = await callProvider({
+      config,
+      systemPrompt,
+      messages: [{ role: 'user', content: userPrompt }]
+    })
+
+    const note = rawNote.trim().replace(/^["']|["']$/g, '').slice(0, 200)
+    if (note) {
+      deps.db.updateContextNote(msgId, note)
+      // Delete old embedding and re-embed with the new context note
+      deps.db.deleteEmbedding(msgId)
+      const embedText = `${note}\n${msg.text}`.trim()
+      const vec = await deps.embed(embedText)
+      deps.db.insertEmbedding(msgId, vec)
+    }
+  } catch (err) {
+    console.error('Failed to enrich source message context:', err)
+  }
 }

@@ -45,8 +45,7 @@ export function MessageDetail({ message, onClose }: MessageDetailProps) {
       : []),
     { label: 'Tipo', value: <span className={`capitalize ${style.iconColor}`}>{message.kind}</span> },
     { label: 'Fuente', value: SOURCE_LABEL[message.source] },
-    { label: 'Enviado por mí', value: message.fromMe ? 'Sí' : 'No' },
-    { label: 'Context Note / Remember', value: message.contextNote ?? 'Sin procesar' }
+    { label: 'Enviado por mí', value: message.fromMe ? 'Sí' : 'No' }
   ]
 
   return (
