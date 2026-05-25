@@ -10,7 +10,6 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { id: 'search', icon: 'search', label: 'Buscar' },
   { id: 'timeline', icon: 'home', label: 'Timeline' },
   { id: 'chat', icon: 'chat', label: 'Chat IA' },
   { id: 'settings', icon: 'settings', label: 'Settings' }
