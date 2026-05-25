@@ -82,8 +82,8 @@ export function Search() {
             className="flex items-center gap-3.5 rounded-[14px] border bg-bt-surf px-5 py-4 transition-colors duration-150"
             style={{
               borderColor: focused
-                ? 'rgba(26,143,227,0.4)'
-                : 'rgba(255,255,255,0.06)'
+                ? 'var(--bt-input-focus-border)'
+                : 'var(--bt-border)'
             }}
           >
             <Icon name="search" size={20} className="text-bt-primary" />

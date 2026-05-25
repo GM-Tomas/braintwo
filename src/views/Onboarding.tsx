@@ -37,7 +37,15 @@ const FTU_STEPS: FTUStepDef[] = [
   { kind: 'qr' },
 ]
 
-export function FTU({ startAtQr = false }: { startAtQr?: boolean }) {
+export function FTU({
+  startAtQr = false,
+  theme = 'dark',
+  toggleTheme = () => {}
+}: {
+  startAtQr?: boolean
+  theme?: 'light' | 'dark'
+  toggleTheme?: () => void
+}) {
   const [step, setStep] = useState(() => (startAtQr ? FTU_STEPS.length - 1 : 0))
   const [waState, setWaState] = useState<WAConnectionState>('connecting')
   const [qr, setQr] = useState<string | null>(null)
@@ -105,21 +113,32 @@ export function FTU({ startAtQr = false }: { startAtQr?: boolean }) {
             <div
               key={i}
               className={`h-[6px] rounded-full transition-all duration-300 ${
-                i === step ? 'w-6 bg-bt-accent' : 'w-[6px] bg-white/15'
+                i === step ? 'w-6 bg-bt-accent' : 'w-[6px] bg-bt-border-strong'
               }`}
             />
           ))}
         </div>
-        {!isLast && (
+        <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={advance}
-            className="rounded-[10px] px-8 py-3 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
-            style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
+            onClick={toggleTheme}
+            aria-label={theme === 'light' ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro'}
+            title={theme === 'light' ? 'Modo Oscuro' : 'Modo Claro'}
+            className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-bt-border text-bt-muted transition-colors hover:bg-bt-hover hover:text-bt-text"
           >
-            Siguiente
+            <Icon name={theme === 'light' ? 'moon' : 'sun'} size={16} />
           </button>
-        )}
+          {!isLast && (
+            <button
+              type="button"
+              onClick={advance}
+              className="rounded-[10px] px-8 py-3 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
+            >
+              Siguiente
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

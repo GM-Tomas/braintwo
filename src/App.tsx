@@ -215,7 +215,7 @@ export default function App() {
     return (
       <div className="flex h-full bg-bt-bg text-bt-text font-sans">
         <main className="flex flex-1 flex-col overflow-hidden">
-          <FTU startAtQr={phase === 'qr'} />
+          <FTU startAtQr={phase === 'qr'} theme={theme} toggleTheme={toggleTheme} />
         </main>
       </div>
     )
