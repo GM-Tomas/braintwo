@@ -202,7 +202,14 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
     ai: {
       getConfig: spies.aiGetConfig,
       setConfig: spies.aiSetConfig,
-      send: spies.aiSend
+      send: spies.aiSend,
+      listChats: vi.fn(async () => []),
+      getChatMessages: vi.fn(async () => []),
+      createChat: vi.fn(async () => 1),
+      deleteChat: vi.fn(async () => {}),
+      renameChat: vi.fn(async () => {}),
+      saveChatMessage: vi.fn(async () => 1),
+      deleteLastMessage: vi.fn(async () => {})
     }
   }
 

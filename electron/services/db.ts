@@ -79,6 +79,21 @@ export interface MemoryResult {
   distance?: number
 }
 
+export interface DbChat {
+  id: number
+  title: string
+  created_at: number
+}
+
+export interface DbChatMessage {
+  id: number
+  chat_id: number
+  role: 'user' | 'assistant'
+  content: string
+  sources: string | null
+  created_at: number
+}
+
 export interface DbStats {
   messages: number
   embeddings: number
@@ -104,6 +119,13 @@ export interface DbInstance {
   searchMemoryKeyword: (query: string, limit: number) => MemoryResult[]
   listMemories: (limit: number) => MemoryResult[]
   listUnembeddedMemories: (limit: number) => { id: number; content: string }[]
+  // Chat history
+  createChat: (title: string) => number
+  listChats: () => DbChat[]
+  deleteChat: (id: number) => void
+  renameChat: (id: number, title: string) => void
+  getChatMessages: (chatId: number) => DbChatMessage[]
+  insertChatMessage: (chatId: number, role: 'user' | 'assistant', content: string, sources: string | null) => number
   // Stats / misc
   stats: (filePath?: string) => DbStats
   countMessages: () => number
@@ -156,7 +178,23 @@ const SCHEMA_STATEMENTS = [
   `CREATE TRIGGER IF NOT EXISTS ai_memory_fts_ai
      AFTER INSERT ON ai_memory BEGIN
        INSERT INTO ai_memory_fts(rowid, content) VALUES (new.id, new.content);
-     END`
+     END`,
+  // Chat history tables
+  `CREATE TABLE IF NOT EXISTS chats (
+     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+     title       TEXT NOT NULL,
+     created_at  INTEGER DEFAULT (unixepoch())
+   )`,
+  `CREATE TABLE IF NOT EXISTS chat_messages (
+     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+     chat_id     INTEGER NOT NULL,
+     role        TEXT NOT NULL,
+     content     TEXT NOT NULL,
+     sources     TEXT,
+     created_at  INTEGER DEFAULT (unixepoch()),
+     FOREIGN KEY(chat_id) REFERENCES chats(id) ON DELETE CASCADE
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_chat_msg_chat_id ON chat_messages(chat_id)`
 ]
 
 // Idempotent column additions for users upgrading from earlier schemas.
@@ -337,6 +375,25 @@ export function openDatabase(filePath: string): DbInstance {
     LIMIT ?
   `)
 
+  const insertChatStmt = db.prepare(
+    'INSERT INTO chats(title) VALUES (?)'
+  )
+  const listChatsStmt = db.prepare<[], DbChat>(
+    'SELECT id, title, created_at FROM chats ORDER BY created_at DESC'
+  )
+  const deleteChatStmt = db.prepare<[number], void>(
+    'DELETE FROM chats WHERE id = ?'
+  )
+  const renameChatStmt = db.prepare<[string, number], void>(
+    'UPDATE chats SET title = ? WHERE id = ?'
+  )
+  const getChatMessagesStmt = db.prepare<[number], DbChatMessage>(
+    'SELECT id, chat_id, role, content, sources, created_at FROM chat_messages WHERE chat_id = ? ORDER BY id ASC'
+  )
+  const insertChatMessageStmt = db.prepare(
+    'INSERT INTO chat_messages(chat_id, role, content, sources) VALUES (?, ?, ?, ?)'
+  )
+
   return {
     raw: db,
     insertMessage(msg) {
@@ -458,6 +515,26 @@ export function openDatabase(filePath: string): DbInstance {
     },
     listUnembeddedMemories(limit) {
       return unembeddedMemoriesStmt.all(Math.min(limit, 500))
+    },
+    createChat(title) {
+      const r = insertChatStmt.run(title)
+      return Number(r.lastInsertRowid)
+    },
+    listChats() {
+      return listChatsStmt.all()
+    },
+    deleteChat(id) {
+      deleteChatStmt.run(id)
+    },
+    renameChat(id, title) {
+      renameChatStmt.run(title, id)
+    },
+    getChatMessages(chatId) {
+      return getChatMessagesStmt.all(chatId)
+    },
+    insertChatMessage(chatId, role, content, sources) {
+      const r = insertChatMessageStmt.run(chatId, role, content, sources)
+      return Number(r.lastInsertRowid)
     },
     getSurroundingMessages(msgId, limit) {
       const target = getMsgStmt.get(msgId)

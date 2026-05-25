@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { SyncStatus, View, WAConnectionState } from '@shared/types'
+import type { SyncStatus, View, WAConnectionState, DbChat } from '@shared/types'
 import { BrainMark, Icon, type IconName } from '@/lib/icons'
 import { SyncStatusBadge } from './SyncStatusBadge'
 
@@ -26,6 +26,18 @@ interface SidebarProps {
   onLogout?: () => void
   theme?: 'light' | 'dark'
   toggleTheme?: () => void
+  // Chat list props
+  chats?: DbChat[]
+  activeChatId?: number | null
+  editingChatId?: number | null
+  editingTitle?: string
+  onSelectChat?: (id: number) => void
+  onNewChat?: () => void
+  onDeleteChat?: (id: number) => void
+  onStartRename?: (id: number, title: string) => void
+  onSaveRename?: () => void
+  onCancelRename?: () => void
+  setEditingTitle?: (title: string) => void
 }
 
 export function Sidebar({
@@ -37,7 +49,18 @@ export function Sidebar({
   platform,
   onLogout,
   theme = 'dark',
-  toggleTheme = () => {}
+  toggleTheme = () => {},
+  chats = [],
+  activeChatId = null,
+  editingChatId = null,
+  editingTitle = '',
+  onSelectChat = () => {},
+  onNewChat = () => {},
+  onDeleteChat = () => {},
+  onStartRename = () => {},
+  onSaveRename = () => {},
+  onCancelRename = () => {},
+  setEditingTitle = () => {}
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -113,7 +136,9 @@ export function Sidebar({
         collapsed={collapsed}
       />
 
-      <nav className={`flex flex-1 flex-col gap-1.5 ${collapsed ? 'w-full items-center' : 'w-full'}`}>
+      <nav className={`flex flex-col gap-1.5 shrink-0 ${
+        (collapsed || view !== 'chat') ? 'flex-1' : ''
+      } ${collapsed ? 'w-full items-center' : 'w-full'}`}>
         {NAV.map((item) => {
           const active = view === item.id
           return (
@@ -147,6 +172,87 @@ export function Sidebar({
           )
         })}
       </nav>
+
+      {!collapsed && view === 'chat' && (
+        <div className="mt-4 flex flex-1 flex-col overflow-hidden border-t border-bt-border pt-4">
+          <div className="flex items-center justify-between px-2 pb-2">
+            <span className="text-[10px] font-bold tracking-wider text-bt-dim uppercase select-none">Recientes</span>
+            <button
+              type="button"
+              onClick={onNewChat}
+              className="p-1 text-bt-dim hover:text-bt-text rounded hover:bg-bt-hover transition-colors duration-150"
+              title="Nuevo Chat"
+            >
+              <Icon name="plus" size={14} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto flex flex-col gap-1 pr-1">
+            {chats.map((chat) => {
+              const isActive = activeChatId === chat.id
+              const isEditing = editingChatId === chat.id
+              return (
+                <div
+                  key={chat.id}
+                  onClick={() => !isEditing && onSelectChat(chat.id)}
+                  className={`group relative flex items-center justify-between rounded-[8px] px-2.5 py-1.5 text-[12.5px] transition-all duration-150 cursor-pointer ${
+                    isActive
+                      ? 'bg-bt-hover border border-bt-primary/20 text-bt-text font-medium shadow-bt-nav-active-shadow'
+                      : 'text-bt-muted hover:bg-bt-hover/40 hover:text-bt-text border border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Icon name="chat" size={13} className={isActive ? 'text-bt-primary' : 'text-bt-dim'} />
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onBlur={onSaveRename}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') onSaveRename()
+                          if (e.key === 'Escape') onCancelRename()
+                        }}
+                        autoFocus
+                        className="flex-1 bg-bt-surf border border-bt-border rounded px-1 py-0.5 text-[11px] text-bt-text outline-none focus:border-bt-primary/40"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <span
+                        className="truncate select-none font-normal"
+                        onDoubleClick={(e) => {
+                          e.stopPropagation()
+                          onStartRename(chat.id, chat.title)
+                        }}
+                        title="Doble click para renombrar"
+                      >
+                        {chat.title}
+                      </span>
+                    )}
+                  </div>
+                  {!isEditing && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onDeleteChat(chat.id)
+                      }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 text-bt-dim hover:text-bt-red rounded hover:bg-bt-faint"
+                      title="Eliminar chat"
+                    >
+                      <Icon name="x" size={12} />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+            {chats.length === 0 && (
+              <div className="py-4 text-center text-[11px] text-bt-dim select-none">
+                Sin chats guardados
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className={`mt-6 border-t border-bt-border pt-4 ${collapsed ? 'w-full flex flex-col items-center gap-2' : 'w-full flex flex-col gap-2'}`}>
         <button

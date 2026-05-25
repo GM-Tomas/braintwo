@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { AiChatResponse, AiConfig, ChatMessage, View } from '@shared/types'
+import type { AiChatResponse, AiConfig, ChatMessage, RetrievedContext, View } from '@shared/types'
 import type { MessageEntity } from '@shared/domain/message.entity'
 import { PageHeader } from '../../components/PageHeader'
 import { Icon } from '@/lib/icons'
@@ -9,25 +9,73 @@ import { MessageDetail } from '../Timeline/MessageDetail'
 
 interface ChatProps {
   onNavigate: (view: View) => void
+  activeChatId: number | null
+  setActiveChatId: (id: number | null) => void
+  loadChats: () => Promise<void>
 }
 
-export function Chat({ onNavigate }: ChatProps) {
+export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: ChatProps) {
   const { aiService, messageRepository } = useDependencies()
+
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastResponse, setLastResponse] = useState<AiChatResponse | null>(null)
   const [config, setConfig] = useState<AiConfig | null>(null)
-  const [sourcesOpen, setSourcesOpen] = useState(false)
   const [detailMessage, setDetailMessage] = useState<MessageEntity | null>(null)
+
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const loadedChatIdRef = useRef<number | null>(null)
 
   useEffect(() => {
     void aiService.getConfig().then(setConfig)
     setTimeout(() => inputRef.current?.focus(), 100)
   }, [aiService])
+
+  const selectChat = useCallback(async (chatId: number) => {
+    setLoading(false)
+    setError(null)
+    setLastResponse(null)
+    try {
+      const dbMsgs = await aiService.getChatMessages(chatId)
+      const chatMsgs: ChatMessage[] = dbMsgs.map((m) => {
+        let parsedSources: RetrievedContext[] | undefined
+        if (m.sources) {
+          try {
+            parsedSources = JSON.parse(m.sources) as RetrievedContext[]
+          } catch {
+            // ignore
+          }
+        }
+        return {
+          role: m.role,
+          content: m.content,
+          sources: parsedSources,
+          created_at: m.created_at
+        }
+      })
+      setMessages(chatMsgs)
+      setTimeout(() => inputRef.current?.focus(), 100)
+    } catch (err) {
+      setError('Error al cargar los mensajes del chat.')
+      console.error(err)
+    }
+  }, [aiService])
+
+  useEffect(() => {
+    if (activeChatId !== loadedChatIdRef.current) {
+      loadedChatIdRef.current = activeChatId
+      if (activeChatId !== null) {
+        void selectChat(activeChatId)
+      } else {
+        setMessages([])
+        setLastResponse(null)
+        setError(null)
+      }
+    }
+  }, [activeChatId, selectChat])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -39,37 +87,76 @@ export function Chat({ onNavigate }: ChatProps) {
     const text = input.trim()
     if (!text || loading) return
 
+    let currentChatId = activeChatId
+
+    // 1. If no active chat, create one in SQLite first
+    if (currentChatId === null) {
+      try {
+        const defaultTitle = text.length > 30 ? text.slice(0, 30) + '...' : text
+        const newId = await aiService.createChat(defaultTitle)
+        currentChatId = newId
+        loadedChatIdRef.current = newId // Set ref to prevent trigger of selectChat useEffect
+        setActiveChatId(newId)
+        await loadChats()
+      } catch (err) {
+        setError('No se pudo crear el chat en la base de datos.')
+        console.error(err)
+        return
+      }
+    }
+
     const userMsg: ChatMessage = { role: 'user', content: text }
     const nextHistory = [...messages, userMsg]
+
+    // Save user message to database
+    try {
+      await aiService.saveChatMessage(currentChatId, 'user', text, null)
+    } catch (err) {
+      console.error('Error saving user message:', err)
+    }
 
     setMessages(nextHistory)
     setInput('')
     setLoading(true)
     setError(null)
-    setSourcesOpen(false)
     setLastResponse(null)
 
     try {
       const res = await aiService.send(nextHistory)
-      setMessages((prev) => [...prev, { role: 'assistant', content: res.content }])
+
+      // Save assistant message to database
+      const serializedSources = res.sources.length > 0 ? JSON.stringify(res.sources) : null
+      try {
+        await aiService.saveChatMessage(currentChatId, 'assistant', res.content, serializedSources)
+      } catch (err) {
+        console.error('Error saving assistant message:', err)
+      }
+
+      setMessages((prev) => [...prev, { role: 'assistant', content: res.content, sources: res.sources }])
       setLastResponse(res)
-      if (res.sources.length > 0) setSourcesOpen(true)
     } catch (err) {
       setError(parseAiError(err))
     } finally {
       setLoading(false)
     }
-  }, [input, loading, messages, aiService])
+  }, [input, loading, messages, activeChatId, aiService, loadChats, setActiveChatId])
 
   const handleFeedbackGood = useCallback((sourceId: number) => {
-    if (loading || messages.length < 2) return
+    if (loading || messages.length < 2 || activeChatId === null) return
     const historyToReSend = messages.slice(0, -1)
-    void aiService.send(historyToReSend, sourceId).then((res) => {
-      setMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: res.content }])
+    void aiService.send(historyToReSend, sourceId).then(async (res) => {
+      try {
+        await aiService.deleteLastMessage(activeChatId)
+        const serializedSources = res.sources.length > 0 ? JSON.stringify(res.sources) : null
+        await aiService.saveChatMessage(activeChatId, 'assistant', res.content, serializedSources)
+      } catch (err) {
+        console.error('Error saving updated feedback message:', err)
+      }
+
+      setMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: res.content, sources: res.sources }])
       setLastResponse(res)
-      if (res.sources.length > 0) setSourcesOpen(true)
     }).catch(() => { /* silent — feedback is best-effort */ })
-  }, [loading, messages, aiService])
+  }, [loading, messages, activeChatId, aiService])
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -84,7 +171,7 @@ export function Chat({ onNavigate }: ChatProps) {
   }
 
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden animate-fade-in">
+    <div className="relative flex flex-1 flex-col overflow-hidden bg-bt-bg animate-fade-in">
       <PageHeader
         eyebrow="IA"
         title="Chat IA"
@@ -109,7 +196,7 @@ export function Chat({ onNavigate }: ChatProps) {
       <div className="flex-1 overflow-y-auto px-14 py-6">
         <div className="mx-auto flex max-w-[760px] flex-col gap-5">
           {messages.length === 0 && (
-            <div className="py-16 text-center text-[13px] text-bt-dim">
+            <div className="py-16 text-center text-[13px] text-bt-dim select-none">
               <p>Preguntá sobre tus mensajes de WhatsApp.</p>
               <p className="mt-1 text-[12px] opacity-60">
                 Ejemplos: "qué películas anoté", "mensajes sobre fútbol", "cuántos mensajes tengo"
@@ -125,8 +212,6 @@ export function Chat({ onNavigate }: ChatProps) {
                 key={i}
                 msg={msg}
                 response={isLast && isAssistant ? lastResponse : null}
-                sourcesOpen={sourcesOpen}
-                onToggleSources={() => setSourcesOpen((o) => !o)}
                 onNavigate={onNavigate}
                 onOpenMessage={(id) => void openSource(id)}
                 onFeedbackGood={isLast && isAssistant ? handleFeedbackGood : undefined}
@@ -144,7 +229,7 @@ export function Chat({ onNavigate }: ChatProps) {
           )}
 
           {error && (
-            <div className="rounded-[8px] border border-red-500/30 bg-red-500/10 px-4 py-3 text-[13px] text-red-400">
+            <div className="rounded-[8px] border border-red-500/30 bg-red-500/10 px-4 py-3 text-[13px] text-red-400 animate-fade-in">
               {error}
             </div>
           )}

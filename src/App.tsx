@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import type { AppErrorEvent, View, WAConnectionState } from '@shared/types'
+import { useCallback, useEffect, useState } from 'react'
+import type { AppErrorEvent, DbChat, View, WAConnectionState } from '@shared/types'
 import { Onboarding, FTU } from './views/Onboarding'
 import { Search } from './views/Search'
 import { Timeline } from './views/Timeline'
@@ -38,7 +38,7 @@ function initialPhase(): Phase {
 }
 
 export default function App() {
-  const { connectionService, settingsRepository } = useDependencies()
+  const { connectionService, settingsRepository, aiService } = useDependencies()
   const [phase, setPhase] = useState<Phase>(() => initialPhase())
   const [view, setView] = useState<View>(() =>
     readFlag(ONBOARDED_KEY) ? 'search' : 'onboarding'
@@ -58,6 +58,62 @@ export default function App() {
       return 'dark'
     }
   })
+
+  // Chat management state
+  const [chats, setChats] = useState<DbChat[]>([])
+  const [activeChatId, setActiveChatId] = useState<number | null>(null)
+  const [editingChatId, setEditingChatId] = useState<number | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
+  const [deleteConfirmChatId, setDeleteConfirmChatId] = useState<number | null>(null)
+
+  const loadChats = useCallback(async () => {
+    try {
+      const list = await aiService.listChats()
+      setChats(list)
+    } catch (err) {
+      console.error('Error loading chats:', err)
+    }
+  }, [aiService])
+
+  const startNewChat = useCallback(() => {
+    setActiveChatId(null)
+    setEditingChatId(null)
+  }, [])
+
+  const handleDeleteChat = useCallback(async (id: number) => {
+    try {
+      await aiService.deleteChat(id)
+      setDeleteConfirmChatId(null)
+      if (activeChatId === id) {
+        startNewChat()
+      }
+      await loadChats()
+    } catch (err) {
+      console.error('Error deleting chat:', err)
+    }
+  }, [aiService, activeChatId, startNewChat, loadChats])
+
+  const saveRename = useCallback(async () => {
+    if (editingChatId === null) return
+    const title = editingTitle.trim()
+    if (!title) {
+      setEditingChatId(null)
+      return
+    }
+    try {
+      await aiService.renameChat(editingChatId, title)
+      setEditingChatId(null)
+      await loadChats()
+    } catch (err) {
+      console.error('Error renaming chat:', err)
+    }
+  }, [aiService, editingChatId, editingTitle, loadChats])
+
+  useEffect(() => {
+    if (view === 'chat') {
+      void loadChats()
+    }
+  }, [view, loadChats])
 
   useEffect(() => {
     try {
@@ -177,12 +233,39 @@ export default function App() {
         onLogout={() => setShowLogoutConfirm(true)}
         theme={theme}
         toggleTheme={toggleTheme}
+        chats={chats}
+        activeChatId={activeChatId}
+        editingChatId={editingChatId}
+        editingTitle={editingTitle}
+        onSelectChat={(id) => {
+          setView('chat')
+          setActiveChatId(id)
+        }}
+        onNewChat={() => {
+          setView('chat')
+          startNewChat()
+        }}
+        onDeleteChat={setDeleteConfirmChatId}
+        onStartRename={(id, title) => {
+          setEditingChatId(id)
+          setEditingTitle(title)
+        }}
+        onSaveRename={saveRename}
+        onCancelRename={() => setEditingChatId(null)}
+        setEditingTitle={setEditingTitle}
       />
       <main className="flex flex-1 flex-col overflow-hidden">
         {view === 'onboarding' && <Onboarding />}
         {view === 'search' && <Search />}
         {view === 'timeline' && <Timeline />}
-        {view === 'chat' && <Chat onNavigate={setView} />}
+        {view === 'chat' && (
+          <Chat
+            onNavigate={setView}
+            activeChatId={activeChatId}
+            setActiveChatId={setActiveChatId}
+            loadChats={loadChats}
+          />
+        )}
         {view === 'settings' && <Settings onLogout={() => setShowLogoutConfirm(true)} />}
       </main>
       {appError && (
@@ -228,6 +311,42 @@ export default function App() {
                 className="h-9 rounded-[8px] bg-bt-red px-4 text-[13px] font-semibold text-white transition-colors hover:bg-bt-red/90"
               >
                 Cerrar sesión
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {deleteConfirmChatId !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px]"
+          role="presentation"
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-chat-title"
+            className="w-full max-w-[360px] rounded-[12px] border border-bt-border bg-bt-surf p-5 shadow-bt-modal animate-fade-in text-bt-text"
+          >
+            <h3 id="delete-chat-title" className="font-display text-[18px] font-semibold text-bt-text">
+              ¿Eliminar conversación?
+            </h3>
+            <p className="mt-2 text-[13px] text-bt-muted leading-relaxed">
+              Esta acción no se puede deshacer. Se borrarán de forma permanente todos los mensajes de esta conversación.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmChatId(null)}
+                className="h-8 rounded-[8px] border border-bt-border px-3.5 text-[12px] font-medium text-bt-muted hover:bg-bt-hover hover:text-bt-text transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteChat(deleteConfirmChatId)}
+                className="h-8 rounded-[8px] bg-bt-red px-3.5 text-[12px] font-semibold text-white hover:bg-bt-red/90 transition-colors"
+              >
+                Eliminar
               </button>
             </div>
           </section>

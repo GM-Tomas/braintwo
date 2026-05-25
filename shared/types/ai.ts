@@ -36,6 +36,23 @@ export interface AiConfig {
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+  sources?: RetrievedContext[]
+  created_at?: number
+}
+
+export interface DbChat {
+  id: number
+  title: string
+  created_at: number
+}
+
+export interface DbChatMessage {
+  id: number
+  chat_id: number
+  role: 'user' | 'assistant'
+  content: string
+  sources: string | null
+  created_at: number
 }
 
 export interface RetrievedContext {

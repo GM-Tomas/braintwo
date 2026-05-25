@@ -20,5 +20,42 @@ export class AiIpcController {
       const today = new Date().toISOString().split('T')[0]!
       return context.aiChat.value.send(config, messages, today, goodSourceId)
     })
+
+    ipcMain.handle('ai:list-chats', () => {
+      if (!context.db.value) throw new Error('Database not ready')
+      return context.db.value.listChats()
+    })
+
+    ipcMain.handle('ai:get-chat-messages', (_e, chatId: number) => {
+      if (!context.db.value) throw new Error('Database not ready')
+      return context.db.value.getChatMessages(chatId)
+    })
+
+    ipcMain.handle('ai:create-chat', (_e, title: string) => {
+      if (!context.db.value) throw new Error('Database not ready')
+      return context.db.value.createChat(title)
+    })
+
+    ipcMain.handle('ai:delete-chat', (_e, chatId: number) => {
+      if (!context.db.value) throw new Error('Database not ready')
+      return context.db.value.deleteChat(chatId)
+    })
+
+    ipcMain.handle('ai:rename-chat', (_e, chatId: number, title: string) => {
+      if (!context.db.value) throw new Error('Database not ready')
+      return context.db.value.renameChat(chatId, title)
+    })
+
+    ipcMain.handle('ai:save-chat-message', (_e, chatId: number, role: 'user' | 'assistant', content: string, sources: string | null) => {
+      if (!context.db.value) throw new Error('Database not ready')
+      return context.db.value.insertChatMessage(chatId, role, content, sources)
+    })
+
+    ipcMain.handle('ai:delete-last-message', (_e, chatId: number) => {
+      if (!context.db.value) throw new Error('Database not ready')
+      context.db.value.raw.prepare(
+        "DELETE FROM chat_messages WHERE id = (SELECT MAX(id) FROM chat_messages WHERE chat_id = ? AND role = 'assistant')"
+      ).run(chatId)
+    })
   }
 }

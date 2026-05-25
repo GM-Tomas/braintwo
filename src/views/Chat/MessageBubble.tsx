@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { AiChatResponse, ChatMessage, View } from '@shared/types'
 import { Icon } from '@/lib/icons'
 import { InlineMarkdown } from '@/components/InlineMarkdown'
@@ -14,8 +15,6 @@ export function AssistantAvatar() {
 interface MessageBubbleProps {
   msg: ChatMessage
   response: AiChatResponse | null
-  sourcesOpen: boolean
-  onToggleSources: () => void
   onNavigate: (view: View) => void
   onOpenMessage: (id: number) => void
   onFeedbackGood?: (sourceId: number) => void
@@ -24,13 +23,14 @@ interface MessageBubbleProps {
 export function MessageBubble({
   msg,
   response,
-  sourcesOpen,
-  onToggleSources,
   onNavigate,
   onOpenMessage,
   onFeedbackGood
 }: MessageBubbleProps) {
+  const [sourcesOpen, setSourcesOpen] = useState(false)
   const isUser = msg.role === 'user'
+
+  const showResponse = response || (msg.sources && msg.sources.length > 0 ? { sources: msg.sources } : null)
 
   return (
     <div className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
@@ -46,38 +46,44 @@ export function MessageBubble({
         <div
           className={`rounded-[12px] px-4 py-3 text-[14px] leading-relaxed ${
             isUser
-              ? 'bg-bt-primary text-white'
-              : 'border border-bt-border bg-bt-surf text-bt-text'
+               ? 'bg-bt-primary text-white'
+               : 'border border-bt-border bg-bt-surf text-bt-text'
           }`}
         >
           <InlineMarkdown text={msg.content} />
         </div>
 
-        {response && !isUser && (
+        {showResponse && !isUser && (
           <>
-            {response.sources.length > 0 && (
+            {showResponse.sources && showResponse.sources.length > 0 && (
               <div className="w-full">
                 <button
                   type="button"
-                  onClick={onToggleSources}
+                  onClick={() => setSourcesOpen((o) => !o)}
                   className="flex items-center gap-1.5 text-[11px] text-bt-muted transition-colors hover:text-bt-text"
                 >
                   <Icon name={sourcesOpen ? 'x' : 'search'} size={12} />
                   {sourcesOpen
                     ? 'Ocultar fuentes'
-                    : `${response.sources.length} mensaje${response.sources.length !== 1 ? 's' : ''} consultado${response.sources.length !== 1 ? 's' : ''}`}
+                    : `${showResponse.sources.length} mensaje${showResponse.sources.length !== 1 ? 's' : ''} consultado${showResponse.sources.length !== 1 ? 's' : ''}`}
                 </button>
-                {sourcesOpen && <SourcesList sources={response.sources} onOpenMessage={onOpenMessage} onFeedbackGood={onFeedbackGood} />}
+                {sourcesOpen && (
+                  <SourcesList
+                    sources={showResponse.sources}
+                    onOpenMessage={onOpenMessage}
+                    onFeedbackGood={onFeedbackGood}
+                  />
+                )}
               </div>
             )}
-            {response.action?.action === 'navigate' && (
+            {'action' in showResponse && showResponse.action?.action === 'navigate' && (
               <button
                 type="button"
-                onClick={() => onNavigate(response.action!.view as View)}
+                onClick={() => onNavigate(showResponse.action!.view as View)}
                 className="inline-flex items-center gap-2 rounded-full border border-bt-primary/30 px-3.5 py-1.5 text-[12px] text-bt-primary transition-colors hover:bg-bt-primary/10"
               >
                 <Icon name="chev" size={12} />
-                Ir a {response.action.view}
+                Ir a {showResponse.action.view}
               </button>
             )}
           </>

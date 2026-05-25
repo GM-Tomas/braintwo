@@ -1,6 +1,6 @@
 import type { RecentMessage } from './messages'
 import type { SearchResult, ModelProgress } from './search'
-import type { AiConfig, ChatMessage, AiChatResponse } from './ai'
+import type { AiConfig, ChatMessage, AiChatResponse, DbChat, DbChatMessage } from './ai'
 import type { WAConnectionState, SyncStatus, AppErrorEvent } from './sync'
 
 export type View = 'onboarding' | 'search' | 'timeline' | 'settings' | 'chat'
@@ -72,6 +72,13 @@ export interface BrainTwoBridge {
     getConfig: () => Promise<AiConfig | null>
     setConfig: (config: Partial<AiConfig>) => Promise<void>
     send: (messages: ChatMessage[], goodSourceId?: number) => Promise<AiChatResponse>
+    listChats: () => Promise<DbChat[]>
+    getChatMessages: (chatId: number) => Promise<DbChatMessage[]>
+    createChat: (title: string) => Promise<number>
+    deleteChat: (chatId: number) => Promise<void>
+    renameChat: (chatId: number, title: string) => Promise<void>
+    saveChatMessage: (chatId: number, role: 'user' | 'assistant', content: string, sources: string | null) => Promise<number>
+    deleteLastMessage: (chatId: number) => Promise<void>
   }
 }
 

@@ -6,6 +6,8 @@ import type {
   AiChatResponse,
   AppErrorEvent,
   ChatMessage,
+  DbChat,
+  DbChatMessage,
   DbStats,
   ImportProgress,
   ModelProgress,
@@ -61,6 +63,13 @@ export interface BrainTwoApi {
     getConfig: () => Promise<AiConfig | null>
     setConfig: (config: Partial<AiConfig>) => Promise<void>
     send: (messages: ChatMessage[], goodSourceId?: number) => Promise<AiChatResponse>
+    listChats: () => Promise<DbChat[]>
+    getChatMessages: (chatId: number) => Promise<DbChatMessage[]>
+    createChat: (title: string) => Promise<number>
+    deleteChat: (chatId: number) => Promise<void>
+    renameChat: (chatId: number, title: string) => Promise<void>
+    saveChatMessage: (chatId: number, role: 'user' | 'assistant', content: string, sources: string | null) => Promise<number>
+    deleteLastMessage: (chatId: number) => Promise<void>
   }
 }
 
@@ -142,7 +151,14 @@ export function createApi(
     ai: {
       getConfig: () => ipcRenderer.invoke('ai:get-config'),
       setConfig: (config: Partial<AiConfig>) => ipcRenderer.invoke('ai:set-config', config),
-      send: (messages: ChatMessage[], goodSourceId?: number) => ipcRenderer.invoke('ai:send', messages, goodSourceId)
+      send: (messages: ChatMessage[], goodSourceId?: number) => ipcRenderer.invoke('ai:send', messages, goodSourceId),
+      listChats: () => ipcRenderer.invoke('ai:list-chats'),
+      getChatMessages: (chatId: number) => ipcRenderer.invoke('ai:get-chat-messages', chatId),
+      createChat: (title: string) => ipcRenderer.invoke('ai:create-chat', title),
+      deleteChat: (chatId: number) => ipcRenderer.invoke('ai:delete-chat', chatId),
+      renameChat: (chatId: number, title: string) => ipcRenderer.invoke('ai:rename-chat', chatId, title),
+      saveChatMessage: (chatId: number, role: 'user' | 'assistant', content: string, sources: string | null) => ipcRenderer.invoke('ai:save-chat-message', chatId, role, content, sources),
+      deleteLastMessage: (chatId: number) => ipcRenderer.invoke('ai:delete-last-message', chatId)
     }
   }
 }
