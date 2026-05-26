@@ -173,24 +173,21 @@ export function Timeline() {
                   <div className="mb-3 text-[11px] uppercase tracking-eyebrow text-bt-dim">
                     {searchResults.length} resultado{searchResults.length !== 1 ? 's' : ''}
                   </div>
-                  <ul className="divide-y divide-bt-border border-y border-bt-border">
-                    {searchResults.map((r) => (
-                      <li key={r.id} className="py-4">
-                        <div className="flex items-start justify-between gap-5">
-                          <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-bt-text">
-                            {r.text || 'Mensaje sin texto'}
-                          </p>
-                          <MatchBadge source={r.matchSource} similarity={r.similarity} />
-                        </div>
-                        <div className="mt-1.5 flex items-center gap-2 text-[11.5px] text-bt-dim">
-                          <time dateTime={new Date(r.timestamp).toISOString()}>
-                            {searchFormatter.format(new Date(r.timestamp))}
-                          </time>
-                          <span>|</span>
-                          <span>{r.source}</span>
-                        </div>
-                      </li>
-                    ))}
+                  <ul className="w-full">
+                    {searchResults.map((r) => {
+                      const m = new MessageEntity(r)
+                      return (
+                        <NoteRow
+                          key={r.id}
+                          message={m}
+                          formatted={searchFormatter.format(new Date(r.timestamp))}
+                          isSelected={false}
+                          onClick={() => setSelected(m)}
+                          similarity={r.similarity}
+                          matchSource={r.matchSource}
+                        />
+                      )
+                    })}
                   </ul>
                 </section>
               )}
@@ -229,30 +226,7 @@ export function Timeline() {
   )
 }
 
-function MatchBadge({ source, similarity }: { source?: 'semantic' | 'keyword' | 'both'; similarity: number }) {
-  if (source === 'keyword') {
-    return (
-      <span className="shrink-0 rounded-full border border-bt-accent/30 px-2.5 py-1 text-[11px] text-bt-accent">
-        exacto
-      </span>
-    )
-  }
-  if (source === 'both') {
-    return (
-      <div className="flex shrink-0 items-center gap-2">
-        <span className="rounded-full border border-bt-accent/30 px-2.5 py-1 text-[11px] text-bt-accent">exacto</span>
-        <span className="rounded-full border border-bt-brand/30 px-2.5 py-1 text-[11px] text-bt-brand">
-          {Math.round(similarity * 100)}%
-        </span>
-      </div>
-    )
-  }
-  return (
-    <span className="shrink-0 rounded-full border border-bt-brand/30 px-2.5 py-1 text-[11px] text-bt-brand">
-      {Math.round(similarity * 100)}%
-    </span>
-  )
-}
+
 
 function kindCounts(list: MessageEntity[]): Record<MessageKind, number> {
   const out: Record<MessageKind, number> = {

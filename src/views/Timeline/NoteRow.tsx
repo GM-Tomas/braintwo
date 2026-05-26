@@ -7,9 +7,11 @@ interface NoteRowProps {
   formatted: string
   isSelected: boolean
   onClick: () => void
+  similarity?: number
+  matchSource?: 'semantic' | 'keyword' | 'both'
 }
 
-export function NoteRow({ message, formatted, isSelected, onClick }: NoteRowProps) {
+export function NoteRow({ message, formatted, isSelected, onClick, similarity, matchSource }: NoteRowProps) {
   const style = KIND_STYLE[message.kind] ?? KIND_STYLE.other
   return (
     <li>
@@ -21,11 +23,11 @@ export function NoteRow({ message, formatted, isSelected, onClick }: NoteRowProp
           if (e.key === 'Enter' || e.key === ' ') onClick()
         }}
         aria-pressed={isSelected}
-        className={`group grid min-h-[92px] cursor-pointer grid-cols-[36px_minmax(0,1fr)_16px] items-start gap-[18px] border-b border-bt-border px-4 py-5 transition-colors duration-100 outline-none focus-visible:ring-1 focus-visible:ring-bt-primary/40 ${
+        className={`group grid min-h-[92px] cursor-pointer items-start gap-[18px] border-b border-bt-border px-4 py-5 transition-colors duration-100 outline-none focus-visible:ring-1 focus-visible:ring-bt-primary/40 ${
           isSelected
             ? 'bg-bt-primary/[0.06] border-l-2 border-l-bt-primary'
             : 'hover:bg-white/[0.018]'
-        }`}
+        } ${similarity !== undefined ? 'grid-cols-[36px_minmax(0,1fr)_auto_16px]' : 'grid-cols-[36px_minmax(0,1fr)_16px]'}`}
       >
         <div
           aria-hidden
@@ -62,6 +64,28 @@ export function NoteRow({ message, formatted, isSelected, onClick }: NoteRowProp
             ) : null}
           </div>
         </div>
+        {similarity !== undefined && (
+          <div className="flex shrink-0 items-center mt-1.5">
+            {matchSource === 'keyword' ? (
+              <span className="rounded-full border border-bt-accent/30 px-2.5 py-1 text-[11px] text-bt-accent font-medium">
+                exacto
+              </span>
+            ) : matchSource === 'both' ? (
+              <div className="flex items-center gap-1.5">
+                <span className="rounded-full border border-bt-accent/30 px-2.5 py-1 text-[11px] text-bt-accent font-medium">
+                  exacto
+                </span>
+                <span className="rounded-full border border-bt-brand/30 px-2.5 py-1 text-[11px] text-bt-brand font-medium">
+                  {Math.round(similarity * 100)}%
+                </span>
+              </div>
+            ) : (
+              <span className="rounded-full border border-bt-brand/30 px-2.5 py-1 text-[11px] text-bt-brand font-medium">
+                {Math.round(similarity * 100)}%
+              </span>
+            )}
+          </div>
+        )}
         <Icon
           name="chev"
           size={14}
