@@ -234,12 +234,17 @@ function openStorage(): void {
   context.ingest.value = createIngestPipeline(context.db.value, ingestLogger)
   ingestLogger?.info({ dbPath: context.dbPath.value, count: context.ingest.value.count() }, 'storage opened')
   const modelsDir = join(app.getPath('userData'), 'models')
-  const EMBEDDING_VERSION = 'multilingual-e5-small:passage:v1'
+  const EMBEDDING_VERSION = 'multilingual-e5-small:passage:v2'
   const versionFile = join(app.getPath('userData'), 'embedding_version.txt')
   let storedVersion = ''
   try { storedVersion = readFileSync(versionFile, 'utf8').trim() } catch { /* first run */ }
-  if (storedVersion !== EMBEDDING_VERSION && context.db.value.countEmbeddings() > 0) {
-    context.db.value.clearEmbeddings()
+  if (storedVersion !== EMBEDDING_VERSION) {
+    if (context.db.value.countEmbeddings() > 0) {
+      context.db.value.clearEmbeddings()
+    }
+    try {
+      context.db.value.raw.exec('UPDATE messages SET context_note = NULL')
+    } catch { /* ignore */ }
   }
   writeFileSync(versionFile, EMBEDDING_VERSION)
   embeddings = createEmbeddingService({

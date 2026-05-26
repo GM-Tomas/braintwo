@@ -16,10 +16,12 @@ interface ContextServiceDeps {
 }
 
 const SYSTEM_PROMPT =
-  'Sos un asistente que indexa mensajes de WhatsApp para búsqueda semántica futura. ' +
-  'Tu tarea es generar UNA sola oración (máximo 120 caracteres) que describa de qué trata el mensaje ' +
-  'y en qué situación fue enviado, de forma que aparezca fácilmente en búsquedas futuras. ' +
-  'Sé específico. Responde SOLO con la oración, sin comillas ni explicaciones adicionales.'
+  'Sos un asistente que indexa mensajes de WhatsApp para búsqueda futura. ' +
+  'Tu tarea es generar UNA sola oración (máximo 150 caracteres) que describa de qué trata el mensaje ' +
+  'y en qué situación fue enviado. Asegúrate de incluir palabras clave relacionadas y sinónimos comunes ' +
+  '(por ejemplo, si habla de un doctor, incluye "médico"; si es un turno, incluye "cita"; si es fútbol, "deporte", etc.) ' +
+  'para facilitar su búsqueda posterior tanto por palabras clave como semántica. ' +
+  'Sé específico. Responde SOLO con la oración, sin comillas ni explicaciones.'
 
 function buildUserPrompt(kind: MessageKind, text: string, media: MediaMeta | null): string {
   const lines: string[] = [`Tipo: ${kind}`]

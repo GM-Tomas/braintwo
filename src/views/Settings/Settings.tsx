@@ -32,11 +32,11 @@ export function Settings({ onLogout }: SettingsProps) {
 
       <div className="flex-1 overflow-y-auto px-14 py-8">
         <div className="mx-auto grid max-w-4xl gap-5 md:grid-cols-2">
+          <AiConfigSection />
           <SessionSection onLogout={onLogout} />
           <StartupSection settings={settings} onSettingsChange={setSettings} />
           <DbStatsSection stats={stats} />
           <LocalFolderSection settings={settings} />
-          <AiConfigSection />
         </div>
       </div>
     </div>

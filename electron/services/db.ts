@@ -47,6 +47,10 @@ export interface SimilarResult {
   text: string
   source: MessageSource
   kind: MessageKind
+  from_me: number
+  media_meta: string | null
+  created_at: number | null
+  context_note: string | null
   distance: number
 }
 
@@ -63,6 +67,10 @@ export interface KeywordResult {
   timestamp: number
   source: MessageSource
   kind: MessageKind
+  from_me: number
+  media_meta: string | null
+  created_at: number | null
+  context_note: string | null
 }
 
 export interface ContextableMessage {
@@ -153,12 +161,18 @@ const SCHEMA_STATEMENTS = [
   // Standalone FTS5 table (owns its own copy of text — simpler than external content).
   `CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
      text,
+     context_note,
      tokenize='unicode61'
    )`,
   // Keep FTS index in sync when messages are inserted.
   `CREATE TRIGGER IF NOT EXISTS messages_fts_ai
      AFTER INSERT ON messages BEGIN
-       INSERT INTO messages_fts(rowid, text) VALUES (new.id, new.text);
+       INSERT INTO messages_fts(rowid, text, context_note) VALUES (new.id, new.text, new.context_note);
+     END`,
+  // Keep FTS index in sync when context notes are updated.
+  `CREATE TRIGGER IF NOT EXISTS messages_fts_au
+     AFTER UPDATE OF context_note ON messages BEGIN
+       UPDATE messages_fts SET context_note = new.context_note WHERE rowid = old.id;
      END`,
 
   // AI memory: the model annotates what it learns across conversations.
@@ -220,9 +234,40 @@ function listColumns(db: DatabaseType, table: string): string[] {
 }
 
 export function applyMigrations(db: DatabaseType): void {
+  // Check if messages_fts exists and if it lacks context_note
+  let hasFtsTable = false
+  try {
+    const rows = db.pragma('table_info(messages_fts)') as { name: string }[]
+    if (rows.length > 0) {
+      hasFtsTable = true
+      const ftsCols = new Set(rows.map((r) => r.name))
+      if (!ftsCols.has('context_note')) {
+        // Upgrade existing messages_fts table
+        db.exec('DROP TRIGGER IF EXISTS messages_fts_ai')
+        db.exec('DROP TRIGGER IF EXISTS messages_fts_au')
+        db.exec('DROP TABLE IF EXISTS messages_fts')
+        hasFtsTable = false
+      }
+    }
+  } catch {
+    // ignore
+  }
+
   for (const sql of SCHEMA_STATEMENTS) {
     db.exec(sql)
   }
+
+  if (hasFtsTable === false) {
+    try {
+      db.exec(`
+        INSERT OR IGNORE INTO messages_fts(rowid, text, context_note)
+        SELECT id, text, context_note FROM messages
+      `)
+    } catch {
+      // best-effort
+    }
+  }
+
   const cols = new Set(listColumns(db, 'messages'))
   for (const m of POST_MIGRATIONS) {
     if (!cols.has(m.column)) db.exec(m.sql)
@@ -261,8 +306,8 @@ export function openDatabase(filePath: string): DbInstance {
   // One-time FTS backfill for rows that existed before the trigger was added.
   try {
     db.exec(`
-      INSERT INTO messages_fts(rowid, text)
-      SELECT m.id, m.text FROM messages m
+      INSERT INTO messages_fts(rowid, text, context_note)
+      SELECT m.id, m.text, m.context_note FROM messages m
       WHERE m.id NOT IN (SELECT rowid FROM messages_fts)
     `)
   } catch {
@@ -270,7 +315,7 @@ export function openDatabase(filePath: string): DbInstance {
   }
 
   const kwSearchStmt = db.prepare<[string, number], KeywordResult>(`
-    SELECT m.id, m.wa_msg_id, m.text, m.timestamp, m.source, m.kind
+    SELECT m.id, m.wa_msg_id, m.text, m.timestamp, m.source, m.kind, m.from_me, m.media_meta, m.created_at, m.context_note
     FROM messages_fts
     JOIN messages m ON m.id = messages_fts.rowid
     WHERE messages_fts MATCH ?
@@ -279,7 +324,7 @@ export function openDatabase(filePath: string): DbInstance {
   `)
 
   const searchStmt = db.prepare<[Buffer, number], SimilarResult>(`
-    SELECT m.id, m.wa_msg_id, m.timestamp, m.text, m.source, m.kind, e.distance
+    SELECT m.id, m.wa_msg_id, m.timestamp, m.text, m.source, m.kind, m.from_me, m.media_meta, m.created_at, m.context_note, e.distance
     FROM message_embeddings e
     JOIN messages m ON m.id = e.msg_id
     WHERE e.embedding MATCH ? AND k = ?
