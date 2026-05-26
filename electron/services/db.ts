@@ -78,6 +78,7 @@ export interface ContextableMessage {
   text: string
   kind: MessageKind
   media_meta: string | null
+  timestamp: number
 }
 
 export interface MemoryResult {
@@ -353,7 +354,7 @@ export function openDatabase(filePath: string): DbInstance {
   `)
 
   const withoutContextStmt = db.prepare<[number], ContextableMessage>(`
-    SELECT id, text, kind, media_meta
+    SELECT id, text, kind, media_meta, timestamp
     FROM messages
     WHERE context_note IS NULL
     ORDER BY timestamp DESC

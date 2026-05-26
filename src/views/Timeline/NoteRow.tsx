@@ -9,9 +9,10 @@ interface NoteRowProps {
   onClick: () => void
   similarity?: number
   matchSource?: 'semantic' | 'keyword' | 'both'
+  lowRelevance?: boolean
 }
 
-export function NoteRow({ message, formatted, isSelected, onClick, similarity, matchSource }: NoteRowProps) {
+export function NoteRow({ message, formatted, isSelected, onClick, similarity, matchSource, lowRelevance }: NoteRowProps) {
   const style = KIND_STYLE[message.kind] ?? KIND_STYLE.other
   return (
     <li>
@@ -66,22 +67,17 @@ export function NoteRow({ message, formatted, isSelected, onClick, similarity, m
         </div>
         {similarity !== undefined && (
           <div className="flex shrink-0 items-center mt-1.5">
-            {matchSource === 'keyword' ? (
-              <span className="rounded-full border border-bt-accent/30 px-2.5 py-1 text-[11px] text-bt-accent font-medium">
-                exacto
+            {matchSource === 'keyword' || matchSource === 'both' ? (
+              <span className="rounded-full border border-bt-accent/30 bg-bt-accent/[0.04] px-2.5 py-1 text-[11px] text-bt-accent font-medium uppercase tracking-wider">
+                Máxima similitud
               </span>
-            ) : matchSource === 'both' ? (
-              <div className="flex items-center gap-1.5">
-                <span className="rounded-full border border-bt-accent/30 px-2.5 py-1 text-[11px] text-bt-accent font-medium">
-                  exacto
-                </span>
-                <span className="rounded-full border border-bt-brand/30 px-2.5 py-1 text-[11px] text-bt-brand font-medium">
-                  {Math.round(similarity * 100)}%
-                </span>
-              </div>
+            ) : lowRelevance ? (
+              <span className="rounded-full border border-bt-amber/30 bg-bt-amber/[0.04] px-2.5 py-1 text-[11px] text-bt-amber font-medium uppercase tracking-wider">
+                Similitud baja
+              </span>
             ) : (
-              <span className="rounded-full border border-bt-brand/30 px-2.5 py-1 text-[11px] text-bt-brand font-medium">
-                {Math.round(similarity * 100)}%
+              <span className="rounded-full border border-bt-brand/30 bg-bt-brand/[0.04] px-2.5 py-1 text-[11px] text-bt-brand font-medium uppercase tracking-wider">
+                Similitud alta
               </span>
             )}
           </div>

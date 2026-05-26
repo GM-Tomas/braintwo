@@ -23,36 +23,49 @@ const RRF_K = 60
 
 function filterByRelevance(candidates: SearchResult[]): SearchResult[] {
   // 1. Exclude absolute low relevance below the floor.
-  const above = candidates.filter((r) => r.similarity >= MIN_SIMILARITY)
+  const ABSOLUTE_FLOOR = 0.75
+  const above = candidates.filter((r) => r.similarity >= ABSOLUTE_FLOOR)
   if (above.length === 0) return []
 
   // 2. Find the maximum similarity.
   const maxSim = Math.max(...above.map((r) => r.similarity))
 
   // If the absolute best match is below 0.84, it is generally considered noise.
-  if (maxSim < 0.84) return []
+  let allAreLowRelevance = false
+  if (maxSim < 0.84) {
+    allAreLowRelevance = true
+  }
 
   // 3. Relative margin: exclude results that are significantly weaker than the best match.
-  // For example, if maxSim = 0.92, we don't want to return 0.83 (diff = 0.09).
+  // For example, if maxSim = 0.92, we don't want to return 0.83 (diff = 0.09) as high relevance.
   // We use a relative margin of 0.05.
   const MARGIN = 0.05
-  const filtered = above.filter((r) => r.similarity >= maxSim - MARGIN)
 
   // 4. Tight cluster filter: if we have multiple results, but they are all very close to each other
   // and the best match is not exceptionally high (maxSim < 0.88), it suggests a flat distribution
   // of similarities indicating background noise.
-  if (filtered.length >= 2 && maxSim < 0.88) {
-    const mean = filtered.reduce((s, r) => s + r.similarity, 0) / filtered.length
-    const variance = filtered.reduce((s, r) => s + (r.similarity - mean) ** 2, 0) / filtered.length
+  if (above.length >= 2 && maxSim < 0.88) {
+    const mean = above.reduce((s, r) => s + r.similarity, 0) / above.length
+    const variance = above.reduce((s, r) => s + (r.similarity - mean) ** 2, 0) / above.length
     const std = Math.sqrt(variance)
 
     // Standard deviation threshold: if less than 1.2% (0.012), it is a tight cluster of noise.
     if (std < 0.012) {
-      return []
+      allAreLowRelevance = true
     }
   }
 
-  return filtered
+  return above.map((r) => {
+    const isLow =
+      allAreLowRelevance ||
+      r.similarity < MIN_SIMILARITY ||
+      r.similarity < maxSim - MARGIN
+
+    return {
+      ...r,
+      lowRelevance: isLow
+    }
+  })
 }
 
 function applyRRF(

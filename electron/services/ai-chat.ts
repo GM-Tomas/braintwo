@@ -31,11 +31,14 @@ export function createAiChatService(deps: AiChatDeps): AiChatService {
       const lastUserMsg = [...history].reverse().find((m) => m.role === 'user')
       const question = lastUserMsg?.content ?? ''
 
+      // Get recent memories for query expansion context
+      const recentMemories = deps.db.listMemories(20)
+
       // ── Step 1: Query planning ──────────────────────────────────────────
       // Ask the model to expand the query into specific search terms.
       // This runs BEFORE retrieval so that entity-aware terms (e.g. "Boca
       // Juniors" from "club de fútbol") are searched in the DB.
-      const queries = await planQueries(config, question)
+      const queries = await planQueries(config, question, today, recentMemories)
 
       // ── Step 2: Multi-query hybrid retrieval ───────────────────────────
       const [allVectorHits, allKwHits, allMemHits] = await Promise.all([
@@ -71,7 +74,7 @@ export function createAiChatService(deps: AiChatDeps): AiChatService {
       // Deduplicate memories.
       const seenMem = new Set<number>()
       const memories: MemoryResult[] = []
-      for (const m of [...allMemHits, ...memKwHits]) {
+      for (const m of [...allMemHits, ...memKwHits, ...recentMemories]) {
         if (seenMem.has(m.id)) continue
         seenMem.add(m.id)
         memories.push(m)
@@ -125,16 +128,55 @@ export function createAiChatService(deps: AiChatDeps): AiChatService {
 
 // ── Query planning ────────────────────────────────────────────────────────────
 
-async function planQueries(config: AiConfig, question: string): Promise<string[]> {
+async function planQueries(
+  config: AiConfig,
+  question: string,
+  today: string,
+  memories: MemoryResult[]
+): Promise<string[]> {
+  const todayDate = new Date(today + 'T12:00:00')
+  const weekdayNames = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+  const todayDayName = weekdayNames[todayDate.getDay()]!
+
+  const calendarLines: string[] = []
+  for (let i = -7; i <= 7; i++) {
+    const day = new Date(todayDate)
+    day.setDate(todayDate.getDate() + i)
+    const yyyy = day.getFullYear()
+    const mm = String(day.getMonth() + 1).padStart(2, '0')
+    const dd = String(day.getDate()).padStart(2, '0')
+    const dateStr = `${dd}/${mm}/${yyyy}`
+    const name = weekdayNames[day.getDay()]!
+    const isTodayStr = i === 0 ? ' (hoy)' : ''
+    calendarLines.push(`- ${name} ${dateStr}${isTodayStr}`)
+  }
+  const calendarBlock = calendarLines.join('\n')
+
+  const memoryBlock = memories.length
+    ? memories.map((m) => `- ${m.content}`).join('\n')
+    : 'No context memories.'
+
   const systemPrompt = `You are a search query expansion engine for a personal note-taking app.
 The user's notes are short WhatsApp messages they sent to themselves.
 
-Given the user's question, output 3-6 short search terms that would best retrieve relevant notes.
+Current Date: ${today} (${todayDayName}).
+Calendar reference of the current and next week (-7 to +7 days):
+${calendarBlock}
+
+USER CONTEXT & MEMORIES:
+${memoryBlock}
+
+Given the user's question, output 3-6 short search terms in Spanish that would best retrieve relevant notes.
 Apply these strategies:
 - Extract core concepts and include their specific instances (e.g. a generic category → known entities within it)
 - Add synonyms and related words
 - Include proper nouns, abbreviations, and alternate spellings the user might have used
-- Think about how someone would actually write a casual note on this topic
+- If the question contains relative temporal expressions (like "esta semana", "hoy", "mañana", "el jueves", "este fin de semana"), you MUST include specific search terms for:
+  1. The exact dates in DD/MM/YYYY or "D de MMMM" format that correspond to that period (e.g., "28 de mayo", "28/05/2026").
+  2. The name of the weekdays (e.g., "jueves").
+  3. General temporal terms (e.g., "esta semana", "pendiente").
+- Use the USER CONTEXT & MEMORIES to find specific topics/names/projects the user cares about (e.g., "González", "estudio", "distribución normal", "fútbol") and include them as search terms if relevant to the question.
+- Think about how someone would actually write a casual note on this topic.
 
 Output ONLY a JSON array of strings, nothing else.`
 

@@ -238,6 +238,7 @@ function ResultsPanel({
               onClick={() => onSelect(m)}
               similarity={r.similarity}
               matchSource={r.matchSource}
+              lowRelevance={r.lowRelevance}
             />
           )
         })}

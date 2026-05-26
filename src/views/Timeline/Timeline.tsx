@@ -185,6 +185,7 @@ export function Timeline() {
                           onClick={() => setSelected(m)}
                           similarity={r.similarity}
                           matchSource={r.matchSource}
+                          lowRelevance={r.lowRelevance}
                         />
                       )
                     })}

@@ -234,7 +234,7 @@ function openStorage(): void {
   context.ingest.value = createIngestPipeline(context.db.value, ingestLogger)
   ingestLogger?.info({ dbPath: context.dbPath.value, count: context.ingest.value.count() }, 'storage opened')
   const modelsDir = join(app.getPath('userData'), 'models')
-  const EMBEDDING_VERSION = 'multilingual-e5-small:passage:v2'
+  const EMBEDDING_VERSION = 'multilingual-e5-small:passage:v3'
   const versionFile = join(app.getPath('userData'), 'embedding_version.txt')
   let storedVersion = ''
   try { storedVersion = readFileSync(versionFile, 'utf8').trim() } catch { /* first run */ }
@@ -354,7 +354,7 @@ function startWhatsApp(): void {
       fromMe: raw.key?.fromMe === true
     })
     queueEmbedding(result.rowId, extractText(raw))
-    context.contextSvc.value?.queue(result.rowId, extractKind(raw), extractText(raw), extractMediaMeta(raw))
+    context.contextSvc.value?.queue(result.rowId, extractKind(raw), extractText(raw), extractMediaMeta(raw), extractTimestampMs(raw))
     if (source === 'offline-sync' || source === 'history-sync') {
       noteCatchupMessage()
     }

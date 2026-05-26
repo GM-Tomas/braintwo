@@ -51,9 +51,6 @@ export function SourcesList({ sources, onOpenMessage, onFeedbackGood }: SourcesL
           >
             <span className="mr-2 text-bt-dim">[{s.index ?? (i + 1)}]</span>
             <time className="mr-2 text-bt-dim">{fmt.format(new Date(s.timestamp))}</time>
-            {s.similarity !== undefined && (
-              <span className="mr-2 text-bt-accent">{Math.round(s.similarity * 100)}%</span>
-            )}
             <span className="text-bt-muted">
               {s.text.length > 120 ? `${s.text.slice(0, 120)}…` : s.text}
             </span>

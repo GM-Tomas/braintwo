@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openDatabase, type DbInstance } from '../../../electron/services/db'
-import { createEmbeddingService, deterministicEmbedder } from '../../../electron/services/embeddings'
+import { createEmbeddingService, deterministicEmbedder, type EmbeddingService } from '../../../electron/services/embeddings'
 import { createSearchService } from '../../../electron/services/search'
 
 describe('search service', () => {
@@ -85,7 +85,7 @@ describe('search service', () => {
       return Math.sqrt(2 * (1 - sim))
     }
 
-    it('excludes low-relevance results far below the max similarity', async () => {
+    it('marks low-relevance results far below the max similarity as lowRelevance: true', async () => {
       const mockDb = {
         searchKeyword: () => [],
         searchSimilar: () => [
@@ -102,11 +102,16 @@ describe('search service', () => {
       })
 
       const results = await service.query('test query', 5)
-      expect(results).toHaveLength(1)
+      expect(results).toHaveLength(3)
       expect(results[0]!.wa_msg_id).toBe('a')
+      expect(results[0]!.lowRelevance).toBe(false)
+      expect(results[1]!.wa_msg_id).toBe('b')
+      expect(results[1]!.lowRelevance).toBe(true)
+      expect(results[2]!.wa_msg_id).toBe('c')
+      expect(results[2]!.lowRelevance).toBe(true)
     })
 
-    it('keeps a single outstanding result above MIN_SIMILARITY', async () => {
+    it('keeps a single outstanding result above MIN_SIMILARITY as high relevance', async () => {
       const mockDb = {
         searchKeyword: () => [],
         searchSimilar: () => [
@@ -123,9 +128,10 @@ describe('search service', () => {
       const results = await service.query('test query', 5)
       expect(results).toHaveLength(1)
       expect(results[0]!.wa_msg_id).toBe('a')
+      expect(results[0]!.lowRelevance).toBe(false)
     })
 
-    it('discards a tight cluster of low-relevance results (noise floor)', async () => {
+    it('marks a tight cluster of low-relevance results (noise floor) as lowRelevance: true', async () => {
       const mockDb = {
         searchKeyword: () => [],
         searchSimilar: () => [
@@ -142,15 +148,16 @@ describe('search service', () => {
       })
 
       const results = await service.query('test query', 5)
-      expect(results).toHaveLength(0)
+      expect(results).toHaveLength(3)
+      expect(results.every(r => r.lowRelevance === true)).toBe(true)
     })
 
-    it('keeps a tight cluster of high-relevance results', async () => {
+    it('keeps a tight cluster of high-relevance results as lowRelevance: false', async () => {
       const mockDb = {
         searchKeyword: () => [],
         searchSimilar: () => [
           { id: 1, wa_msg_id: 'a', timestamp: 1, text: 'Medico A', source: 'export', kind: 'text', from_me: 0, media_meta: null, created_at: null, context_note: null, distance: simToDistance(0.91) },
-          { id: 2, wa_msg_id: 'b', timestamp: 2, text: 'Medico B', source: 'export', kind: 'text', from_me: 0, media_meta: null, created_at: null, distance: simToDistance(0.905) }
+          { id: 2, wa_msg_id: 'b', timestamp: 2, text: 'Medico B', source: 'export', kind: 'text', from_me: 0, media_meta: null, created_at: null, context_note: null, distance: simToDistance(0.905) }
         ]
       } as unknown as DbInstance
 
@@ -164,6 +171,7 @@ describe('search service', () => {
       expect(results).toHaveLength(2)
       expect(results.map(r => r.wa_msg_id)).toContain('a')
       expect(results.map(r => r.wa_msg_id)).toContain('b')
+      expect(results.every(r => r.lowRelevance === false)).toBe(true)
     })
   })
 })

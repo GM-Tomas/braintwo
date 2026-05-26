@@ -4,6 +4,7 @@ export interface SearchResult extends RecentMessage {
   distance: number
   similarity: number
   matchSource?: 'semantic' | 'keyword' | 'both'
+  lowRelevance?: boolean
 }
 
 export interface ModelProgress {
