@@ -214,6 +214,7 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
     ollama: {
       getStatus: vi.fn(async () => 'not-installed' as const),
       install: vi.fn(async () => {}),
+      uninstall: vi.fn(async () => {}),
       startServer: vi.fn(async () => {}),
       stopServer: vi.fn(async () => {}),
       listModels: vi.fn(async () => []),

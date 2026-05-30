@@ -10,6 +10,10 @@ export class IpcOllamaService implements IOllamaService {
     return window.braintwo.ollama.install()
   }
 
+  async uninstall(): Promise<void> {
+    return window.braintwo.ollama.uninstall()
+  }
+
   async startServer(): Promise<void> {
     return window.braintwo.ollama.startServer()
   }

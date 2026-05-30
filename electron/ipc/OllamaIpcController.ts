@@ -9,6 +9,20 @@ function getServerUrl(context: AppContext): string {
 
 export class OllamaIpcController {
   static register(context: AppContext) {
+    ipcMain.handle('ollama:uninstall', () => {
+      context.ollamaService.uninstall()
+      context.broadcast('ollama:on-status', 'not-installed')
+      // Clear active model from config
+      const cfg = readAiConfig(context.app.getPath('userData'))
+      writeAiConfig(context.app.getPath('userData'), {
+        provider: cfg?.profiles?.[0]?.provider ?? 'opencode-zen',
+        apiKey: cfg?.profiles?.[0]?.apiKey ?? 'public',
+        model: cfg?.profiles?.[0]?.model ?? '',
+        activeProfileId: cfg?.profiles?.[0]?.id ?? 'profile-default',
+        ollama: { ...cfg?.ollama, enabled: false, activeModel: '' }
+      })
+    })
+
     ipcMain.handle('ollama:get-status', async (_e, serverUrl?: string) => {
       return context.ollamaService.getStatus(serverUrl ?? getServerUrl(context))
     })

@@ -78,6 +78,7 @@ export interface BrainTwoApi {
   ollama: {
     getStatus: (serverUrl?: string) => Promise<OllamaStatus>
     install: () => Promise<void>
+    uninstall: () => Promise<void>
     startServer: () => Promise<void>
     stopServer: () => Promise<void>
     listModels: () => Promise<OllamaModel[]>
@@ -180,6 +181,7 @@ export function createApi(
     ollama: {
       getStatus: (serverUrl?: string) => ipcRenderer.invoke('ollama:get-status', serverUrl),
       install: () => ipcRenderer.invoke('ollama:install'),
+      uninstall: () => ipcRenderer.invoke('ollama:uninstall'),
       startServer: () => ipcRenderer.invoke('ollama:start-server'),
       stopServer: () => ipcRenderer.invoke('ollama:stop-server'),
       listModels: () => ipcRenderer.invoke('ollama:list-models'),

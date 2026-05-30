@@ -5,6 +5,7 @@ export type OllamaUnsubscribe = () => void
 export interface IOllamaService {
   getStatus(serverUrl?: string): Promise<OllamaStatus>
   install(): Promise<void>
+  uninstall(): Promise<void>
   startServer(): Promise<void>
   stopServer(): Promise<void>
   listModels(): Promise<OllamaModel[]>

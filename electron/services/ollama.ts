@@ -1,5 +1,5 @@
 import { execSync, spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdirSync, chmodSync, createWriteStream, unlinkSync, copyFileSync } from 'node:fs'
+import { existsSync, mkdirSync, chmodSync, createWriteStream, unlinkSync, copyFileSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import type {
@@ -83,6 +83,7 @@ export interface OllamaService {
   isInstalling(): boolean
   getStatus(serverUrl: string): Promise<OllamaStatus>
   install(onProgress: (p: OllamaInstallProgress) => void): Promise<void>
+  uninstall(): void
   startServer(serverUrl: string): Promise<void>
   stopServer(): void
   isRunningByUs(): boolean
@@ -379,6 +380,46 @@ export function createOllamaService(): OllamaService {
         body: JSON.stringify({ name })
       })
       if (!res.ok) throw new Error(`Error al eliminar modelo: HTTP ${res.status}`)
+    },
+
+    uninstall() {
+      // Stop server first
+      if (managedByUs && serverProcess && !serverProcess.killed) {
+        serverProcess.kill()
+        serverProcess = null
+        managedByUs = false
+      }
+
+      const home = homedir()
+
+      if (process.platform === 'win32') {
+        const installDir = join(process.env['LOCALAPPDATA'] ?? home, 'Programs', 'Ollama')
+        if (existsSync(installDir)) rmSync(installDir, { recursive: true, force: true })
+      } else if (process.platform === 'linux') {
+        const bin = join(home, '.local', 'bin', 'ollama')
+        const libs = join(home, '.local', 'lib', 'ollama')
+        if (existsSync(bin)) unlinkSync(bin)
+        if (existsSync(libs)) rmSync(libs, { recursive: true, force: true })
+      } else {
+        // macOS: binary + dylibs are all in ~/.local/bin/
+        const bin = join(home, '.local', 'bin', 'ollama')
+        if (existsSync(bin)) unlinkSync(bin)
+        for (const ext of ['.dylib', '.so']) {
+          try {
+            execSync(`find "${join(home, '.local', 'bin')}" -name "*${ext}" -delete`, { stdio: 'ignore' })
+          } catch { /* ignore */ }
+        }
+        for (const dir of ['mlx_metal_v3', 'mlx_metal_v4']) {
+          const p = join(home, '.local', 'bin', dir)
+          if (existsSync(p)) rmSync(p, { recursive: true, force: true })
+        }
+      }
+
+      // Remove downloaded models (~/.ollama)
+      const modelsDir = join(home, '.ollama')
+      if (existsSync(modelsDir)) rmSync(modelsDir, { recursive: true, force: true })
+
+      knownBinary = null
     },
 
     // Preloads the model into VRAM by sending an empty request.

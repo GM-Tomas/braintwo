@@ -48,6 +48,7 @@ export const IPC_CHANNELS = {
     PULL_MODEL: 'ollama:pull-model',
     CANCEL_PULL: 'ollama:cancel-pull',
     DELETE_MODEL: 'ollama:delete-model',
+    UNINSTALL: 'ollama:uninstall',
     ON_STATUS: 'ollama:on-status',
     ON_PULL_PROGRESS: 'ollama:on-pull-progress',
     ON_INSTALL_PROGRESS: 'ollama:on-install-progress',

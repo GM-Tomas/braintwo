@@ -283,6 +283,7 @@ export function LocalAiSection({
   const [installProgress, setInstallProgress] = useState<OllamaInstallProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isStarting, setIsStarting] = useState(false)
+  const [isChecking, setIsChecking] = useState(false)
   const [urlInput, setUrlInput] = useState(serverUrl || DEFAULT_URL)
 
   const { registerGuard } = useNavigationGuard()
@@ -298,7 +299,7 @@ export function LocalAiSection({
     return () => registerGuard(null)
   }, [status, hasValidModel, registerGuard])
 
-  const loadStatus = useCallback(async (url?: string) => {
+  const loadStatus = useCallback(async (url?: string): Promise<OllamaStatus> => {
     try {
       const s = await ollamaService.getStatus(url ?? urlInput)
       setStatus(s)
@@ -308,8 +309,10 @@ export function LocalAiSection({
       } else {
         setInstalledModels([])
       }
+      return s
     } catch {
       setStatus('error')
+      return 'error'
     }
   }, [ollamaService, urlInput])
 
@@ -340,6 +343,19 @@ export function LocalAiSection({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al instalar Ollama')
       setInstallProgress(null)
+    }
+  }
+
+  const handleUninstall = async () => {
+    const ok = window.confirm(
+      'Esto va a eliminar la aplicación Ollama y todos los modelos descargados (puede liberar varios GB de disco).\n\n¿Querés continuar?'
+    )
+    if (!ok) return
+    try {
+      await ollamaService.uninstall()
+      onModelChange('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al desinstalar Ollama')
     }
   }
 
@@ -389,9 +405,24 @@ export function LocalAiSection({
     }
   }
 
-  const handleManualConnect = () => {
+  const [connectFeedback, setConnectFeedback] = useState<{ ok: boolean; msg: string } | null>(null)
+
+  const handleManualConnect = async () => {
+    if (!urlInput.trim()) {
+      setConnectFeedback({ ok: false, msg: 'Ingresá la URL del servidor.' })
+      return
+    }
+    setConnectFeedback(null)
+    setIsChecking(true)
     onServerUrlChange(urlInput)
-    void loadStatus(urlInput)
+    const [result] = await Promise.all([
+      loadStatus(urlInput),
+      new Promise<void>(r => setTimeout(r, 1000))
+    ])
+    setIsChecking(false)
+    if (result !== 'running') {
+      setConnectFeedback({ ok: false, msg: 'No se pudo conectar. Verificá que el servidor esté corriendo.' })
+    }
   }
 
   const handleModeSwitch = (mode: 'ollama' | 'manual') => {
@@ -410,7 +441,7 @@ export function LocalAiSection({
     'bg-bt-muted/60'
 
   const ollamaNotInstalled = status === 'not-installed'
-  const serverDown = status === 'not-running' || status === 'error' || (status === 'not-installed' && ollamaMode === 'manual')
+
 
   return (
     <div className="flex flex-col gap-4">
@@ -516,27 +547,49 @@ export function LocalAiSection({
               <span className="text-[12px] text-bt-muted">Iniciar Ollama automáticamente con BrainTwo</span>
             </label>
           )}
+
+          {/* Uninstall */}
+          {!ollamaNotInstalled && !installProgress && (
+            <div className="pt-2 border-t border-bt-border/50">
+              <button
+                type="button"
+                onClick={() => void handleUninstall()}
+                className="text-[12px] text-bt-muted hover:text-bt-red transition-colors"
+              >
+                Desinstalar Ollama y eliminar modelos…
+              </button>
+            </div>
+          )}
         </>
       )}
 
       {/* ── MANUAL MODE ─────────────────────────────────────────── */}
       {ollamaMode === 'manual' && (
         <>
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
             <div className="flex gap-2 items-end">
               <label className="flex flex-col gap-1 flex-1">
                 <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">URL del servidor</span>
                 <input type="url" value={urlInput}
-                  onChange={(e) => setUrlInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleManualConnect()}
+                  onChange={(e) => { setUrlInput(e.target.value); setConnectFeedback(null) }}
+                  onKeyDown={(e) => e.key === 'Enter' && void handleManualConnect()}
                   placeholder="http://localhost:1234"
-                  className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/50" />
+                  className={`h-9 rounded-[8px] border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none transition-colors ${
+                    connectFeedback && !connectFeedback.ok ? 'border-bt-red/60 focus:border-bt-red/60' : 'border-bt-border focus:border-bt-primary/50'
+                  }`} />
               </label>
-              <button type="button" onClick={handleManualConnect}
-                className="h-9 px-3 rounded-[8px] bg-bt-primary text-white text-[13px] hover:bg-bt-primary/90 transition-colors shrink-0">
-                Conectar
+              <button type="button" onClick={() => void handleManualConnect()} disabled={isChecking}
+                className="h-9 px-3 rounded-[8px] bg-bt-primary text-white text-[13px] hover:bg-bt-primary/90 transition-colors shrink-0 disabled:opacity-60 flex items-center gap-2">
+                {isChecking && <Icon name="loader" size={12} className="animate-spin" />}
+                {isChecking ? 'Verificando…' : 'Conectar'}
               </button>
             </div>
+
+            {/* Inline feedback right under the input */}
+            {connectFeedback && !connectFeedback.ok && (
+              <p className="text-[12px] text-bt-red">{connectFeedback.msg}</p>
+            )}
+
             <p className="text-[11px] text-bt-dim">
               LM Studio: <span className="font-mono">http://localhost:1234</span> ·
               llama.cpp: <span className="font-mono">http://localhost:8080</span>
@@ -571,12 +624,6 @@ export function LocalAiSection({
             </>
           )}
 
-          {serverDown && urlInput && urlInput !== DEFAULT_URL && (
-            <div className="flex items-center gap-2">
-              <span className={`inline-block h-2 w-2 rounded-full ${dotColor}`} />
-              <span className="text-[13px] text-bt-muted">Sin conexión — verificá que el servidor esté corriendo</span>
-            </div>
-          )}
         </>
       )}
     </div>
