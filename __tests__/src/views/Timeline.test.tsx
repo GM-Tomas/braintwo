@@ -153,10 +153,10 @@ describe('<Timeline />', () => {
     })
     render(<Timeline />)
     await waitFor(() => {
-      expect(screen.getByText('Tiempo real')).toBeInTheDocument()
-      expect(screen.getByText('Sincronización diferida')).toBeInTheDocument()
-      expect(screen.getByText('Histórico')).toBeInTheDocument()
-      expect(screen.getByText('Importado')).toBeInTheDocument()
+      expect(screen.getAllByText('Tiempo real')[0]).toBeInTheDocument()
+      expect(screen.getAllByText('Sincronización diferida')[0]).toBeInTheDocument()
+      expect(screen.getAllByText('Histórico')[0]).toBeInTheDocument()
+      expect(screen.getAllByText('Importado')[0]).toBeInTheDocument()
     })
   })
 

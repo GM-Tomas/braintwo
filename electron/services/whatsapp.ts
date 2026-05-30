@@ -209,7 +209,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       // fetchLatestBaileysVersion does an HTTP GET to a remote repo; if it
       // fails (offline, blocked, slow DNS) we don't want to block pairing.
       // Fall back to a known-good version so the socket still initializes.
-      let version: unknown = [2, 3000, 1023223]
+      let version: unknown = [2, 3000, 1035194821]
       try {
         const fetched = await this.versionFactory()
         if (fetched?.version) version = fetched.version

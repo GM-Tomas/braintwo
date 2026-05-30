@@ -41,7 +41,7 @@ export default function App() {
   const { connectionService, settingsRepository, aiService } = useDependencies()
   const [phase, setPhase] = useState<Phase>(() => initialPhase())
   const [view, setView] = useState<View>(() =>
-    readFlag(ONBOARDED_KEY) ? 'timeline' : 'onboarding'
+    readFlag(ONBOARDED_KEY) ? 'chat' : 'onboarding'
   )
   const [autoRouted, setAutoRouted] = useState(false)
   const [waState, setWaState] = useState<WAConnectionState>('connecting')
@@ -198,7 +198,7 @@ export default function App() {
       writeFlag(FTU_KEY, true)
       if (phase !== 'app') setPhase('app')
       if (!autoRouted) {
-        setView('timeline')
+        setView('chat')
         setAutoRouted(true)
       }
       return

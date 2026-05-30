@@ -12,7 +12,15 @@ interface NoteRowProps {
   lowRelevance?: boolean
 }
 
-export function NoteRow({ message, formatted, isSelected, onClick, similarity, matchSource, lowRelevance }: NoteRowProps) {
+export function NoteRow({
+  message,
+  formatted,
+  isSelected,
+  onClick,
+  similarity,
+  matchSource,
+  lowRelevance
+}: NoteRowProps) {
   const style = KIND_STYLE[message.kind] ?? KIND_STYLE.other
   return (
     <li>

@@ -140,8 +140,12 @@ export function createSearchService(deps: SearchServiceDeps): SearchService {
         .searchSimilar(queryVec, Math.max(1, Math.min(k * 3, 150)))
         .map(toSearchResult)
       const filteredVec = filterByRelevance(vecCandidates)
-
-      return applyRRF(filteredVec, kwResults, k)
+      const rrf = applyRRF(filteredVec, kwResults, k)
+      return rrf.sort((a, b) => {
+        const aLow = a.lowRelevance === true ? 1 : 0
+        const bLow = b.lowRelevance === true ? 1 : 0
+        return aLow - bLow
+      })
     },
 
     async backfillMissing(limit = 500) {

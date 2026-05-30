@@ -167,20 +167,20 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 function CollapsibleSection({ label, children }: { label: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
   return (
-    <section>
+    <section className="flex flex-col items-start">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 text-left"
+        className="flex items-center gap-2 rounded-lg border border-bt-border bg-bt-surf/30 hover:bg-bt-surf px-3 py-1.5 text-[12.5px] text-bt-muted hover:text-bt-text transition-colors duration-150 outline-none focus-visible:ring-1 focus-visible:ring-bt-primary/40 cursor-pointer"
       >
-        <p className="text-[10.5px] font-semibold uppercase tracking-widest text-bt-dim">{label}</p>
+        <span>{open ? `Ocultar ${label.toLowerCase()}` : `Ver ${label.toLowerCase()}`}</span>
         <Icon
           name="chev"
-          size={11}
-          className={`text-bt-dim transition-transform duration-150 ${open ? 'rotate-90' : '-rotate-90'}`}
+          size={12}
+          className={`text-bt-dim transition-transform duration-150 ${open ? 'rotate-90' : '0'}`}
         />
       </button>
-      {open && children}
+      {open && <div className="w-full mt-2">{children}</div>}
     </section>
   )
 }
