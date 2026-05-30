@@ -4,6 +4,14 @@ import { Icon } from '@/lib/icons'
 import { InlineMarkdown } from '@/components/InlineMarkdown'
 import { SourcesList } from './SourcesList'
 
+const VIEW_NAMES: Record<string, string> = {
+  timeline: 'Mis mensajes',
+  chat: 'Chat',
+  settings: 'Ajustes',
+  onboarding: 'Inicio',
+  search: 'Búsqueda'
+}
+
 export function AssistantAvatar() {
   return (
     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bt-hover text-bt-accent">
@@ -83,7 +91,7 @@ export function MessageBubble({
                 className="inline-flex items-center gap-2 rounded-full border border-bt-primary/30 px-3.5 py-1.5 text-[12px] text-bt-primary transition-colors hover:bg-bt-primary/10"
               >
                 <Icon name="chev" size={12} />
-                Ir a {showResponse.action.view}
+                Ir a {VIEW_NAMES[showResponse.action.view] ?? showResponse.action.view}
               </button>
             )}
           </>

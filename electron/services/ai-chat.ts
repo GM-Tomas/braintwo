@@ -363,7 +363,8 @@ async function enrichSourceMessageContext(
     const systemPrompt = `Sos un asistente que ayuda a indexar mensajes personales.
 Tu tarea es escribir una nota de contexto breve y específica (máximo 150 caracteres) en español que explique por qué este mensaje es relevante para la consulta del usuario o qué información adicional/aclaración aporta esta conversación al mensaje original.
 Esto se usará para enriquecer su búsqueda semántica futura.
-Responde únicamente con la frase, sin explicaciones ni comillas.`
+Al final de la nota, obligatoriamente debes agregar tags (etiquetas con "#") apropiados (por ejemplo: #recordatorio, #idea, #link, #contacto, #evento, #compra, #gasto, #receta, #estudio, #trabajo, #info).
+Responde únicamente con la frase y los tags correspondientes, sin explicaciones ni comillas.`
 
     const chatHistorySnippet = history
       .slice(-4)
@@ -381,12 +382,16 @@ ${chatHistorySnippet}`
       messages: [{ role: 'user', content: userPrompt }]
     })
 
-    const note = rawNote.trim().replace(/^["']|["']$/g, '').slice(0, 200)
-    if (note) {
-      deps.db.updateContextNote(msgId, note)
-      // Delete old embedding and re-embed with the new context note
+    const newNote = rawNote.trim().replace(/^["']|["']$/g, '').slice(0, 200)
+    if (newNote) {
+      const existingNote = msg.contextNote ?? null
+      const combined = existingNote
+        ? `${existingNote} | ${newNote}`.slice(0, 500)
+        : newNote
+      deps.db.updateContextNote(msgId, combined)
+      // Delete old embedding and re-embed with the enriched context note
       deps.db.deleteEmbedding(msgId)
-      const embedText = `${note}\n${msg.text}`.trim()
+      const embedText = `${combined}\n${msg.text}`.trim()
       const vec = await deps.embed(embedText)
       deps.db.insertEmbedding(msgId, vec)
     }

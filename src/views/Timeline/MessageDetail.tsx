@@ -1,9 +1,20 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { MessageEntity } from '@shared/domain/message.entity'
 import { Icon } from '@/lib/icons'
 import { formatBytes, formatDuration } from '@/lib/format'
 import { useDateFormatter } from '@/hooks/useDateFormatter'
 import { KIND_STYLE, SOURCE_LABEL } from './timeline-constants'
+
+const MEDIA_KEY_LABEL: Record<string, string> = {
+  fileLengthBytes: 'Tamaño del archivo',
+  durationSec: 'Duración',
+  mimetype: 'Tipo MIME',
+  fileName: 'Nombre de archivo',
+  ptt: 'Nota de voz',
+  height: 'Alto',
+  width: 'Ancho',
+  pageCount: 'Páginas'
+}
 
 interface MessageDetailProps {
   message: MessageEntity
@@ -20,7 +31,7 @@ export function MessageDetail({ message, onClose }: MessageDetailProps) {
     { label: 'ID SQLite', value: message.id },
     { label: 'WhatsApp ID', value: <code className="break-all font-mono text-[11px]">{message.waMsgId}</code> },
     {
-      label: 'Timestamp',
+      label: 'Marca de tiempo',
       value: (
         <span>
           {longFormatter.format(new Date(message.timestamp))}
@@ -103,9 +114,8 @@ export function MessageDetail({ message, onClose }: MessageDetailProps) {
             )}
           </section>
 
-          {/* All SQLite fields */}
-          <section>
-            <SectionLabel>Datos SQLite</SectionLabel>
+          {/* All SQLite fields — collapsible */}
+          <CollapsibleSection label="Información adicional">
             <dl className="mt-2 divide-y divide-bt-border rounded-lg border border-bt-border bg-bt-surf overflow-hidden">
               {rows.map(({ label, value }) => (
                 <div key={label} className="grid grid-cols-3 gap-4 px-4 py-3">
@@ -114,18 +124,18 @@ export function MessageDetail({ message, onClose }: MessageDetailProps) {
                 </div>
               ))}
             </dl>
-          </section>
+          </CollapsibleSection>
 
           {/* Media metadata */}
           {message.media ? (
             <section>
-              <SectionLabel>Metadata de media</SectionLabel>
+              <SectionLabel>Metadatos de archivo</SectionLabel>
               <dl className="mt-2 divide-y divide-bt-border rounded-lg border border-bt-border bg-bt-surf overflow-hidden">
                 {Object.entries(message.media)
                   .filter(([, v]) => v != null)
                   .map(([key, value]) => (
                     <div key={key} className="grid grid-cols-3 gap-4 px-4 py-3">
-                      <dt className="text-[12px] font-medium text-bt-dim">{key}</dt>
+                      <dt className="text-[12px] font-medium text-bt-dim">{MEDIA_KEY_LABEL[key] ?? key}</dt>
                       <dd className="col-span-2 text-[13px] text-bt-text break-words">
                         {typeof value === 'boolean'
                           ? value ? 'Sí' : 'No'
@@ -151,5 +161,26 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
     <p className="text-[10.5px] font-semibold uppercase tracking-widest text-bt-dim">
       {children}
     </p>
+  )
+}
+
+function CollapsibleSection({ label, children }: { label: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <section>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-1.5 text-left"
+      >
+        <p className="text-[10.5px] font-semibold uppercase tracking-widest text-bt-dim">{label}</p>
+        <Icon
+          name="chev"
+          size={11}
+          className={`text-bt-dim transition-transform duration-150 ${open ? 'rotate-90' : '-rotate-90'}`}
+        />
+      </button>
+      {open && children}
+    </section>
   )
 }

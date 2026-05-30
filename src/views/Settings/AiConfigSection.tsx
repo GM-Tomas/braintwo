@@ -56,16 +56,28 @@ export function AiConfigSection() {
         const defaultId = 'profile-default'
         const initialProfile: AiConfigProfile = {
           id: defaultId,
-          name: 'Perfil 1',
-          provider: 'openai-compat',
-          apiKey: '',
-          baseUrl: '',
-          model: '',
-          providers: {}
+          name: 'BigPickle',
+          provider: 'opencode-zen',
+          apiKey: 'public',
+          baseUrl: 'https://opencode.ai/zen/v1',
+          model: 'big-pickle',
+          providers: {
+            'opencode-zen': { apiKey: 'public', baseUrl: 'https://opencode.ai/zen/v1', model: 'big-pickle' }
+          }
         }
         setProfiles([initialProfile])
         setActiveProfileId(defaultId)
         setAiDraft(initialProfile)
+        // Persist immediately so the service is ready from first launch
+        void aiService.setConfig({
+          provider: initialProfile.provider,
+          apiKey: initialProfile.apiKey,
+          baseUrl: initialProfile.baseUrl,
+          model: initialProfile.model,
+          providers: initialProfile.providers,
+          activeProfileId: defaultId,
+          profiles: [initialProfile]
+        })
       }
     })
   }, [aiService])

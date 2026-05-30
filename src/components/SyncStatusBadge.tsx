@@ -14,7 +14,7 @@ const FALLBACK_LABEL: Record<WAConnectionState, string> = {
   connecting: 'Conectando...',
   open: 'Conectado',
   disconnected: 'Reconectando...',
-  'logged-out': 'Sesion cerrada'
+  'logged-out': 'Sesión cerrada'
 }
 
 export function SyncStatusBadge({
@@ -30,7 +30,7 @@ export function SyncStatusBadge({
   const label = syncStatus?.label ?? FALLBACK_LABEL[connectionState]
   const warning =
     syncStatus?.state === 'stale-primary'
-      ? `Primary phone inactivo hace ${syncStatus.stalePrimaryDays} dias`
+      ? `Celular principal inactivo hace ${syncStatus.stalePrimaryDays} días`
       : null
 
   if (collapsed) {

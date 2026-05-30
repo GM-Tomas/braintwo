@@ -26,7 +26,21 @@ const SYSTEM_PROMPT =
   'Asegúrate de incluir palabras clave relacionadas y sinónimos comunes ' +
   '(por ejemplo, si habla de un doctor, incluye "médico"; si es un turno, incluye "cita"; si es fútbol, "deporte", etc.) ' +
   'para facilitar su búsqueda posterior tanto por palabras clave como semántica.\n' +
-  'Sé específico. Responde SOLO con la oración descriptiva, sin comillas ni explicaciones.'
+  'REGLA CRÍTICA PARA TAGS:\n' +
+  '- Al final de tu oración descriptiva, obligatoriamente debes agregar tags (etiquetas que comiencen con "#") que categoricen el mensaje.\n' +
+  '- Ejemplos de tags muy útiles para el usuario (puedes usar uno o varios de estos, u otros similares según el contexto, siempre en minúsculas):\n' +
+  '  * #recordatorio (para tareas, pendientes, citas, turnos, vencimientos o cosas por hacer)\n' +
+  '  * #idea (para reflexiones, borradores, pensamientos, inspiraciones, anotaciones creativas)\n' +
+  '  * #link (para URLs, páginas web, artículos, videos o lecturas guardadas)\n' +
+  '  * #contacto (para números de teléfono, direcciones, correos, nombres de personas)\n' +
+  '  * #evento (para reuniones, cumpleaños, recitales, viajes o citas con fecha/hora específica)\n' +
+  '  * #compra (para listas de compras, productos o cosas para adquirir)\n' +
+  '  * #gasto (para registros de dinero, transferencias, cuentas, precios, pagos o deudas)\n' +
+  '  * #receta (para comidas, ingredientes, recetas o restaurantes)\n' +
+  '  * #estudio (para apuntes, clases, cursos, tareas académicas o lecturas de aprendizaje)\n' +
+  '  * #trabajo (para cosas laborales, pendientes de oficina o proyectos)\n' +
+  '  * #info (para claves públicas, códigos de barras, CBU, datos duros o información útil general)\n' +
+  'Sé específico. Responde SOLO con la oración descriptiva seguida de los tags correspondientes, sin comillas ni explicaciones adicionales.'
 
 function buildUserPrompt(kind: MessageKind, text: string, media: MediaMeta | null, timestamp: number): string {
   const date = new Date(timestamp)

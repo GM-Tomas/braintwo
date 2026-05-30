@@ -186,7 +186,7 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
             className="underline hover:no-underline"
             onClick={() => onNavigate('settings')}
           >
-            Configurá uno en Settings
+            Configurá uno en Ajustes
           </button>
           .
         </div>
@@ -251,7 +251,7 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
             placeholder={
               hasConfig
                 ? 'Preguntá algo… (Enter para enviar, Shift+Enter nueva línea)'
-                : 'Configurá un proveedor de IA en Settings primero'
+                : 'Configurá un proveedor de IA en Ajustes primero'
             }
             className="max-h-[120px] flex-1 resize-none rounded-[10px] border border-bt-border bg-bt-surf px-4 py-2.5 text-[14px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/40 disabled:opacity-40"
           />

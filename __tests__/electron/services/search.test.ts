@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { openDatabase, type DbInstance } from '../../../electron/services/db'
+import { openDatabase, VEC_DIM, type DbInstance } from '../../../electron/services/db'
 import { createEmbeddingService, deterministicEmbedder, type EmbeddingService } from '../../../electron/services/embeddings'
 import { createSearchService } from '../../../electron/services/search'
 
@@ -77,7 +77,7 @@ describe('search service', () => {
 
   describe('relevance filtering rules', () => {
     const mockEmbeddings = {
-      embed: async () => new Float32Array(384)
+      embed: async () => new Float32Array(VEC_DIM)
     } as unknown as EmbeddingService
 
     // Helper to calculate SQLite distance for a target cosine similarity
@@ -135,9 +135,9 @@ describe('search service', () => {
       const mockDb = {
         searchKeyword: () => [],
         searchSimilar: () => [
-          { id: 1, wa_msg_id: 'a', timestamp: 1, text: 'Hola', source: 'export', kind: 'text', from_me: 0, media_meta: null, created_at: null, context_note: null, distance: simToDistance(0.85) },
-          { id: 2, wa_msg_id: 'b', timestamp: 2, text: 'Chao', source: 'export', kind: 'text', from_me: 0, media_meta: null, created_at: null, context_note: null, distance: simToDistance(0.848) },
-          { id: 3, wa_msg_id: 'c', timestamp: 3, text: 'Test', source: 'export', kind: 'text', from_me: 0, media_meta: null, created_at: null, context_note: null, distance: simToDistance(0.845) }
+          { id: 1, wa_msg_id: 'a', timestamp: 1, text: 'Hola', source: 'export', kind: 'text', from_me: 0, media_meta: null, created_at: null, context_note: null, distance: simToDistance(0.77) },
+          { id: 2, wa_msg_id: 'b', timestamp: 2, text: 'Chao', source: 'export', kind: 'text', from_me: 0, media_meta: null, created_at: null, context_note: null, distance: simToDistance(0.768) },
+          { id: 3, wa_msg_id: 'c', timestamp: 3, text: 'Test', source: 'export', kind: 'text', from_me: 0, media_meta: null, created_at: null, context_note: null, distance: simToDistance(0.765) }
         ]
       } as unknown as DbInstance
 
@@ -172,6 +172,35 @@ describe('search service', () => {
       expect(results.map(r => r.wa_msg_id)).toContain('a')
       expect(results.map(r => r.wa_msg_id)).toContain('b')
       expect(results.every(r => r.lowRelevance === false)).toBe(true)
+    })
+
+    it('marks placeholder media messages as lowRelevance: true and ignores them for maxSim', async () => {
+      const mockDb = {
+        searchKeyword: () => [],
+        searchSimilar: () => [
+          // Placeholder message (no text, generic context note, high similarity due to embedding anomaly)
+          { id: 1, wa_msg_id: 'a', timestamp: 1, text: '', source: 'export', kind: 'image', from_me: 0, media_meta: null, created_at: null, context_note: 'Imagen sin descripción', distance: simToDistance(0.85) },
+          // Meaningful message (with text, lower similarity but truly related)
+          { id: 2, wa_msg_id: 'b', timestamp: 2, text: 'El perro corre', source: 'export', kind: 'text', from_me: 0, media_meta: null, created_at: null, context_note: null, distance: simToDistance(0.80) }
+        ]
+      } as unknown as DbInstance
+
+      const service = createSearchService({
+        db: mockDb,
+        embeddings: mockEmbeddings,
+        scheduler: (cb) => cb()
+      })
+
+      const results = await service.query('test query', 5)
+      expect(results).toHaveLength(2)
+      // Message 'a' is a placeholder, so it must be marked as low relevance
+      const a = results.find(r => r.wa_msg_id === 'a')!
+      expect(a.lowRelevance).toBe(true)
+      // Message 'b' is not a placeholder. Its similarity (0.80) is the maxSim for non-placeholders.
+      // 0.80 - 0.03 = 0.77 relative floor, and it is above 0.75 MIN_SIMILARITY.
+      // So 'b' must NOT be marked as low relevance.
+      const b = results.find(r => r.wa_msg_id === 'b')!
+      expect(b.lowRelevance).toBe(false)
     })
   })
 })

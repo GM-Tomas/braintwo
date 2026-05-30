@@ -25,7 +25,7 @@ export function Settings({ onLogout }: SettingsProps) {
   return (
     <div className="flex flex-1 flex-col overflow-hidden animate-fade-in">
       <PageHeader
-        eyebrow="Settings"
+        eyebrow="Ajustes"
         title="Ajustes"
         subtitle="Estado local, base de datos y controles de sincronizacion."
       />

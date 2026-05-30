@@ -14,37 +14,49 @@ export interface SearchServiceDeps {
   batchSize?: number
 }
 
-// Floor calibrated for multilingual-e5-small with short WhatsApp messages.
-// Increased to 0.82 to filter out low-relevance false positives.
-const MIN_SIMILARITY = 0.82
+// Floor calibrated for multilingual-e5-base with short WhatsApp messages.
+const MIN_SIMILARITY = 0.75
 
 // Standard RRF constant — chosen to balance precision and recall across lists.
 const RRF_K = 60
 
 function filterByRelevance(candidates: SearchResult[]): SearchResult[] {
+  // Pre-process candidates to flag placeholder media/messages.
+  // A placeholder is a message with no text content and either no context note or a generic placeholder context note.
+  const processed = candidates.map((r) => {
+    const isPlaceholder =
+      !r.text?.trim() &&
+      (!r.contextNote ||
+        /sin (descripci[oó]n|texto)/i.test(r.contextNote) ||
+        /^imagen$/i.test(r.contextNote))
+    return { ...r, isPlaceholder }
+  })
+
   // 1. Exclude absolute low relevance below the floor.
-  const ABSOLUTE_FLOOR = 0.75
-  const above = candidates.filter((r) => r.similarity >= ABSOLUTE_FLOOR)
+  const ABSOLUTE_FLOOR = 0.72
+  const above = processed.filter((r) => r.similarity >= ABSOLUTE_FLOOR)
   if (above.length === 0) return []
 
-  // 2. Find the maximum similarity.
-  const maxSim = Math.max(...above.map((r) => r.similarity))
+  // 2. Find the maximum similarity among non-placeholder messages.
+  const nonPlaceholders = above.filter((r) => !r.isPlaceholder)
+  const maxSim =
+    nonPlaceholders.length > 0
+      ? Math.max(...nonPlaceholders.map((r) => r.similarity))
+      : Math.max(...above.map((r) => r.similarity))
 
-  // If the absolute best match is below 0.84, it is generally considered noise.
+  // If the absolute best match is below 0.77, it is generally considered noise.
   let allAreLowRelevance = false
-  if (maxSim < 0.84) {
+  if (maxSim < 0.77) {
     allAreLowRelevance = true
   }
 
   // 3. Relative margin: exclude results that are significantly weaker than the best match.
-  // For example, if maxSim = 0.92, we don't want to return 0.83 (diff = 0.09) as high relevance.
-  // We use a relative margin of 0.05.
-  const MARGIN = 0.05
+  const MARGIN = 0.03
 
   // 4. Tight cluster filter: if we have multiple results, but they are all very close to each other
-  // and the best match is not exceptionally high (maxSim < 0.88), it suggests a flat distribution
+  // and the best match is not exceptionally high (maxSim < 0.80), it suggests a flat distribution
   // of similarities indicating background noise.
-  if (above.length >= 2 && maxSim < 0.88) {
+  if (above.length >= 2 && maxSim < 0.80) {
     const mean = above.reduce((s, r) => s + r.similarity, 0) / above.length
     const variance = above.reduce((s, r) => s + (r.similarity - mean) ** 2, 0) / above.length
     const std = Math.sqrt(variance)
@@ -57,12 +69,15 @@ function filterByRelevance(candidates: SearchResult[]): SearchResult[] {
 
   return above.map((r) => {
     const isLow =
+      r.isPlaceholder ||
       allAreLowRelevance ||
       r.similarity < MIN_SIMILARITY ||
       r.similarity < maxSim - MARGIN
 
+    // Remove the temporary isPlaceholder flag
+    const { isPlaceholder, ...rest } = r
     return {
-      ...r,
+      ...rest,
       lowRelevance: isLow
     }
   })

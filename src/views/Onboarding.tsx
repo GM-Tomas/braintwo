@@ -287,7 +287,7 @@ export function Onboarding() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden animate-fade-in">
       <PageHeader
-        eyebrow="Onboarding"
+        eyebrow="Primeros pasos"
         title="Vinculá tu WhatsApp"
         subtitle="BrainTwo se conecta como dispositivo vinculado a tu cuenta. Tus mensajes se procesan localmente — nunca salen de tu computadora."
       />

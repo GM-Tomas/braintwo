@@ -10,9 +10,8 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { id: 'timeline', icon: 'home', label: 'Timeline' },
-  { id: 'chat', icon: 'chat', label: 'Chat IA' },
-  { id: 'settings', icon: 'settings', label: 'Settings' }
+  { id: 'timeline', icon: 'home', label: 'Mis mensajes' },
+  { id: 'chat', icon: 'chat', label: 'Chat IA' }
 ]
 
 interface SidebarProps {
@@ -254,6 +253,23 @@ export function Sidebar({
       )}
 
       <div className={`mt-6 border-t border-bt-border pt-4 ${collapsed ? 'w-full flex flex-col items-center gap-2' : 'w-full flex flex-col gap-2'}`}>
+        <button
+          type="button"
+          onClick={() => setView('settings')}
+          aria-label="Ajustes"
+          title="Ajustes"
+          className={`flex h-9 items-center justify-center rounded-[8px] border text-[12px] font-medium transition-colors ${
+            view === 'settings'
+              ? 'bg-bt-hover text-bt-text border-bt-primary/40 shadow-bt-nav-active'
+              : 'border-bt-border text-bt-muted hover:bg-bt-hover hover:text-bt-text'
+          } ${
+            collapsed ? 'w-10 px-0' : 'w-full gap-2 px-3'
+          }`}
+        >
+          <Icon name="settings" size={16} className="shrink-0" />
+          {!collapsed && <span>Ajustes</span>}
+        </button>
+
         <button
           type="button"
           onClick={toggleTheme}

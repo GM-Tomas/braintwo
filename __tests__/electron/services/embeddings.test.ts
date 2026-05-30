@@ -3,7 +3,7 @@ import { VEC_DIM } from '../../../electron/services/db'
 import { createEmbeddingService, deterministicEmbedder } from '../../../electron/services/embeddings'
 
 describe('embedding service', () => {
-  it('produces deterministic 384-dim fallback vectors', () => {
+  it('produces deterministic fallback vectors of VEC_DIM size', () => {
     const a = deterministicEmbedder('Ideas BrainTwo')
     const b = deterministicEmbedder('Ideas BrainTwo')
     expect(a).toHaveLength(VEC_DIM)

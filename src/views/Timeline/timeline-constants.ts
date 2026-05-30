@@ -3,7 +3,7 @@ import type { IconName } from '@/lib/icons'
 
 export const SOURCE_LABEL: Record<MessageSource, string> = {
   realtime: 'Tiempo real',
-  'offline-sync': 'Catch-up',
+  'offline-sync': 'Sincronización diferida',
   'history-sync': 'Histórico',
   export: 'Importado'
 }

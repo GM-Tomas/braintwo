@@ -200,7 +200,7 @@ describe('db service', () => {
       msgId = r.rowId as number
     })
 
-    it('inserts a 384-dim Float32Array', () => {
+    it('inserts a VEC_DIM-dim Float32Array', () => {
       expect(() => db.insertEmbedding(msgId, makeVec(1))).not.toThrow()
       expect(db.countEmbeddings()).toBe(1)
       expect(db.hasEmbedding(msgId)).toBe(true)
@@ -208,16 +208,16 @@ describe('db service', () => {
 
     it('rejects wrong dimension count (too few)', () => {
       const bad = new Float32Array(100)
-      expect(() => db.insertEmbedding(msgId, bad)).toThrow(/384/)
+      expect(() => db.insertEmbedding(msgId, bad)).toThrow(new RegExp(VEC_DIM.toString()))
     })
 
     it('rejects wrong dimension count (too many)', () => {
       const bad = new Float32Array(VEC_DIM + 1)
-      expect(() => db.insertEmbedding(msgId, bad)).toThrow(/384/)
+      expect(() => db.insertEmbedding(msgId, bad)).toThrow(new RegExp(VEC_DIM.toString()))
     })
 
     it('rejects empty Float32Array', () => {
-      expect(() => db.insertEmbedding(msgId, new Float32Array())).toThrow(/384/)
+      expect(() => db.insertEmbedding(msgId, new Float32Array())).toThrow(new RegExp(VEC_DIM.toString()))
     })
 
     it('one embedding per msg_id (PRIMARY KEY conflict on duplicate)', () => {
@@ -270,7 +270,7 @@ describe('db service', () => {
 
     it('rejects wrong-dimension query vector', () => {
       seedSet(1)
-      expect(() => db.searchSimilar(new Float32Array(10), 1)).toThrow(/384/)
+      expect(() => db.searchSimilar(new Float32Array(10), 1)).toThrow(new RegExp(VEC_DIM.toString()))
     })
 
     it('result rows include all fields from messages', () => {

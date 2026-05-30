@@ -2,7 +2,7 @@ import Database, { type Database as DatabaseType } from 'better-sqlite3'
 import * as sqliteVec from 'sqlite-vec'
 import { statSync } from 'node:fs'
 
-export const VEC_DIM = 384
+export const VEC_DIM = 768
 
 export type MessageSource = 'export' | 'history-sync' | 'realtime' | 'offline-sync'
 
@@ -140,7 +140,7 @@ export interface DbInstance {
   countMessages: () => number
   countEmbeddings: () => number
   hasEmbedding: (msgId: number) => boolean
-  getSurroundingMessages: (msgId: number, limit: number) => { id: number; text: string; timestamp: number }[]
+  getSurroundingMessages: (msgId: number, limit: number) => { id: number; text: string; timestamp: number; contextNote: string | null }[]
   close: () => void
 }
 
@@ -235,6 +235,21 @@ function listColumns(db: DatabaseType, table: string): string[] {
 }
 
 export function applyMigrations(db: DatabaseType): void {
+  // Check if we need to migrate embedding dimensions.
+  // We can query sqlite_master for the schema of message_embeddings.
+  try {
+    const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'message_embeddings'").get() as { sql: string } | undefined
+    if (row && row.sql) {
+      const expectedPattern = `FLOAT[${VEC_DIM}]`
+      if (!row.sql.includes(expectedPattern)) {
+        db.exec('DROP TABLE IF EXISTS message_embeddings')
+        db.exec('DROP TABLE IF EXISTS memory_embeddings')
+      }
+    }
+  } catch {
+    // ignore
+  }
+
   // Check if messages_fts exists and if it lacks context_note
   let hasFtsTable = false
   try {
@@ -286,6 +301,31 @@ function vecToBuffer(vec: Float32Array): Buffer {
     )
   }
   return Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength)
+}
+
+export function parseFtsQuery(query: string): string {
+  const trimmed = query.trim()
+  if (!trimmed) return ''
+
+  // If already enclosed in quotes, assume strict phrase search
+  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length > 2) {
+    return trimmed
+  }
+
+  // Split by whitespace, sanitize each token, format with trailing wildcard
+  const terms = trimmed
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((term) => {
+      // Remove double/single quotes, asterisks to prevent FTS5 syntax errors
+      const clean = term.replace(/["'*]/g, '').trim()
+      if (!clean) return ''
+      // Return term wrapped in quotes with a trailing wildcard
+      return `"${clean}"*`
+    })
+    .filter(Boolean)
+
+  return terms.join(' AND ')
 }
 
 export function openDatabase(filePath: string): DbInstance {
@@ -373,8 +413,8 @@ export function openDatabase(filePath: string): DbInstance {
     'SELECT MAX(created_at) AS last FROM messages'
   )
 
-  const getMsgStmt = db.prepare<[number], { id: number; text: string; timestamp: number }>(
-    'SELECT id, text, timestamp FROM messages WHERE id = ?'
+  const getMsgStmt = db.prepare<[number], { id: number; text: string; timestamp: number; context_note: string | null }>(
+    'SELECT id, text, timestamp, context_note FROM messages WHERE id = ?'
   )
 
   const surroundingBeforeStmt = db.prepare<[number, number, number, number], { id: number; text: string; timestamp: number }>(`
@@ -474,14 +514,18 @@ export function openDatabase(filePath: string): DbInstance {
       db.exec('DELETE FROM message_embeddings')
     },
     searchKeyword(query, limit) {
-      if (!query.trim() || limit <= 0) return []
-      // Wrap in double-quotes for phrase search; escape any embedded double-quotes.
-      const safeQuery = `"${query.replace(/"/g, '""')}"`
+      const safeQuery = parseFtsQuery(query)
+      if (!safeQuery || limit <= 0) return []
       try {
         return kwSearchStmt.all(safeQuery, Math.min(limit, 100))
       } catch {
-        // FTS5 MATCH throws on malformed queries (e.g. stray AND/OR operators).
-        return []
+        // Fallback to phrase search if FTS5 MATCH throws
+        try {
+          const fallbackQuery = `"${query.trim().replace(/"/g, '""')}"`
+          return kwSearchStmt.all(fallbackQuery, Math.min(limit, 100))
+        } catch {
+          return []
+        }
       }
     },
     searchSimilar(queryVec, k) {
@@ -545,8 +589,8 @@ export function openDatabase(filePath: string): DbInstance {
       }))
     },
     searchMemoryKeyword(query, limit, chatId) {
-      if (!query.trim() || limit <= 0) return []
-      const safeQuery = `"${query.replace(/"/g, '""')}"`
+      const safeQuery = parseFtsQuery(query)
+      if (!safeQuery || limit <= 0) return []
       try {
         return searchMemKwStmt.all(safeQuery, chatId ?? null, Math.min(limit, 50)).map((r) => ({
           id: r.id,
@@ -554,7 +598,17 @@ export function openDatabase(filePath: string): DbInstance {
           createdAt: r.created_at * 1000
         }))
       } catch {
-        return []
+        // Fallback to phrase search if FTS5 MATCH throws
+        try {
+          const fallbackQuery = `"${query.trim().replace(/"/g, '""')}"`
+          return searchMemKwStmt.all(fallbackQuery, chatId ?? null, Math.min(limit, 50)).map((r) => ({
+            id: r.id,
+            content: r.content,
+            createdAt: r.created_at * 1000
+          }))
+        } catch {
+          return []
+        }
       }
     },
     listMemories(limit) {
@@ -597,7 +651,13 @@ export function openDatabase(filePath: string): DbInstance {
       // before is in DESC order, reverse to chronological (ASC) order
       before.reverse()
 
-      return [...before, target, ...after]
+      const toRow = (r: { id: number; text: string; timestamp: number; context_note?: string | null }) => ({
+        id: r.id,
+        text: r.text,
+        timestamp: r.timestamp,
+        contextNote: r.context_note ?? null
+      })
+      return [...before.map(toRow), toRow(target), ...after.map(toRow)]
     },
     close() {
       db.close()

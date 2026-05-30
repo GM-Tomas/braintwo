@@ -89,7 +89,7 @@ export function Search() {
       ) : (
         <>
           <PageHeader
-            eyebrow="Busqueda"
+            eyebrow="Búsqueda"
             title="Preguntale a tu cerebro"
             subtitle="Busca en lenguaje natural. La IA entiende contexto, no solo palabras exactas."
           />

@@ -28,11 +28,11 @@ export class ConnectionEntity {
     switch (this.state) {
       case 'open':
       case 'idle':
-        return 'Al dia'
+        return 'Al día'
       case 'disconnected':
         return 'Reconectando'
       case 'logged-out':
-        return 'Sesion cerrada'
+        return 'Sesión cerrada'
       case 'connecting':
         return 'Conectando'
       case 'catching-up':

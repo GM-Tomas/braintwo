@@ -108,7 +108,7 @@ export function Timeline() {
         <>
           <PageHeader
             eyebrow="Tu cerebro"
-            title="Timeline"
+            title="Mis mensajes"
             subtitle="Explorá y buscá en tu historial de WhatsApp."
             action={
               !isSearching ? (

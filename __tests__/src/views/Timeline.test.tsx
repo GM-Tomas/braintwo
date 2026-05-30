@@ -74,7 +74,7 @@ describe('<Timeline />', () => {
 
   it('renders the title', async () => {
     render(<Timeline />)
-    expect(screen.getByText('Timeline')).toBeInTheDocument()
+    expect(screen.getByText('Mis mensajes')).toBeInTheDocument()
   })
 
   it('shows empty-state when there are no messages', async () => {
@@ -154,7 +154,7 @@ describe('<Timeline />', () => {
     render(<Timeline />)
     await waitFor(() => {
       expect(screen.getByText('Tiempo real')).toBeInTheDocument()
-      expect(screen.getByText('Catch-up')).toBeInTheDocument()
+      expect(screen.getByText('Sincronización diferida')).toBeInTheDocument()
       expect(screen.getByText('Histórico')).toBeInTheDocument()
       expect(screen.getByText('Importado')).toBeInTheDocument()
     })

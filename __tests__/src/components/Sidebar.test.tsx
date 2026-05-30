@@ -12,21 +12,21 @@ describe('<Sidebar />', () => {
 
   it('renders the post-onboarding nav buttons with accessible names', () => {
     const setView = vi.fn()
-    render(<Sidebar view="search" setView={setView} connectionState="open" />)
-    expect(screen.getByRole('button', { name: 'Buscar' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Timeline' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
+    render(<Sidebar view="chat" setView={setView} connectionState="open" />)
+    expect(screen.getByRole('button', { name: 'Chat IA' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mis mensajes' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ajustes' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Onboarding' })).not.toBeInTheDocument()
   })
 
   it('marks the current view with aria-current=page', () => {
     const setView = vi.fn()
-    render(<Sidebar view="search" setView={setView} connectionState="open" />)
-    expect(screen.getByRole('button', { name: 'Buscar' })).toHaveAttribute(
+    render(<Sidebar view="chat" setView={setView} connectionState="open" />)
+    expect(screen.getByRole('button', { name: 'Chat IA' })).toHaveAttribute(
       'aria-current',
       'page'
     )
-    expect(screen.getByRole('button', { name: 'Timeline' })).not.toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Mis mensajes' })).not.toHaveAttribute(
       'aria-current'
     )
   })
@@ -35,7 +35,7 @@ describe('<Sidebar />', () => {
     const setView = vi.fn()
     render(<Sidebar view="onboarding" setView={setView} connectionState="connecting" />)
     const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'Timeline' }))
+    await user.click(screen.getByRole('button', { name: 'Mis mensajes' }))
     expect(setView).toHaveBeenCalledWith('timeline')
   })
 
@@ -43,7 +43,7 @@ describe('<Sidebar />', () => {
     ['connecting', 'Conectando...'],
     ['open', 'Conectado'],
     ['disconnected', 'Reconectando...'],
-    ['logged-out', 'Sesion cerrada']
+    ['logged-out', 'Sesión cerrada']
   ] as const)('shows the connection label for %s', (state, label) => {
     const setView = vi.fn()
     render(<Sidebar view="onboarding" setView={setView} connectionState={state} />)

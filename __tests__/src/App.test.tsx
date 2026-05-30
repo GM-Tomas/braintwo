@@ -29,6 +29,8 @@ describe('<App />', () => {
 
   beforeEach(() => {
     window.localStorage.clear()
+    window.HTMLElement.prototype.scrollIntoView = vi.fn()
+    window.Element.prototype.scrollIntoView = vi.fn()
     h = installBraintwoBridge({
       initialState: 'connecting',
       initialQr: null,
@@ -50,7 +52,7 @@ describe('<App />', () => {
       expect(
         screen.queryByRole('navigation', { name: /Navegación principal/ })
       ).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Buscar' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Chat IA' })).not.toBeInTheDocument()
     })
 
     it('clicking Continuar moves to the QR phase', async () => {
@@ -77,7 +79,7 @@ describe('<App />', () => {
 
     it('does NOT render the sidebar while waiting for pairing', () => {
       render(<App />)
-      expect(screen.queryByRole('button', { name: 'Buscar' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Chat IA' })).not.toBeInTheDocument()
     })
   })
 
@@ -102,7 +104,7 @@ describe('<App />', () => {
 
     it.each([
       ['connecting', 'Conectando'],
-      ['open', 'Al dia']
+      ['open', 'Al día']
     ] as const)('on %s the sidebar shows %s', async (state, label) => {
       render(<App />)
       await screen.findByText('Conectando')
@@ -121,7 +123,7 @@ describe('<App />', () => {
   })
 
   describe('auto-routing', () => {
-    it('welcome → continuar → QR → open routes to Search with sidebar', async () => {
+    it('welcome → continuar → QR → open routes to Timeline with sidebar', async () => {
       render(<App />)
       const user = userEvent.setup()
       await user.click(screen.getByRole('button', { name: /Siguiente/i }))
@@ -134,8 +136,8 @@ describe('<App />', () => {
       await waitFor(() => {
         expect(screen.queryByText(/VINCULÁ TU WHATSAPP/i)).not.toBeInTheDocument()
       })
-      expect(screen.getByText('Proba preguntar')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Timeline' })).toBeInTheDocument()
+      expect(screen.getByText(/Aún no hay mensajes/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Ajustes' })).toBeInTheDocument()
       expect(window.localStorage.getItem(ONBOARDED_KEY)).toBe('1')
     })
 
@@ -146,15 +148,15 @@ describe('<App />', () => {
 
       act(() => h.emitConnectionState('open'))
       await waitFor(() =>
-        expect(screen.getByText('Proba preguntar')).toBeInTheDocument()
+        expect(screen.getByText(/Aún no hay mensajes/i)).toBeInTheDocument()
       )
 
       const user = userEvent.setup()
-      await user.click(screen.getByRole('button', { name: 'Timeline' }))
-      expect(screen.getByText(/Aún no hay mensajes/)).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Chat IA' }))
+      expect(screen.getByText('Preguntá sobre tus mensajes de WhatsApp.')).toBeInTheDocument()
 
       act(() => h.emitConnectionState('open'))
-      expect(screen.getByText(/Aún no hay mensajes/)).toBeInTheDocument()
+      expect(screen.getByText('Preguntá sobre tus mensajes de WhatsApp.')).toBeInTheDocument()
     })
 
     it('logged-out from app phase falls back to QR (skipping welcome)', async () => {
@@ -165,7 +167,7 @@ describe('<App />', () => {
       act(() => h.emitConnectionState('logged-out'))
       expect(await screen.findByText(/VINCULÁ TU WHATSAPP/i)).toBeInTheDocument()
       expect(screen.queryByText(/Tu segundo cerebro/i)).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Buscar' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Ajustes' })).not.toBeInTheDocument()
     })
   })
 
@@ -179,10 +181,10 @@ describe('<App />', () => {
       await screen.findByText('Conectando')
       const user = userEvent.setup()
 
-      await user.click(screen.getByRole('button', { name: 'Buscar' }))
-      expect(screen.getByText('Proba preguntar')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Chat IA' }))
+      expect(screen.getByText('Preguntá sobre tus mensajes de WhatsApp.')).toBeInTheDocument()
 
-      await user.click(screen.getByRole('button', { name: 'Timeline' }))
+      await user.click(screen.getByRole('button', { name: 'Mis mensajes' }))
       expect(screen.getByText(/Aún no hay mensajes/)).toBeInTheDocument()
     })
 

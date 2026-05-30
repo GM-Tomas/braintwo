@@ -24,7 +24,7 @@ describe('<Search />', () => {
 
   it('renders the page header', () => {
     render(<Search />)
-    expect(screen.getByText('Busqueda')).toBeInTheDocument()
+    expect(screen.getByText('Búsqueda')).toBeInTheDocument()
     expect(
       screen.getByRole('heading', { name: /Preguntale a tu cerebro/ })
     ).toBeInTheDocument()
@@ -47,7 +47,7 @@ describe('<Search />', () => {
     render(<Search />)
     const user = userEvent.setup()
     await user.type(screen.getByRole('searchbox', { name: /Buscar en BrainTwo/ }), 'brain')
-    await waitFor(() => expect(screen.getByText('88%')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Similitud alta')).toBeInTheDocument())
     expect(screen.getByText('Ideas sobre BrainTwo')).toBeInTheDocument()
   })
 
