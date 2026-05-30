@@ -69,11 +69,40 @@ export default function App() {
   const loadChats = useCallback(async () => {
     try {
       const list = await aiService.listChats()
-      setChats(list)
+      const WELCOME_CHAT_CREATED_KEY = 'braintwo:welcome-chat-created'
+      if (list.length === 0 && !localStorage.getItem(WELCOME_CHAT_CREATED_KEY)) {
+        const title = 'Bienvenido a BrainTwo'
+        const chatId = await aiService.createChat(title)
+
+        const welcomeMessage = `¡Hola! 👋 ¡Te damos la bienvenida a **BrainTwo**! 🧠✨
+
+Este es tu segundo cerebro digital, diseñado para ayudarte a buscar, recordar y analizar todo lo que pasa por tu WhatsApp de forma 100% segura y local. 🔒💻
+
+Aquí tienes un resumen de lo que puedes hacer:
+1. 🔍 **Buscador Inteligente**: Encuentra mensajes, enlaces y transcripciones de audios al instante desde la pestaña de **Búsqueda**.
+2. 📅 **Timeline**: Revisa todo tu historial de forma cronológica, como un feed personal limpio y sin algoritmos.
+3. 💬 **Asistente IA**: Este chat sirve para conversar con un asistente de Inteligencia Artificial que tiene acceso a tus conversaciones y a la memoria de la aplicación.
+
+¡Pregúntame lo que quieras! Por ejemplo:
+* *¿Qué es BrainTwo y cómo funciona?* 🤖
+* *¿Cómo puedo importar chats viejos?* 📂
+* *¿Dónde se guardan mis datos?* 🏠
+
+¿En qué te puedo ayudar hoy? 😊`
+
+        await aiService.saveChatMessage(chatId, 'assistant', welcomeMessage, null)
+        localStorage.setItem(WELCOME_CHAT_CREATED_KEY, '1')
+
+        const updatedList = await aiService.listChats()
+        setChats(updatedList)
+        setActiveChatId(chatId)
+      } else {
+        setChats(list)
+      }
     } catch (err) {
       console.error('Error loading chats:', err)
     }
-  }, [aiService])
+  }, [aiService, setActiveChatId])
 
   const startNewChat = useCallback(() => {
     setActiveChatId(null)

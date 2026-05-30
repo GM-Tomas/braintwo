@@ -24,6 +24,10 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  runAfterFinish: true
+msi:
+  runAfterFinish: true
+  perMachine: false
 mac:
   target: dmg
   category: public.app-category.productivity

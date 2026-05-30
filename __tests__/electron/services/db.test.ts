@@ -356,4 +356,12 @@ describe('db file persistence', () => {
     expect(b.hasEmbedding(r.rowId as number)).toBe(true)
     b.close()
   })
+
+  it('seeds default memories when created from scratch', () => {
+    const db = openDatabase(dbPath)
+    const memories = db.listMemories(100)
+    expect(memories.length).toBe(8)
+    expect(memories.some(m => m.content.includes('BrainTwo'))).toBe(true)
+    db.close()
+  })
 })

@@ -24,5 +24,19 @@ foreach ($folder in @("Local Storage", "Session Storage", "auth")) {
     }
 }
 
+foreach ($file in @("braintwo.db", "braintwo.db-wal", "braintwo.db-shm", "embedding_version.txt")) {
+    $path = "$userData\$file"
+    if (Test-Path $path) {
+        cmd /c "del /f /q `"$path`"" 2>$null
+        if (Test-Path $path) {
+            Write-Warning "No se pudo borrar el archivo: $file"
+        } else {
+            Write-Host "OK: $file borrado"
+        }
+    } else {
+        Write-Host "OK: $file ya no existe"
+    }
+}
+
 Write-Host ""
 Write-Host "Listo. Corré 'npm run dev' para ver el FTU."
