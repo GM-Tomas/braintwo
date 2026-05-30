@@ -180,7 +180,7 @@ function createWindow(): void {
           defaultId: 0,
           title: 'Descarga en segundo plano',
           message: 'Hay una descarga de modelo en curso.',
-          detail: 'La descarga continúa mientras BrainTwo esté en el tray. Para cancelarla, presioná "Cancelar descarga".'
+          detail: 'La descarga continúa en segundo plano aunque cerrés la ventana. Para cancelarla, presioná "Cancelar descarga".'
         }).then(({ response }) => {
           if (response === 1) context.ollamaService.cancelPull()
           context.mainWindow.value?.hide()

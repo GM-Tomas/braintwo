@@ -138,7 +138,7 @@ export function createOllamaService(): OllamaService {
         const arch = process.arch === 'arm64' ? 'arm64' : 'amd64'
 
         if (process.platform === 'win32') {
-          // Windows: standalone zip → extract to %LOCALAPPDATA%\Programs\Ollama (no UAC prompt)
+          // Windows: zip contains ollama.exe (root) + lib/ollama/*.dll + vc_redist.x64.exe
           const url = 'https://ollama.com/download/ollama-windows-amd64.zip'
           const installDir = join(process.env['LOCALAPPDATA'] ?? home, 'Programs', 'Ollama')
           const tmpArchive = join(tmpdir(), `ollama-${Date.now()}.zip`)
@@ -146,10 +146,10 @@ export function createOllamaService(): OllamaService {
 
           onProgress({ stage: 'downloading', percent: 5, message: 'Descargando Ollama…' })
           await downloadWithProgress(url, tmpArchive, (bytes, total) => {
-            onProgress({ stage: 'downloading', percent: total > 0 ? Math.round((bytes / total) * 85) + 5 : 10, message: 'Descargando Ollama…' })
+            onProgress({ stage: 'downloading', percent: total > 0 ? Math.round((bytes / total) * 83) + 5 : 10, message: 'Descargando Ollama…' })
           })
 
-          onProgress({ stage: 'installing', percent: 92, message: 'Extrayendo…' })
+          onProgress({ stage: 'installing', percent: 90, message: 'Extrayendo…' })
           try {
             execSync(
               `powershell -NoProfile -Command "Expand-Archive -Force -Path '${tmpArchive}' -DestinationPath '${installDir}'"`,
@@ -158,49 +158,72 @@ export function createOllamaService(): OllamaService {
           } finally {
             try { unlinkSync(tmpArchive) } catch { /* ignore */ }
           }
+
+          // Install Visual C++ runtime (required by Ollama; runs silently, safe to re-run)
+          const vcRedist = join(installDir, 'vc_redist.x64.exe')
+          if (existsSync(vcRedist)) {
+            onProgress({ stage: 'installing', percent: 96, message: 'Instalando dependencias…' })
+            try { execSync(`"${vcRedist}" /quiet /norestart`, { stdio: 'ignore' }) } catch { /* already installed */ }
+          }
+
           const exe = join(installDir, 'ollama.exe')
           if (!existsSync(exe)) throw new Error('No se encontró ollama.exe tras la extracción')
           knownBinary = exe
 
-        } else {
-          // Linux: .tar.zst  ·  macOS: .tgz — both extract to ~/.local preserving bin/ + lib/ layout.
-          // The binary at ~/.local/bin/ollama discovers its runtime libs at ../lib/ollama.
-          const isLinux = process.platform === 'linux'
-          const fileName = isLinux ? `ollama-linux-${arch}.tar.zst` : 'ollama-darwin.tgz'
+        } else if (process.platform === 'linux') {
+          // Linux: .tar.zst — structure: bin/ollama + lib/ollama/** → extract to ~/.local
+          // The binary at ~/.local/bin/ollama finds its libs at ~/.local/lib/ollama/
+          const fileName = `ollama-linux-${arch}.tar.zst`
           const url = `https://ollama.com/download/${fileName}`
           const prefix = join(home, '.local')
           const binPath = join(prefix, 'bin', 'ollama')
-          const tmpArchive = join(tmpdir(), `ollama-${Date.now()}.${isLinux ? 'tar.zst' : 'tgz'}`)
+          const tmpArchive = join(tmpdir(), `ollama-${Date.now()}.tar.zst`)
 
           mkdirSync(join(prefix, 'bin'), { recursive: true })
 
           onProgress({ stage: 'downloading', percent: 5, message: 'Descargando Ollama…' })
           await downloadWithProgress(url, tmpArchive, (bytes, total) => {
-            const pct = total > 0 ? Math.round((bytes / total) * 85) + 5 : 10
-            onProgress({ stage: 'downloading', percent: pct, message: 'Descargando Ollama…' })
+            onProgress({ stage: 'downloading', percent: total > 0 ? Math.round((bytes / total) * 85) + 5 : 10, message: 'Descargando Ollama…' })
           })
 
           onProgress({ stage: 'installing', percent: 92, message: 'Extrayendo…' })
           try {
-            if (isLinux) {
-              // zstd-compressed tar. Try GNU tar --zstd, fall back to piping through zstd.
-              try {
-                execSync(`tar --zstd -xf "${tmpArchive}" -C "${prefix}"`, { stdio: 'ignore' })
-              } catch {
-                execSync(`zstd -dc "${tmpArchive}" | tar -x -C "${prefix}"`, { stdio: 'ignore', shell: '/bin/bash' })
-              }
-            } else {
-              execSync(`tar -xzf "${tmpArchive}" -C "${prefix}"`, { stdio: 'ignore' })
+            try {
+              execSync(`tar --zstd -xf "${tmpArchive}" -C "${prefix}"`, { stdio: 'ignore' })
+            } catch {
+              execSync(`zstd -dc "${tmpArchive}" | tar -x -C "${prefix}"`, { stdio: 'ignore', shell: '/bin/bash' })
             }
           } finally {
             try { unlinkSync(tmpArchive) } catch { /* ignore */ }
           }
 
-          // Some macOS archives ship a flat binary instead of bin/ollama — normalize.
-          if (!existsSync(binPath)) {
-            const flat = join(prefix, 'ollama')
-            if (existsSync(flat)) { copyFileSync(flat, binPath); unlinkSync(flat) }
+          if (!existsSync(binPath)) throw new Error('No se encontró el binario de Ollama tras la extracción')
+          chmodSync(binPath, 0o755)
+          knownBinary = binPath
+
+        } else {
+          // macOS: .tgz — flat structure: ollama (binary) + *.dylib + mlx_metal_v*/ all at root.
+          // Extract everything to ~/.local/bin/ so the binary and its libs share the same directory.
+          const url = 'https://ollama.com/download/ollama-darwin.tgz'
+          const binDir = join(home, '.local', 'bin')
+          const binPath = join(binDir, 'ollama')
+          const tmpArchive = join(tmpdir(), `ollama-${Date.now()}.tgz`)
+
+          mkdirSync(binDir, { recursive: true })
+
+          onProgress({ stage: 'downloading', percent: 5, message: 'Descargando Ollama…' })
+          await downloadWithProgress(url, tmpArchive, (bytes, total) => {
+            onProgress({ stage: 'downloading', percent: total > 0 ? Math.round((bytes / total) * 85) + 5 : 10, message: 'Descargando Ollama…' })
+          })
+
+          onProgress({ stage: 'installing', percent: 92, message: 'Extrayendo…' })
+          try {
+            // Extract flat archive directly into binDir so ollama + *.dylib are co-located
+            execSync(`tar -xzf "${tmpArchive}" -C "${binDir}"`, { stdio: 'ignore' })
+          } finally {
+            try { unlinkSync(tmpArchive) } catch { /* ignore */ }
           }
+
           if (!existsSync(binPath)) throw new Error('No se encontró el binario de Ollama tras la extracción')
           chmodSync(binPath, 0o755)
           knownBinary = binPath

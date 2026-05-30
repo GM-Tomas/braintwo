@@ -509,35 +509,12 @@ export function LocalAiSection({
             </div>
           )}
 
-          {/* Advanced: URL override + auto-start */}
+          {/* Auto-start toggle */}
           {!ollamaNotInstalled && (
-            <details className="group rounded-[8px] border border-bt-border overflow-hidden">
-              <summary className="flex items-center justify-between px-3 py-2.5 text-[12px] text-bt-muted hover:bg-bt-hover transition-colors cursor-pointer list-none">
-                <span>Configuración avanzada</span>
-                <Icon name="chev" size={13} className="transition-transform group-open:rotate-90" />
-              </summary>
-              <div className="px-3 pb-3 pt-2 flex flex-col gap-3 border-t border-bt-border bg-bt-bg/30">
-                <p className="text-[11px] text-bt-muted">Cambiá la URL si Ollama corre en un puerto diferente.</p>
-                <div className="flex gap-2 items-end">
-                  <label className="flex flex-col gap-1 flex-1">
-                    <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">URL del servidor</span>
-                    <input type="url" value={urlInput}
-                      onChange={(e) => setUrlInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleManualConnect()}
-                      placeholder="http://localhost:11434"
-                      className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/50" />
-                  </label>
-                  <button type="button" onClick={handleManualConnect}
-                    className="h-9 px-3 rounded-[8px] border border-bt-border text-[12px] text-bt-muted hover:bg-bt-hover transition-colors shrink-0">
-                    Conectar
-                  </button>
-                </div>
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input type="checkbox" checked={autoStart} onChange={(e) => onAutoStartChange(e.target.checked)} className="accent-bt-primary" />
-                  <span className="text-[12px] text-bt-muted">Iniciar Ollama automáticamente con BrainTwo</span>
-                </label>
-              </div>
-            </details>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" checked={autoStart} onChange={(e) => onAutoStartChange(e.target.checked)} className="accent-bt-primary" />
+              <span className="text-[12px] text-bt-muted">Iniciar Ollama automáticamente con BrainTwo</span>
+            </label>
           )}
         </>
       )}
