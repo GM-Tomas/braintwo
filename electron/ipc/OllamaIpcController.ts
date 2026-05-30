@@ -67,9 +67,14 @@ export class OllamaIpcController {
 
     ipcMain.handle('ollama:pull-model', async (_e, name: string) => {
       const serverUrl = getServerUrl(context)
-      await context.ollamaService.pullModel(serverUrl, name, (progress) => {
-        context.broadcast('ollama:on-pull-progress', progress)
-      })
+      try {
+        await context.ollamaService.pullModel(serverUrl, name, (progress) => {
+          context.broadcast('ollama:on-pull-progress', progress)
+        })
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return // user cancelled — not an error
+        throw err
+      }
 
       // After pull, auto-set as active model if no model is set
       const cfg = readAiConfig(context.app.getPath('userData'))

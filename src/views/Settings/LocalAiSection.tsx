@@ -68,6 +68,7 @@ function PullProgressBar({ progress, onCancel }: { progress: OllamaPullProgress;
     ? Math.round(((progress.completed ?? 0) / progress.total) * 100)
     : null
   const friendlyName = ALL_CATALOG.find(m => m.name === progress.model)?.label ?? progress.model
+  const isPreparing = !progress.total || progress.total === 0
 
   return (
     <div className="rounded-[8px] border border-bt-border bg-bt-bg p-4 flex flex-col gap-3">
@@ -78,14 +79,18 @@ function PullProgressBar({ progress, onCancel }: { progress: OllamaPullProgress;
         </button>
       </div>
       <div className="h-2 w-full rounded-full bg-bt-border overflow-hidden">
-        <div className="h-full bg-gradient-to-r from-bt-primary to-bt-accent rounded-full"
-          style={{ width: pct !== null ? `${pct}%` : '5%', transition: 'width 400ms ease' }} />
+        {isPreparing ? (
+          <div className="h-full w-full bg-gradient-to-r from-bt-primary to-bt-accent rounded-full animate-pulse opacity-60" />
+        ) : (
+          <div className="h-full bg-gradient-to-r from-bt-primary to-bt-accent rounded-full"
+            style={{ width: `${pct}%`, transition: 'width 400ms ease' }} />
+        )}
       </div>
       <div className="flex items-center justify-between text-[11px] text-bt-muted">
-        <span>{progress.status}</span>
-        {progress.total && progress.total > 0 && (
+        <span>{isPreparing ? 'Preparando descarga…' : progress.status}</span>
+        {!isPreparing && (
           <span className="tabular-nums">
-            {formatBytes(progress.completed ?? 0)} / {formatBytes(progress.total)}
+            {formatBytes(progress.completed ?? 0)} / {formatBytes(progress.total ?? 0)}
           </span>
         )}
       </div>
@@ -384,11 +389,15 @@ export function LocalAiSection({
     setPullProgress({ model: modelName, status: 'Iniciando…', done: false })
     try {
       await ollamaService.pullModel(modelName)
-      onModelChange(modelName)
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        setError(err instanceof Error ? err.message : 'Error al descargar el modelo')
+      // Verify the model actually downloaded before setting it as active
+      const models = await ollamaService.listModels()
+      setInstalledModels(models)
+      if (models.some(m => m.name === modelName)) {
+        onModelChange(modelName)
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al descargar el modelo')
+    } finally {
       setPullProgress(null)
     }
   }

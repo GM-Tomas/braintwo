@@ -103,7 +103,8 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
 
   const hasConfig = Boolean(config?.provider && (config.provider === 'ollama' || config.apiKey))
   const localServerDown = config?.provider === 'ollama' && ollamaRunning === false
-  const canSend = hasConfig && !localServerDown
+  const localModelMissing = config?.provider === 'ollama' && ollamaRunning === true && !config.model
+  const canSend = hasConfig && !localServerDown && !localModelMissing
 
   const send = useCallback(async () => {
     const text = input.trim()
@@ -201,7 +202,7 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
       />
 
       {!hasConfig && (
-        <div className="mx-14 mt-4 rounded-[8px] border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-[13px] text-yellow-400">
+        <div className="mx-14 mt-4 rounded-[8px] border border-bt-amber/40 bg-bt-amber/10 px-4 py-3 text-[13px] text-bt-amber">
           No hay proveedor de IA configurado.{' '}
           <button
             type="button"
@@ -214,8 +215,22 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
         </div>
       )}
 
+      {hasConfig && localModelMissing && (
+        <div className="mx-14 mt-4 rounded-[8px] border border-bt-amber/40 bg-bt-amber/10 px-4 py-3 text-[13px] text-bt-amber">
+          Todavía no elegiste un modelo de IA local.{' '}
+          <button
+            type="button"
+            className="underline hover:no-underline"
+            onClick={() => onNavigate('settings')}
+          >
+            Terminá la configuración en Ajustes
+          </button>
+          .
+        </div>
+      )}
+
       {hasConfig && localServerDown && (
-        <div className="mx-14 mt-4 rounded-[8px] border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-[13px] text-yellow-400">
+        <div className="mx-14 mt-4 rounded-[8px] border border-bt-amber/40 bg-bt-amber/10 px-4 py-3 text-[13px] text-bt-amber">
           El servidor local de IA no está corriendo.{' '}
           <button
             type="button"
@@ -287,9 +302,11 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
             placeholder={
               !hasConfig
                 ? 'Configurá un proveedor de IA en Ajustes primero'
-                : localServerDown
-                  ? 'El servidor local de IA no está corriendo'
-                  : 'Preguntá algo… (Enter para enviar, Shift+Enter nueva línea)'
+                : localModelMissing
+                  ? 'Elegí un modelo en Ajustes para empezar'
+                  : localServerDown
+                    ? 'El servidor local de IA no está corriendo'
+                    : 'Preguntá algo… (Enter para enviar, Shift+Enter nueva línea)'
             }
             className="max-h-[120px] flex-1 resize-none rounded-[10px] border border-bt-border bg-bt-surf px-4 py-2.5 text-[14px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/40 disabled:opacity-40"
           />
