@@ -104,12 +104,13 @@ interface ModelDropdownProps {
   installedModels: OllamaModel[]
   activeModel: string
   isPulling: boolean
+  catalogEnabled: boolean
   onSelect: (name: string) => void
   onDownload: (name: string) => void
   onDelete: (name: string) => void
 }
 
-function ModelDropdown({ installedModels, activeModel, isPulling, onSelect, onDownload, onDelete }: ModelDropdownProps) {
+function ModelDropdown({ installedModels, activeModel, isPulling, catalogEnabled, onSelect, onDownload, onDelete }: ModelDropdownProps) {
   const [open, setOpen] = useState(false)
   const [showMore, setShowMore] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -123,7 +124,6 @@ function ModelDropdown({ installedModels, activeModel, isPulling, onSelect, onDo
   }, [])
 
   const isInstalled = (name: string) => installedModels.some(m => m.name === name)
-  // A model only counts as "selected" if it's actually installed.
   const activeIsInstalled = !!activeModel && isInstalled(activeModel)
   const activeInfo = activeIsInstalled ? ALL_CATALOG.find(m => m.name === activeModel) : undefined
   const extraInstalled = installedModels.filter(m => !ALL_CATALOG.some(c => c.name === m.name))
@@ -193,35 +193,52 @@ function ModelDropdown({ installedModels, activeModel, isPulling, onSelect, onDo
 
       {open && (
         <div className="absolute top-full left-0 right-0 mt-1 z-20 rounded-[8px] border border-bt-border bg-bt-surf shadow-lg overflow-hidden max-h-72 overflow-y-auto">
-          <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-bt-dim font-medium">Recomendados</div>
-          {RECOMMENDED_MODELS.map(m => (
-            <ModelRow key={m.name} {...m} installed={isInstalled(m.name)} isActive={activeModel === m.name && isInstalled(m.name)} />
-          ))}
 
-          <button type="button"
-            className="w-full flex items-center justify-between px-3 py-2 text-[12px] text-bt-muted hover:bg-bt-hover transition-colors border-t border-bt-border/50 mt-1"
-            onClick={(e) => { e.stopPropagation(); setShowMore(v => !v) }}>
-            <span>Más modelos</span>
-            <Icon name="chev" size={12} className={`transition-transform ${showMore ? 'rotate-90' : ''}`} />
-          </button>
-
-          {showMore && (
+          {catalogEnabled ? (
             <>
-              <div className="px-3 pt-1 pb-1 text-[10px] uppercase tracking-wider text-bt-dim font-medium bg-bt-bg/40">Avanzados</div>
-              {MORE_MODELS.map(m => (
+              <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-bt-dim font-medium">Recomendados</div>
+              {RECOMMENDED_MODELS.map(m => (
                 <ModelRow key={m.name} {...m} installed={isInstalled(m.name)} isActive={activeModel === m.name && isInstalled(m.name)} />
               ))}
-            </>
-          )}
 
-          {extraInstalled.length > 0 && (
-            <>
-              <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-bt-dim font-medium border-t border-bt-border/50 mt-1">Otros instalados</div>
-              {extraInstalled.map(m => (
+              <button type="button"
+                className="w-full flex items-center justify-between px-3 py-2 text-[12px] text-bt-muted hover:bg-bt-hover transition-colors border-t border-bt-border/50 mt-1"
+                onClick={(e) => { e.stopPropagation(); setShowMore(v => !v) }}>
+                <span>Más modelos</span>
+                <Icon name="chev" size={12} className={`transition-transform ${showMore ? 'rotate-90' : ''}`} />
+              </button>
+
+              {showMore && (
+                <>
+                  <div className="px-3 pt-1 pb-1 text-[10px] uppercase tracking-wider text-bt-dim font-medium bg-bt-bg/40">Avanzados</div>
+                  {MORE_MODELS.map(m => (
+                    <ModelRow key={m.name} {...m} installed={isInstalled(m.name)} isActive={activeModel === m.name && isInstalled(m.name)} />
+                  ))}
+                </>
+              )}
+
+              {extraInstalled.length > 0 && (
+                <>
+                  <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-bt-dim font-medium border-t border-bt-border/50 mt-1">Otros instalados</div>
+                  {extraInstalled.map(m => (
+                    <ModelRow key={m.name} name={m.name} label={m.name} size={formatBytes(m.size)} hint=""
+                      installed={true} isActive={activeModel === m.name} />
+                  ))}
+                </>
+              )}
+            </>
+          ) : (
+            /* Manual mode: only show models from the server */
+            installedModels.length === 0 ? (
+              <div className="px-3 py-4 text-[12px] text-bt-muted text-center">
+                No hay modelos cargados en el servidor
+              </div>
+            ) : (
+              installedModels.map(m => (
                 <ModelRow key={m.name} name={m.name} label={m.name} size={formatBytes(m.size)} hint=""
                   installed={true} isActive={activeModel === m.name} />
-              ))}
-            </>
+              ))
+            )
           )}
         </div>
       )}
@@ -305,11 +322,12 @@ export function LocalAiSection({
   }, [status, hasValidModel, registerGuard])
 
   const loadStatus = useCallback(async (url?: string): Promise<OllamaStatus> => {
+    const target = url ?? urlInput
     try {
-      const s = await ollamaService.getStatus(url ?? urlInput)
+      const s = await ollamaService.getStatus(target)
       setStatus(s)
       if (s === 'running') {
-        const models = await ollamaService.listModels()
+        const models = await ollamaService.listModels(target)
         setInstalledModels(models)
       } else {
         setInstalledModels([])
@@ -322,12 +340,16 @@ export function LocalAiSection({
   }, [ollamaService, urlInput])
 
   useEffect(() => {
-    void loadStatus()
-    const unsubStatus = ollamaService.onStatusChange((s) => {
-      setStatus(s)
-      if (s === 'running') void ollamaService.listModels().then(setInstalledModels).catch(() => {})
-      if (s !== 'running') setInstalledModels([])
-    })
+    // Manual mode: don't auto-connect on mount, only on explicit "Conectar" click
+    if (ollamaMode === 'ollama') void loadStatus()
+    // onStatusChange tracks Ollama process events — only relevant in assisted mode
+    const unsubStatus = ollamaMode === 'ollama'
+      ? ollamaService.onStatusChange((s) => {
+          setStatus(s)
+          if (s === 'running') void ollamaService.listModels(urlInput).then(setInstalledModels).catch(() => {})
+          if (s !== 'running') setInstalledModels([])
+        })
+      : () => {}
     const unsubPull = ollamaService.onPullProgress((p) => {
       setPullProgress(p.done ? null : p)
       if (p.done) void ollamaService.listModels().then(setInstalledModels).catch(() => {})
@@ -436,7 +458,9 @@ export function LocalAiSection({
 
   const handleModeSwitch = (mode: 'ollama' | 'manual') => {
     setError(null)
-    onModeChange(mode)  // parent resets URL atomically along with mode
+    setStatus('not-installed')
+    setInstalledModels([])
+    onModeChange(mode)
     if (mode === 'ollama') {
       setUrlInput(DEFAULT_URL)
       void loadStatus(DEFAULT_URL)
@@ -542,6 +566,7 @@ export function LocalAiSection({
                 installedModels={installedModels}
                 activeModel={activeModel}
                 isPulling={false}
+                catalogEnabled={true}
                 onSelect={onModelChange}
                 onDownload={(name) => void handlePull(name)}
                 onDelete={(name) => void handleDeleteModel(name)}
@@ -580,7 +605,7 @@ export function LocalAiSection({
               <label className="flex flex-col gap-1 flex-1">
                 <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">URL del servidor</span>
                 <input type="url" value={urlInput}
-                  onChange={(e) => { setUrlInput(e.target.value); setConnectFeedback(null) }}
+                  onChange={(e) => { setUrlInput(e.target.value); setConnectFeedback(null); setStatus('not-installed'); setInstalledModels([]) }}
                   onKeyDown={(e) => e.key === 'Enter' && void handleManualConnect()}
                   placeholder="http://localhost:1234"
                   className={`h-9 rounded-[8px] border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none transition-colors ${
@@ -624,6 +649,7 @@ export function LocalAiSection({
                     installedModels={installedModels}
                     activeModel={activeModel}
                     isPulling={false}
+                    catalogEnabled={false}
                     onSelect={onModelChange}
                     onDownload={(name) => void handlePull(name)}
                     onDelete={(name) => void handleDeleteModel(name)}

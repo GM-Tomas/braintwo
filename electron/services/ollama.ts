@@ -123,12 +123,15 @@ export function createOllamaService(): OllamaService {
     },
 
     async getStatus(serverUrl) {
+      // Check the server first — works for any OpenAI-compatible server, not just Ollama
+      const running = await checkHealth(serverUrl)
+      if (running) return 'running'
+
+      // Server not responding — check binary to distinguish not-installed vs not-running
       const binary = knownBinary ?? findOllamaBinary()
       if (!binary) return 'not-installed'
       knownBinary = binary
-
-      const running = await checkHealth(serverUrl)
-      return running ? 'running' : 'not-running'
+      return 'not-running'
     },
 
     async install(onProgress) {
@@ -275,17 +278,23 @@ export function createOllamaService(): OllamaService {
     },
 
     async listModels(serverUrl) {
-      // Try Ollama-specific endpoint first, fall back to OpenAI-compatible /v1/models
+      // Try Ollama-specific endpoint first, fall back to OpenAI-compatible /v1/models.
+      // Some servers (e.g. LM Studio) return HTTP 200 on /api/tags but with an error body —
+      // so we validate that the response actually has the Ollama shape (models array).
       const ollamaRes = await fetch(`${serverUrl}/api/tags`, { signal: AbortSignal.timeout(3000) }).catch(() => null)
       if (ollamaRes?.ok) {
         const data = await ollamaRes.json() as {
           models?: Array<{ name: string; size: number; modified_at: string }>
+          error?: string
         }
-        return (data.models ?? []).map(m => ({
-          name: m.name,
-          size: m.size,
-          modifiedAt: m.modified_at
-        }))
+        if (!data.error && Array.isArray(data.models)) {
+          return data.models.map(m => ({
+            name: m.name,
+            size: m.size,
+            modifiedAt: m.modified_at
+          }))
+        }
+        // Not real Ollama format — fall through to OpenAI-compatible endpoint
       }
 
       // Generic OpenAI-compatible server (LM Studio, Jan, llama.cpp, etc.)

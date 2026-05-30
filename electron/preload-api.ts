@@ -81,7 +81,7 @@ export interface BrainTwoApi {
     uninstall: () => Promise<void>
     startServer: () => Promise<void>
     stopServer: () => Promise<void>
-    listModels: () => Promise<OllamaModel[]>
+    listModels: (serverUrl?: string) => Promise<OllamaModel[]>
     pullModel: (name: string) => Promise<void>
     cancelPull: () => Promise<void>
     deleteModel: (name: string) => Promise<void>
@@ -184,7 +184,7 @@ export function createApi(
       uninstall: () => ipcRenderer.invoke('ollama:uninstall'),
       startServer: () => ipcRenderer.invoke('ollama:start-server'),
       stopServer: () => ipcRenderer.invoke('ollama:stop-server'),
-      listModels: () => ipcRenderer.invoke('ollama:list-models'),
+      listModels: (serverUrl?: string) => ipcRenderer.invoke('ollama:list-models', serverUrl),
       pullModel: (name: string) => ipcRenderer.invoke('ollama:pull-model', name),
       cancelPull: () => ipcRenderer.invoke('ollama:cancel-pull'),
       deleteModel: (name: string) => ipcRenderer.invoke('ollama:delete-model', name),

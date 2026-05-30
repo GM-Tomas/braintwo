@@ -61,8 +61,8 @@ export class OllamaIpcController {
       context.broadcast('ollama:on-status', 'not-running')
     })
 
-    ipcMain.handle('ollama:list-models', async () => {
-      return context.ollamaService.listModels(getServerUrl(context))
+    ipcMain.handle('ollama:list-models', async (_e, serverUrl?: string) => {
+      return context.ollamaService.listModels(serverUrl ?? getServerUrl(context))
     })
 
     ipcMain.handle('ollama:pull-model', async (_e, name: string) => {

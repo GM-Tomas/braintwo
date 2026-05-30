@@ -86,7 +86,7 @@ export interface BrainTwoBridge {
     uninstall: () => Promise<void>
     startServer: () => Promise<void>
     stopServer: () => Promise<void>
-    listModels: () => Promise<OllamaModel[]>
+    listModels: (serverUrl?: string) => Promise<OllamaModel[]>
     pullModel: (name: string) => Promise<void>
     cancelPull: () => Promise<void>
     deleteModel: (name: string) => Promise<void>

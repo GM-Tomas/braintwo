@@ -22,8 +22,8 @@ export class IpcOllamaService implements IOllamaService {
     return window.braintwo.ollama.stopServer()
   }
 
-  async listModels(): Promise<OllamaModel[]> {
-    return window.braintwo.ollama.listModels()
+  async listModels(serverUrl?: string): Promise<OllamaModel[]> {
+    return window.braintwo.ollama.listModels(serverUrl)
   }
 
   async pullModel(name: string): Promise<void> {
