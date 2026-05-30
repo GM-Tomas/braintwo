@@ -1,4 +1,4 @@
-export type AiProvider = 'anthropic' | 'openai-compat' | 'gemini' | 'deepseek' | 'opencode-zen'
+export type AiProvider = 'anthropic' | 'openai-compat' | 'gemini' | 'deepseek' | 'opencode-zen' | 'ollama'
 
 export interface ProviderSpecificConfig {
   apiKey: string
@@ -18,6 +18,42 @@ export interface AiConfigProfile {
   }
 }
 
+export interface OllamaConfig {
+  enabled: boolean
+  mode: 'ollama' | 'manual'
+  serverUrl: string
+  activeModel: string
+  autoStart: boolean
+}
+
+export type OllamaStatus =
+  | 'not-installed'
+  | 'installing'
+  | 'not-running'
+  | 'starting'
+  | 'running'
+  | 'error'
+
+export interface OllamaModel {
+  name: string
+  size: number
+  modifiedAt: string
+}
+
+export interface OllamaPullProgress {
+  model: string
+  status: string
+  completed?: number
+  total?: number
+  done: boolean
+}
+
+export interface OllamaInstallProgress {
+  stage: 'downloading' | 'installing' | 'done' | 'error'
+  percent?: number
+  message?: string
+}
+
 export interface AiConfig {
   provider: AiProvider
   apiKey: string
@@ -31,6 +67,7 @@ export interface AiConfig {
   }
   activeProfileId?: string
   profiles?: AiConfigProfile[]
+  ollama?: Partial<OllamaConfig>
 }
 
 export interface ChatMessage {

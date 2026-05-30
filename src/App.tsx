@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppErrorEvent, DbChat, View, WAConnectionState } from '@shared/types'
+import { NavigationGuardContext, type ExitGuard } from '@/core/NavigationGuardContext'
 import { Onboarding, FTU } from './views/Onboarding'
 import { Search } from './views/Search'
 import { Timeline } from './views/Timeline'
@@ -40,8 +41,19 @@ function initialPhase(): Phase {
 export default function App() {
   const { connectionService, settingsRepository, aiService } = useDependencies()
   const [phase, setPhase] = useState<Phase>(() => initialPhase())
-  const [view, setView] = useState<View>(() =>
+  const [view, setViewRaw] = useState<View>(() =>
     readFlag(ONBOARDED_KEY) ? 'timeline' : 'onboarding'
+  )
+
+  // Navigation guard: a view (e.g. local AI config) can block leaving until it's complete.
+  const exitGuardRef = useRef<ExitGuard | null>(null)
+  const setView = useCallback((v: View) => {
+    if (exitGuardRef.current && !exitGuardRef.current()) return
+    setViewRaw(v)
+  }, [])
+  const navigationGuard = useMemo(
+    () => ({ registerGuard: (fn: ExitGuard | null) => { exitGuardRef.current = fn } }),
+    []
   )
   const [autoRouted, setAutoRouted] = useState(false)
   const [waState, setWaState] = useState<WAConnectionState>('connecting')
@@ -142,7 +154,7 @@ export default function App() {
       if (qr) {
         setPhase((prev) => {
           if (prev !== 'app') return prev
-          setView('onboarding')
+          setViewRaw('onboarding')
           return 'qr'
         })
       }
@@ -173,7 +185,7 @@ export default function App() {
     const offQr = connectionService.onQr(() => {
       setPhase((prev) => {
         if (prev !== 'app') return prev
-        setView('onboarding')
+        setViewRaw('onboarding')
         return 'qr'
       })
     })
@@ -198,7 +210,7 @@ export default function App() {
       writeFlag(FTU_KEY, true)
       if (phase !== 'app') setPhase('app')
       if (!autoRouted) {
-        setView('timeline')
+        setViewRaw('timeline')
         setAutoRouted(true)
       }
       return
@@ -206,7 +218,7 @@ export default function App() {
     if (waState === 'logged-out') {
       setPhase(readFlag(ONBOARDED_KEY) || readFlag(FTU_KEY) ? 'qr' : 'welcome')
       writeFlag(ONBOARDED_KEY, false)
-      setView('onboarding')
+      setViewRaw('onboarding')
       setShowLogoutConfirm(false)
     }
   }, [waState, autoRouted, phase])
@@ -222,6 +234,7 @@ export default function App() {
   }
 
   return (
+    <NavigationGuardContext.Provider value={navigationGuard}>
     <div className="flex h-full bg-bt-bg text-bt-text font-sans">
       <Sidebar
         view={view}
@@ -353,5 +366,6 @@ export default function App() {
         </div>
       )}
     </div>
+    </NavigationGuardContext.Provider>
   )
 }

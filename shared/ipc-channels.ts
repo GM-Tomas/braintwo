@@ -38,5 +38,18 @@ export const IPC_CHANNELS = {
     GET_CONFIG: 'ai:get-config',
     SET_CONFIG: 'ai:set-config',
     SEND: 'ai:send',
+  },
+  OLLAMA: {
+    GET_STATUS: 'ollama:get-status',
+    INSTALL: 'ollama:install',
+    START_SERVER: 'ollama:start-server',
+    STOP_SERVER: 'ollama:stop-server',
+    LIST_MODELS: 'ollama:list-models',
+    PULL_MODEL: 'ollama:pull-model',
+    CANCEL_PULL: 'ollama:cancel-pull',
+    DELETE_MODEL: 'ollama:delete-model',
+    ON_STATUS: 'ollama:on-status',
+    ON_PULL_PROGRESS: 'ollama:on-pull-progress',
+    ON_INSTALL_PROGRESS: 'ollama:on-install-progress',
   }
 } as const

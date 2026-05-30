@@ -210,6 +210,19 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
       renameChat: vi.fn(async () => {}),
       saveChatMessage: vi.fn(async () => 1),
       deleteLastMessage: vi.fn(async () => {})
+    },
+    ollama: {
+      getStatus: vi.fn(async () => 'not-installed' as const),
+      install: vi.fn(async () => {}),
+      startServer: vi.fn(async () => {}),
+      stopServer: vi.fn(async () => {}),
+      listModels: vi.fn(async () => []),
+      pullModel: vi.fn(async () => {}),
+      cancelPull: vi.fn(async () => {}),
+      deleteModel: vi.fn(async () => {}),
+      onPullProgress: vi.fn(() => () => {}),
+      onInstallProgress: vi.fn(() => () => {}),
+      onStatusChange: vi.fn(() => () => {})
     }
   }
 

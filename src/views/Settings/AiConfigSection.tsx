@@ -2,12 +2,20 @@ import { useEffect, useState } from 'react'
 import type { AiConfig, AiProvider, AiConfigProfile } from '@shared/types'
 import { useDependencies } from '@/core/infrastructure/DependenciesContext'
 import { Icon } from '@/lib/icons'
+import { LocalAiSection } from './LocalAiSection'
 
 export function AiConfigSection() {
   const { aiService } = useDependencies()
   const [profiles, setProfiles] = useState<AiConfigProfile[]>([])
   const [activeProfileId, setActiveProfileId] = useState<string>('')
   const [aiDraft, setAiDraft] = useState<Partial<AiConfigProfile>>({})
+  const [ollamaCfg, setOllamaCfg] = useState({
+    activeModel: '',
+    serverUrl: 'http://localhost:11434',
+    autoStart: true,
+    enabled: false,
+    mode: 'ollama' as 'ollama' | 'manual'
+  })
 
   useEffect(() => {
     void aiService.getConfig().then((cfg) => {
@@ -45,13 +53,24 @@ export function AiConfigSection() {
           setAiDraft(initialProfile)
         } else {
           setProfiles(loadedProfiles)
-          if (!currentActiveId || !loadedProfiles.some(p => p.id === currentActiveId)) {
+          // 'local' is a valid activeProfileId even though it's not in the profiles array
+          if (currentActiveId !== 'local' && (!currentActiveId || !loadedProfiles.some(p => p.id === currentActiveId))) {
             currentActiveId = loadedProfiles[0]!.id
           }
           setActiveProfileId(currentActiveId)
-          const activeProfile = loadedProfiles.find(p => p.id === currentActiveId)!
-          setAiDraft(activeProfile)
+          if (currentActiveId !== 'local') {
+            const activeProfile = loadedProfiles.find(p => p.id === currentActiveId)!
+            setAiDraft(activeProfile)
+          }
         }
+        const o = cfg.ollama
+        setOllamaCfg({
+          activeModel: o?.activeModel ?? '',
+          serverUrl: o?.serverUrl ?? 'http://localhost:11434',
+          autoStart: o?.autoStart ?? true,
+          enabled: o?.enabled ?? false,
+          mode: o?.mode ?? 'ollama'
+        })
       } else {
         const defaultId = 'profile-default'
         const initialProfile: AiConfigProfile = {
@@ -81,6 +100,36 @@ export function AiConfigSection() {
       }
     })
   }, [aiService])
+
+  const handleLocalSelect = () => {
+    setActiveProfileId('local')
+    void aiService.setConfig({
+      provider: 'ollama',
+      apiKey: '',
+      model: ollamaCfg.activeModel,
+      activeProfileId: 'local',
+      profiles,
+      ollama: { ...ollamaCfg, enabled: true }
+    })
+  }
+
+  const handleOllamaModelChange = (model: string) => {
+    const next = { ...ollamaCfg, activeModel: model }
+    setOllamaCfg(next)
+    void aiService.setConfig({ model, ollama: next, profiles })
+  }
+
+  const handleOllamaServerUrlChange = (serverUrl: string) => {
+    const next = { ...ollamaCfg, serverUrl }
+    setOllamaCfg(next)
+    void aiService.setConfig({ ollama: next, profiles })
+  }
+
+  const handleOllamaAutoStartChange = (autoStart: boolean) => {
+    const next = { ...ollamaCfg, autoStart }
+    setOllamaCfg(next)
+    void aiService.setConfig({ ollama: next, profiles })
+  }
 
   const handleProfileSelect = (profileId: string) => {
     const selected = profiles.find((p) => p.id === profileId)
@@ -369,6 +418,22 @@ export function AiConfigSection() {
             </div>
           )
         })}
+        {/* Fixed Local tab */}
+        <div
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[20px] text-[13px] font-medium transition-all cursor-pointer border ${
+            activeProfileId === 'local'
+              ? 'bg-bt-hover text-bt-text border-bt-border shadow-bt-nav-active'
+              : 'bg-bt-bg text-bt-muted border-transparent hover:bg-bt-hover/60 hover:text-bt-text'
+          }`}
+          onClick={handleLocalSelect}
+        >
+          <Icon name="cpu" size={12} className="shrink-0" />
+          <span>Local</span>
+          {ollamaCfg.enabled && (
+            <span className="h-1.5 w-1.5 rounded-full bg-bt-green" />
+          )}
+        </div>
+
         {/* Add Profile Pill */}
         <button
           type="button"
@@ -380,78 +445,101 @@ export function AiConfigSection() {
         </button>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1 sm:col-span-2">
-          <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">Nombre del Perfil</span>
-          <input
-            type="text"
-            value={aiDraft.name ?? ''}
-            onChange={(e) => handleProfileNameChange(e.target.value)}
-            placeholder="Ej: OpenAI Rápido, Claude..."
-            className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/50"
+      {activeProfileId === 'local' ? (
+        <div className="mt-4">
+          <LocalAiSection
+            activeModel={ollamaCfg.activeModel}
+            serverUrl={ollamaCfg.serverUrl}
+            autoStart={ollamaCfg.autoStart}
+            ollamaMode={ollamaCfg.mode}
+            onModelChange={handleOllamaModelChange}
+            onServerUrlChange={handleOllamaServerUrlChange}
+            onAutoStartChange={handleOllamaAutoStartChange}
+            onModeChange={(mode) => {
+              const next = {
+                ...ollamaCfg,
+                mode,
+                ...(mode === 'ollama' ? { serverUrl: 'http://localhost:11434' } : {})
+              }
+              setOllamaCfg(next)
+              void aiService.setConfig({ ollama: next, profiles })
+            }}
           />
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">Proveedor</span>
-          <select
-            value={aiDraft.provider ?? ''}
-            onChange={(e) => handleProviderChange(e.target.value as AiProvider)}
-            className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text outline-none focus:border-bt-primary/50"
-          >
-            <option value="">Seleccionar…</option>
-            <option value="anthropic">Anthropic (Claude)</option>
-            <option value="gemini">Google Gemini</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="opencode-zen">OpenCode Zen</option>
-            <option value="openai-compat">Otro (OpenAI-compatible)</option>
-          </select>
-        </label>
-
-        <label className="flex flex-col gap-1">
-          <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">Modelo</span>
-          <input
-            type="text"
-            value={aiDraft.model ?? ''}
-            onChange={(e) => handleFieldChange('model', e.target.value)}
-            placeholder={modelPlaceholder}
-            className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/50"
-          />
-        </label>
-
-        <label className="flex flex-col gap-1 sm:col-span-2">
-          <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">API Key</span>
-          <input
-            type="password"
-            value={aiDraft.apiKey ?? ''}
-            onChange={(e) => handleFieldChange('apiKey', e.target.value)}
-            placeholder={
-              aiDraft.provider === 'deepseek'
-                ? 'sk-…'
-                : aiDraft.provider === 'opencode-zen'
-                  ? 'Tu API Key de Zen…'
-                  : 'sk-… / AIza… / gsk_…'
-            }
-            autoComplete="off"
-            className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/50"
-          />
-        </label>
-
-        {['openai-compat', 'deepseek', 'opencode-zen'].includes(aiDraft.provider ?? '') && (
+        </div>
+      ) : (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 sm:col-span-2">
-            <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">
-              Base URL {aiDraft.provider !== 'openai-compat' && '(Opcional)'}
-            </span>
+            <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">Nombre del Perfil</span>
             <input
-              type="url"
-              value={aiDraft.baseUrl ?? ''}
-              onChange={(e) => handleFieldChange('baseUrl', e.target.value)}
-              placeholder={baseUrlPlaceholder}
+              type="text"
+              value={aiDraft.name ?? ''}
+              onChange={(e) => handleProfileNameChange(e.target.value)}
+              placeholder="Ej: OpenAI Rápido, Claude..."
               className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/50"
             />
           </label>
-        )}
-      </div>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">Proveedor</span>
+            <select
+              value={aiDraft.provider ?? ''}
+              onChange={(e) => handleProviderChange(e.target.value as AiProvider)}
+              className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text outline-none focus:border-bt-primary/50"
+            >
+              <option value="">Seleccionar…</option>
+              <option value="anthropic">Anthropic (Claude)</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="deepseek">DeepSeek</option>
+              <option value="opencode-zen">OpenCode Zen</option>
+              <option value="openai-compat">Otro (OpenAI-compatible)</option>
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">Modelo</span>
+            <input
+              type="text"
+              value={aiDraft.model ?? ''}
+              onChange={(e) => handleFieldChange('model', e.target.value)}
+              placeholder={modelPlaceholder}
+              className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/50"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 sm:col-span-2">
+            <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">API Key</span>
+            <input
+              type="password"
+              value={aiDraft.apiKey ?? ''}
+              onChange={(e) => handleFieldChange('apiKey', e.target.value)}
+              placeholder={
+                aiDraft.provider === 'deepseek'
+                  ? 'sk-…'
+                  : aiDraft.provider === 'opencode-zen'
+                    ? 'Tu API Key de Zen…'
+                    : 'sk-… / AIza… / gsk_…'
+              }
+              autoComplete="off"
+              className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/50"
+            />
+          </label>
+
+          {['openai-compat', 'deepseek', 'opencode-zen'].includes(aiDraft.provider ?? '') && (
+            <label className="flex flex-col gap-1 sm:col-span-2">
+              <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">
+                Base URL {aiDraft.provider !== 'openai-compat' && '(Opcional)'}
+              </span>
+              <input
+                type="url"
+                value={aiDraft.baseUrl ?? ''}
+                onChange={(e) => handleFieldChange('baseUrl', e.target.value)}
+                placeholder={baseUrlPlaceholder}
+                className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/50"
+              />
+            </label>
+          )}
+        </div>
+      )}
 
       <div className="mt-6 flex items-center gap-2 text-[12px] text-bt-dim">
         <span className="h-1.5 w-1.5 rounded-full bg-bt-accent animate-pulse" />

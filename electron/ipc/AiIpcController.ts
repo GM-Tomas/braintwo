@@ -16,7 +16,7 @@ export class AiIpcController {
     ipcMain.handle('ai:send', async (_e, messages: ChatMessage[], goodSourceId?: number, chatId?: number) => {
       if (!context.aiChat.value) throw new Error('Storage not ready')
       const config = readAiConfig(context.app.getPath('userData'))
-      if (!config?.apiKey) throw new Error('IA no configurada. Configurá un proveedor en Settings.')
+      if (!config?.apiKey && config?.provider !== 'ollama') throw new Error('IA no configurada. Configurá un proveedor en Settings.')
       const today = new Date().toISOString().split('T')[0]!
       return context.aiChat.value.send(config, messages, today, goodSourceId, chatId)
     })

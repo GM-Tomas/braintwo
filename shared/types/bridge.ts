@@ -1,6 +1,6 @@
 import type { RecentMessage } from './messages'
 import type { SearchResult, ModelProgress } from './search'
-import type { AiConfig, ChatMessage, AiChatResponse, DbChat, DbChatMessage } from './ai'
+import type { AiConfig, ChatMessage, AiChatResponse, DbChat, DbChatMessage, OllamaStatus, OllamaModel, OllamaPullProgress, OllamaInstallProgress } from './ai'
 import type { WAConnectionState, SyncStatus, AppErrorEvent } from './sync'
 
 export type View = 'onboarding' | 'search' | 'timeline' | 'settings' | 'chat'
@@ -79,6 +79,19 @@ export interface BrainTwoBridge {
     renameChat: (chatId: number, title: string) => Promise<void>
     saveChatMessage: (chatId: number, role: 'user' | 'assistant', content: string, sources: string | null) => Promise<number>
     deleteLastMessage: (chatId: number) => Promise<void>
+  }
+  ollama: {
+    getStatus: (serverUrl?: string) => Promise<OllamaStatus>
+    install: () => Promise<void>
+    startServer: () => Promise<void>
+    stopServer: () => Promise<void>
+    listModels: () => Promise<OllamaModel[]>
+    pullModel: (name: string) => Promise<void>
+    cancelPull: () => Promise<void>
+    deleteModel: (name: string) => Promise<void>
+    onPullProgress: (cb: (p: OllamaPullProgress) => void) => Unsubscribe
+    onInstallProgress: (cb: (p: OllamaInstallProgress) => void) => Unsubscribe
+    onStatusChange: (cb: (status: OllamaStatus) => void) => Unsubscribe
   }
 }
 

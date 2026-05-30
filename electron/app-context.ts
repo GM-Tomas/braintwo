@@ -9,6 +9,7 @@ import type { SyncStatusTracker } from './services/sync-status'
 import type { MessageBatcher } from './main-helpers'
 import type { RecentMessage } from './services/ingest'
 import type { WAConnectionState } from './services/whatsapp-state'
+import type { OllamaService } from './services/ollama'
 
 export interface AppContext {
   app: App
@@ -26,6 +27,7 @@ export interface AppContext {
   isQuitting: { value: boolean }
   lastConnectionState: { value: WAConnectionState }
   lastQr: { value: string | null }
+  ollamaService: OllamaService
   showWindow: () => void
   broadcast: (channel: string, payload: unknown) => void
   reportError: (code: string, message: string, recoverable?: boolean) => void
