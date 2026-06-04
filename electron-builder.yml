@@ -1,5 +1,6 @@
 appId: com.syntropy.braintwo
 productName: BrainTwo
+npmRebuild: true
 copyright: Copyright © 2026 Syntropy
 directories:
   output: dist
@@ -15,9 +16,8 @@ extraResources:
       - '*.png'
 asar: true
 asarUnpack:
-  - node_modules/sqlite-vec/**/*
-  - node_modules/sqlite-vec-*/**/*
-  - node_modules/better-sqlite3/**/*
+  - "**/*.node"
+  - "**/*.dylib"
 win:
   icon: build/icon.png
   target:
@@ -29,13 +29,23 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
   runAfterFinish: true
-  deleteAppDataOnUninstall: true
 msi:
   runAfterFinish: true
   perMachine: false
 mac:
   target: dmg
   category: public.app-category.productivity
+  icon: build/icon.png
+dmg:
+  artifactName: BrainTwo-${version}.${ext}
+  contents:
+    - x: 410
+      y: 150
+      type: link
+      path: /Applications
+    - x: 130
+      y: 150
+      type: file
 linux:
   target: AppImage
   category: Utility

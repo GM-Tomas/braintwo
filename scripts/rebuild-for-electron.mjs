@@ -22,9 +22,10 @@ if (existsSync(ELECTRON_MARKER)) {
 
 console.log('[rebuild] Rebuilding better-sqlite3 against Electron ABI…')
 try {
-  execSync('npx electron-rebuild -f -w better-sqlite3', {
+  execSync('npx @electron/rebuild -f -w better-sqlite3', {
     stdio: 'inherit',
-    cwd: root
+    cwd: root,
+    env: { ...process.env, NODE_OPTIONS: '' }
   })
   writeFileSync(ELECTRON_MARKER, new Date().toISOString())
   try {
