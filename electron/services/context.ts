@@ -4,7 +4,7 @@ import type { EmbeddingService } from './embeddings'
 import { callProvider } from './ai-provider'
 
 export interface ContextService {
-  queue(id: number, kind: MessageKind, text: string, media: MediaMeta | null): void
+  queue(id: number, kind: MessageKind, text: string, media: MediaMeta | null, timestamp: number): void
   backfill(): Promise<void>
 }
 
@@ -16,13 +16,42 @@ interface ContextServiceDeps {
 }
 
 const SYSTEM_PROMPT =
-  'Sos un asistente que indexa mensajes de WhatsApp para búsqueda semántica futura. ' +
-  'Tu tarea es generar UNA sola oración (máximo 120 caracteres) que describa de qué trata el mensaje ' +
-  'y en qué situación fue enviado, de forma que aparezca fácilmente en búsquedas futuras. ' +
-  'Sé específico. Responde SOLO con la oración, sin comillas ni explicaciones adicionales.'
+  'Sos un asistente que indexa mensajes de WhatsApp para búsqueda futura.\n' +
+  'Tu tarea es generar UNA sola oración (máximo 180 caracteres) que describa de qué trata el mensaje, ' +
+  'en qué situación fue enviado y qué fechas/días menciona (si menciona alguno).\n' +
+  'REGLA CRÍTICA PARA FECHAS:\n' +
+  '- Usa la "Fecha de envío" y el "día de la semana" provistos para resolver expresiones relativas temporales (por ejemplo: "hoy", "mañana", "el jueves", "este finde", "el lunes que viene", "ayer").\n' +
+  '- Traduce esas referencias relativas a fechas absolutas específicas (día y mes, por ejemplo: "28 de mayo") o rangos claros, y escríbelas explícitamente en tu respuesta.\n' +
+  '- Si el mensaje no contiene expresiones de tiempo, no inventes fechas.\n' +
+  'Asegúrate de incluir palabras clave relacionadas y sinónimos comunes ' +
+  '(por ejemplo, si habla de un doctor, incluye "médico"; si es un turno, incluye "cita"; si es fútbol, "deporte", etc.) ' +
+  'para facilitar su búsqueda posterior tanto por palabras clave como semántica.\n' +
+  'REGLA CRÍTICA PARA TAGS:\n' +
+  '- Al final de tu oración descriptiva, obligatoriamente debes agregar tags (etiquetas que comiencen con "#") que categoricen el mensaje.\n' +
+  '- Ejemplos de tags muy útiles para el usuario (puedes usar uno o varios de estos, u otros similares según el contexto, siempre en minúsculas):\n' +
+  '  * #recordatorio (para tareas, pendientes, citas, turnos, vencimientos o cosas por hacer)\n' +
+  '  * #idea (para reflexiones, borradores, pensamientos, inspiraciones, anotaciones creativas)\n' +
+  '  * #link (para URLs, páginas web, artículos, videos o lecturas guardadas)\n' +
+  '  * #contacto (para números de teléfono, direcciones, correos, nombres de personas)\n' +
+  '  * #evento (para reuniones, cumpleaños, recitales, viajes o citas con fecha/hora específica)\n' +
+  '  * #compra (para listas de compras, productos o cosas para adquirir)\n' +
+  '  * #gasto (para registros de dinero, transferencias, cuentas, precios, pagos o deudas)\n' +
+  '  * #receta (para comidas, ingredientes, recetas o restaurantes)\n' +
+  '  * #estudio (para apuntes, clases, cursos, tareas académicas o lecturas de aprendizaje)\n' +
+  '  * #trabajo (para cosas laborales, pendientes de oficina o proyectos)\n' +
+  '  * #info (para claves públicas, códigos de barras, CBU, datos duros o información útil general)\n' +
+  'Sé específico. Responde SOLO con la oración descriptiva seguida de los tags correspondientes, sin comillas ni explicaciones adicionales.'
 
-function buildUserPrompt(kind: MessageKind, text: string, media: MediaMeta | null): string {
-  const lines: string[] = [`Tipo: ${kind}`]
+function buildUserPrompt(kind: MessageKind, text: string, media: MediaMeta | null, timestamp: number): string {
+  const date = new Date(timestamp)
+  const dateStr = date.toISOString().split('T')[0]! // YYYY-MM-DD
+  const weekdayNames = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+  const weekday = weekdayNames[date.getDay()]!
+
+  const lines: string[] = [
+    `Tipo: ${kind}`,
+    `Fecha de envío: ${dateStr} (día de la semana: ${weekday})`
+  ]
   if (media?.ptt) lines.push('Es una nota de voz (push-to-talk)')
   if (typeof media?.durationSec === 'number') lines.push(`Duración: ${Math.round(media.durationSec)}s`)
   if (media?.fileName) lines.push(`Archivo: ${media.fileName}`)
@@ -32,7 +61,7 @@ function buildUserPrompt(kind: MessageKind, text: string, media: MediaMeta | nul
 }
 
 export function createContextService(deps: ContextServiceDeps): ContextService {
-  type QueueItem = { id: number; kind: MessageKind; text: string; media: MediaMeta | null }
+  type QueueItem = { id: number; kind: MessageKind; text: string; media: MediaMeta | null; timestamp: number }
   const pending: QueueItem[] = []
   const queued = new Set<number>()
   let running = false
@@ -52,7 +81,7 @@ export function createContextService(deps: ContextServiceDeps): ContextService {
           const raw = await callProvider({
             config,
             systemPrompt: SYSTEM_PROMPT,
-            messages: [{ role: 'user', content: buildUserPrompt(item.kind, item.text, item.media) }]
+            messages: [{ role: 'user', content: buildUserPrompt(item.kind, item.text, item.media, item.timestamp) }]
           })
           const note = raw.trim().slice(0, 500)
           if (!note) continue
@@ -88,8 +117,8 @@ export function createContextService(deps: ContextServiceDeps): ContextService {
   }
 
   return {
-    queue(id, kind, text, media) {
-      enqueue({ id, kind, text, media })
+    queue(id, kind, text, media, timestamp) {
+      enqueue({ id, kind, text, media, timestamp })
       void processQueue()
     },
 
@@ -104,7 +133,7 @@ export function createContextService(deps: ContextServiceDeps): ContextService {
         if (row.media_meta) {
           try { media = JSON.parse(row.media_meta) as MediaMeta } catch { /* ignore */ }
         }
-        enqueue({ id: row.id, kind: row.kind, text: row.text, media })
+        enqueue({ id: row.id, kind: row.kind, text: row.text, media, timestamp: row.timestamp })
       }
       await processQueue()
     }

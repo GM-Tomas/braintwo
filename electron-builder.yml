@@ -7,19 +7,32 @@ directories:
 files:
   - out/**/*
   - package.json
+  - package-lock.json
 extraResources:
   - from: build
     to: build
     filter:
       - '*.png'
 asar: true
+asarUnpack:
+  - node_modules/sqlite-vec/**/*
+  - node_modules/sqlite-vec-*/**/*
+  - node_modules/better-sqlite3/**/*
 win:
-  target: nsis
+  icon: build/icon.png
+  target:
+    - nsis
+    - msi
   artifactName: BrainTwo-${version}-setup.${ext}
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  runAfterFinish: true
+  deleteAppDataOnUninstall: true
+msi:
+  runAfterFinish: true
+  perMachine: false
 mac:
   target: dmg
   category: public.app-category.productivity

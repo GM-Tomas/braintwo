@@ -4,97 +4,241 @@ import type { ImportProgress, WAConnectionState } from '@shared/types'
 import { PageHeader } from '../components/PageHeader'
 import { Icon, BrainMark, type IconName } from '@/lib/icons'
 
-interface WelcomeCardsProps {
-  onContinue: () => void
+const FTU_KEY = 'braintwo:ftu-seen'
+
+function setFtuFlag(value: boolean) {
+  try {
+    if (value) localStorage.setItem(FTU_KEY, '1')
+    else localStorage.removeItem(FTU_KEY)
+  } catch { /* ignore */ }
 }
 
-interface FeatureCard {
-  icon: IconName
-  title: string
-  body: string
-}
+// ── FTU carousel ─────────────────────────────────────────────────────────────
 
-const FEATURE_CARDS: FeatureCard[] = [
+interface FTUSplash { kind: 'splash' }
+interface FTUFeature { kind: 'feature'; icon: IconName; title: string; body: string }
+interface FTUQr { kind: 'qr' }
+type FTUStepDef = FTUSplash | FTUFeature | FTUQr
+
+const FTU_STEPS: FTUStepDef[] = [
+  { kind: 'splash' },
   {
+    kind: 'feature',
     icon: 'search',
-    title: 'Buscá en tu historial',
-    body: 'Encontrá cualquier conversación, audio o link que mandaste o recibiste, sin scrollear meses de chats.'
+    title: 'BUSCÁ EN TU HISTORIAL',
+    body: 'Encontrá cualquier conversación, audio o link que mandaste o recibiste, sin scrollear meses de chats.',
   },
   {
+    kind: 'feature',
     icon: 'home',
-    title: 'Timeline propio',
-    body: 'Tu actividad de WhatsApp ordenada cronológicamente — un feed de lo que importa, no de lo que el algoritmo elige.'
+    title: 'TU TIMELINE PERSONAL',
+    body: 'Tu actividad de WhatsApp ordenada cronológicamente — un feed de lo que importa, sin algoritmo.',
   },
-  {
-    icon: 'bolt',
-    title: '100% local y privado',
-    body: 'Todo se procesa en tu computadora. Tus mensajes nunca salen a la nube ni a servidores externos.'
-  },
-  {
-    icon: 'wa',
-    title: 'Vinculación oficial',
-    body: 'Se conecta como un dispositivo vinculado de WhatsApp, igual que WhatsApp Web. No reemplaza tu app.'
-  }
+  { kind: 'qr' },
 ]
 
-export function WelcomeCards({ onContinue }: WelcomeCardsProps) {
+export function FTU({
+  startAtQr = false,
+  theme = 'dark',
+  toggleTheme = () => {}
+}: {
+  startAtQr?: boolean
+  theme?: 'light' | 'dark'
+  toggleTheme?: () => void
+}) {
+  const [step, setStep] = useState(() => (startAtQr ? FTU_STEPS.length - 1 : 0))
+  const [waState, setWaState] = useState<WAConnectionState>('connecting')
+  const [qr, setQr] = useState<string | null>(null)
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    void window.braintwo.wa.getConnectionState().then(setWaState)
+    void window.braintwo.wa.getCurrentQr().then(setQr)
+    const offState = window.braintwo.wa.onConnectionState(setWaState)
+    const offQr = window.braintwo.wa.onQr(setQr)
+    const offLoggedOut = window.braintwo.wa.onLoggedOut(() => {
+      setQr(null)
+      setQrDataUrl(null)
+    })
+    return () => {
+      offState()
+      offQr()
+      offLoggedOut()
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!qr) {
+      setQrDataUrl(null)
+      return
+    }
+    void QRCode.toDataURL(qr, {
+      width: 240,
+      margin: 1,
+      color: { dark: '#0f172a', light: '#ffffff' },
+    }).then((url) => {
+      if (!cancelled) setQrDataUrl(url)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [qr])
+
+  const current = FTU_STEPS[step]
+  const isLast = step === FTU_STEPS.length - 1
+
+  function advance() {
+    const next = step + 1
+    if (next === FTU_STEPS.length - 1) setFtuFlag(true)
+    setStep(next)
+  }
+
   return (
-    <div className="flex flex-1 flex-col overflow-hidden animate-fade-in">
-      <header className="flex flex-col items-center gap-4 px-14 pt-14 pb-6 text-center">
-        <div className="p-2" aria-hidden>
-          <BrainMark size={44} />
+    <div className="flex flex-1 flex-col">
+      <div
+        key={step}
+        className="flex flex-1 flex-col items-center justify-center px-8 py-10 animate-fade-in"
+      >
+        <div className="flex w-full max-w-[360px] flex-col items-center">
+          {current.kind === 'splash' && <FTUSplashCard />}
+          {current.kind === 'feature' && <FTUFeatureCard step={current} />}
+          {current.kind === 'qr' && <FTUQrCard waState={waState} qrDataUrl={qrDataUrl} />}
         </div>
-        <div className="text-[11px] uppercase tracking-eyebrow text-bt-dim">
-          Bienvenido a BrainTwo
+      </div>
+
+      <div className="flex flex-col items-center gap-5 pb-10">
+        <div className="flex items-center gap-2">
+          {FTU_STEPS.map((_, i) => (
+            <div
+              key={i}
+              className={`h-[6px] rounded-full transition-all duration-300 ${
+                i === step ? 'w-6 bg-bt-accent' : 'w-[6px] bg-bt-border-strong'
+              }`}
+            />
+          ))}
         </div>
-        <h1 className="font-display text-[44px] leading-tight tracking-tight text-bt-text">
-          Tu segundo cerebro de WhatsApp
-        </h1>
-        <p className="max-w-xl text-sm leading-relaxed text-bt-muted">
-          Una capa local sobre tus chats que te deja buscar, recordar y revivir lo que pasó —
-          sin enviar nada a la nube.
-        </p>
-      </header>
-
-      <div className="flex flex-1 overflow-y-auto px-14 pb-10">
-        <div className="mx-auto flex w-full max-w-4xl flex-col gap-8">
-          <div className="grid gap-4 md:grid-cols-2">
-            {FEATURE_CARDS.map((card) => (
-              <article
-                key={card.title}
-                className="flex flex-col gap-3 rounded-[14px] border border-bt-border bg-bt-surf p-5"
-              >
-                <div
-                  className="flex h-10 w-10 items-center justify-center rounded-[10px]"
-                  style={{ background: 'linear-gradient(135deg,#1a8fe320,#2ec4a520)' }}
-                  aria-hidden
-                >
-                  <Icon name={card.icon} size={20} className="text-bt-text" />
-                </div>
-                <h2 className="text-[15px] font-semibold text-bt-text">{card.title}</h2>
-                <p className="text-sm leading-relaxed text-bt-muted">{card.body}</p>
-              </article>
-            ))}
-          </div>
-
-          <div className="flex flex-col items-center gap-3">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={theme === 'light' ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro'}
+            title={theme === 'light' ? 'Modo Oscuro' : 'Modo Claro'}
+            className="flex h-9 w-9 items-center justify-center rounded-[8px] border border-bt-border text-bt-muted transition-colors hover:bg-bt-hover hover:text-bt-text"
+          >
+            <Icon name={theme === 'light' ? 'moon' : 'sun'} size={16} />
+          </button>
+          {!isLast && (
             <button
               type="button"
-              onClick={onContinue}
-              className="rounded-[10px] px-6 py-3 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg,#1a8fe3,#2ec4a5)' }}
+              onClick={advance}
+              className="rounded-[10px] px-8 py-3 text-[14px] font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
             >
-              Continuar
+              Siguiente
             </button>
-            <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">
-              Próximo paso · Vincular WhatsApp
-            </span>
-          </div>
+          )}
         </div>
       </div>
     </div>
   )
 }
+
+function FTUSplashCard() {
+  return (
+    <div className="flex flex-col items-center gap-8 text-center">
+      <BrainMark size={80} />
+      <div className="flex flex-col items-center gap-2">
+        <h1 className="font-display text-[64px] leading-none tracking-wider text-bt-text">
+          BRAINTWO
+        </h1>
+        <p className="text-[11px] uppercase tracking-eyebrow text-bt-dim">
+          Tu segundo cerebro
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function FTUFeatureCard({ step }: { step: FTUFeature }) {
+  return (
+    <div className="flex flex-col items-center gap-8 text-center">
+      <div
+        className="flex h-[72px] w-[72px] items-center justify-center rounded-[20px] border border-bt-border-strong"
+        style={{ background: 'linear-gradient(135deg,var(--bt-primary-faint),var(--bt-accent-faint))' }}
+        aria-hidden
+      >
+        <Icon name={step.icon} size={34} className="text-bt-accent" strokeWidth={1.4} />
+      </div>
+      <div className="flex flex-col items-center gap-4">
+        <h2 className="font-display text-[44px] leading-tight tracking-tight text-bt-text">
+          {step.title}
+        </h2>
+        <p className="max-w-[280px] text-[15px] leading-relaxed text-bt-muted">{step.body}</p>
+      </div>
+    </div>
+  )
+}
+
+function FTUQrCard({
+  waState,
+  qrDataUrl,
+}: {
+  waState: WAConnectionState
+  qrDataUrl: string | null
+}) {
+  return (
+    <div className="flex flex-col items-center gap-6 text-center">
+      <div className="flex flex-col items-center gap-2">
+        <h2 className="font-display text-[40px] leading-tight tracking-tight text-bt-text">
+          VINCULÁ TU WHATSAPP
+        </h2>
+        <p className="max-w-[240px] text-[13px] leading-relaxed text-bt-muted">
+          Abrí WhatsApp → Dispositivos vinculados → Vincular dispositivo
+        </p>
+      </div>
+
+      <div className="flex h-[264px] w-[264px] items-center justify-center overflow-hidden rounded-[16px] border border-bt-border-strong bg-bt-surf">
+        {waState === 'logged-out' ? (
+          <div className="flex flex-col items-center gap-3 px-6 text-center">
+            <Icon name="wa" size={28} className="text-bt-red" />
+            <p className="text-sm text-bt-muted">La sesión se cerró desde el celular.</p>
+            <button
+              type="button"
+              onClick={() => void window.braintwo.wa.requestQr()}
+              className="rounded-[8px] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
+            >
+              Generar QR de nuevo
+            </button>
+          </div>
+        ) : qrDataUrl ? (
+          <img src={qrDataUrl} alt="QR para vincular WhatsApp" width={248} height={248} />
+        ) : waState === 'disconnected' ? (
+          <div className="flex flex-col items-center gap-3 px-6 text-center">
+            <span className="h-2 w-2 rounded-full bg-bt-muted" />
+            <p className="text-sm text-bt-muted">No se pudo conectar con WhatsApp.</p>
+            <button
+              type="button"
+              onClick={() => void window.braintwo.wa.requestQr()}
+              className="rounded-[8px] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
+            >
+              Reintentar
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-3 text-sm text-bt-muted">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-bt-primary" />
+            Generando QR…
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Onboarding (sidebar view for already-connected users) ────────────────────
 
 export function Onboarding() {
   const [state, setState] = useState<WAConnectionState>('connecting')
@@ -131,7 +275,7 @@ export function Onboarding() {
     void QRCode.toDataURL(qr, {
       width: 280,
       margin: 1,
-      color: { dark: '#060a12', light: '#e8eef8' }
+      color: { dark: '#0f172a', light: '#ffffff' }
     }).then((url) => {
       if (!cancelled) setQrDataUrl(url)
     })
@@ -143,7 +287,7 @@ export function Onboarding() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden animate-fade-in">
       <PageHeader
-        eyebrow="Onboarding"
+        eyebrow="Primeros pasos"
         title="Vinculá tu WhatsApp"
         subtitle="BrainTwo se conecta como dispositivo vinculado a tu cuenta. Tus mensajes se procesan localmente — nunca salen de tu computadora."
       />
@@ -220,7 +364,7 @@ function PairingPanel({ state, qrDataUrl }: PanelProps) {
         <div className="flex h-[280px] w-full flex-col items-center justify-center gap-4">
           <div
             className="flex h-20 w-20 items-center justify-center rounded-full"
-            style={{ background: 'linear-gradient(135deg,#1a8fe3,#2ec4a5)' }}
+            style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
           >
             <Icon name="check" size={32} strokeWidth={2.5} className="text-white" />
           </div>
@@ -241,7 +385,7 @@ function PairingPanel({ state, qrDataUrl }: PanelProps) {
           <button
             type="button"
             className="rounded-[10px] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
-            style={{ background: 'linear-gradient(135deg,#1a8fe3,#2ec4a5)' }}
+            style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
             onClick={() => void window.braintwo.wa.requestQr()}
           >
             Generar QR de nuevo
@@ -267,11 +411,29 @@ function PairingPanel({ state, qrDataUrl }: PanelProps) {
     )
   }
 
+  if (state === 'disconnected') {
+    return (
+      <Card>
+        <div className="flex h-[280px] w-full flex-col items-center justify-center gap-4 px-6 text-center text-sm text-bt-muted">
+          <p>No se pudo conectar con WhatsApp.</p>
+          <button
+            type="button"
+            className="rounded-[10px] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
+            onClick={() => void window.braintwo.wa.requestQr()}
+          >
+            Reintentar
+          </button>
+        </div>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <div className="flex h-[280px] w-full flex-col items-center justify-center gap-3 text-sm text-bt-muted">
         <span className="h-2 w-2 animate-pulse rounded-full bg-bt-primary" />
-        {state === 'connecting' ? 'Generando QR…' : 'Reconectando…'}
+        Generando QR…
       </div>
     </Card>
   )
@@ -325,7 +487,7 @@ function Step({ n, children }: { n: number; children: React.ReactNode }) {
       <span
         aria-hidden
         className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-bt-border text-[11px] font-semibold text-bt-text"
-        style={{ background: 'linear-gradient(135deg,#1a8fe320,#2ec4a520)' }}
+        style={{ background: 'linear-gradient(135deg,var(--bt-primary-faint),var(--bt-accent-faint))' }}
       >
         {n}
       </span>

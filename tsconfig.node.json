@@ -12,10 +12,9 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "resolveJsonModule": true,
-    "baseUrl": ".",
     "paths": {
-      "@shared/*": ["shared/*"]
+      "@shared/*": ["./shared/*"]
     }
   },
-  "include": ["electron", "shared", "electron.vite.config.ts"]
+  "include": ["electron", "shared", "electron.vite.config.ts", "__tests__/electron"]
 }

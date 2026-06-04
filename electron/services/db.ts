@@ -2,7 +2,7 @@ import Database, { type Database as DatabaseType } from 'better-sqlite3'
 import * as sqliteVec from 'sqlite-vec'
 import { statSync } from 'node:fs'
 
-export const VEC_DIM = 384
+export const VEC_DIM = 768
 
 export type MessageSource = 'export' | 'history-sync' | 'realtime' | 'offline-sync'
 
@@ -47,6 +47,10 @@ export interface SimilarResult {
   text: string
   source: MessageSource
   kind: MessageKind
+  from_me: number
+  media_meta: string | null
+  created_at: number | null
+  context_note: string | null
   distance: number
 }
 
@@ -63,6 +67,10 @@ export interface KeywordResult {
   timestamp: number
   source: MessageSource
   kind: MessageKind
+  from_me: number
+  media_meta: string | null
+  created_at: number | null
+  context_note: string | null
 }
 
 export interface ContextableMessage {
@@ -70,6 +78,7 @@ export interface ContextableMessage {
   text: string
   kind: MessageKind
   media_meta: string | null
+  timestamp: number
 }
 
 export interface MemoryResult {
@@ -77,6 +86,21 @@ export interface MemoryResult {
   content: string
   createdAt: number
   distance?: number
+}
+
+export interface DbChat {
+  id: number
+  title: string
+  created_at: number
+}
+
+export interface DbChatMessage {
+  id: number
+  chat_id: number
+  role: 'user' | 'assistant'
+  content: string
+  sources: string | null
+  created_at: number
 }
 
 export interface DbStats {
@@ -98,17 +122,25 @@ export interface DbInstance {
   updateContextNote: (id: number, note: string) => void
   deleteEmbedding: (msgId: number) => void
   // AI memory
-  insertMemory: (content: string) => number
+  insertMemory: (content: string, chatId?: number) => number
   insertMemoryEmbedding: (memoryId: number, vec: Float32Array) => void
-  searchMemorySimilar: (queryVec: Float32Array, k: number) => MemoryResult[]
-  searchMemoryKeyword: (query: string, limit: number) => MemoryResult[]
+  searchMemorySimilar: (queryVec: Float32Array, k: number, chatId?: number) => MemoryResult[]
+  searchMemoryKeyword: (query: string, limit: number, chatId?: number) => MemoryResult[]
   listMemories: (limit: number) => MemoryResult[]
   listUnembeddedMemories: (limit: number) => { id: number; content: string }[]
+  // Chat history
+  createChat: (title: string) => number
+  listChats: () => DbChat[]
+  deleteChat: (id: number) => void
+  renameChat: (id: number, title: string) => void
+  getChatMessages: (chatId: number) => DbChatMessage[]
+  insertChatMessage: (chatId: number, role: 'user' | 'assistant', content: string, sources: string | null) => number
   // Stats / misc
   stats: (filePath?: string) => DbStats
   countMessages: () => number
   countEmbeddings: () => number
   hasEmbedding: (msgId: number) => boolean
+  getSurroundingMessages: (msgId: number, limit: number) => { id: number; text: string; timestamp: number; contextNote: string | null }[]
   close: () => void
 }
 
@@ -130,18 +162,25 @@ const SCHEMA_STATEMENTS = [
   // Standalone FTS5 table (owns its own copy of text — simpler than external content).
   `CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
      text,
+     context_note,
      tokenize='unicode61'
    )`,
   // Keep FTS index in sync when messages are inserted.
   `CREATE TRIGGER IF NOT EXISTS messages_fts_ai
      AFTER INSERT ON messages BEGIN
-       INSERT INTO messages_fts(rowid, text) VALUES (new.id, new.text);
+       INSERT INTO messages_fts(rowid, text, context_note) VALUES (new.id, new.text, new.context_note);
+     END`,
+  // Keep FTS index in sync when context notes are updated.
+  `CREATE TRIGGER IF NOT EXISTS messages_fts_au
+     AFTER UPDATE OF context_note ON messages BEGIN
+       UPDATE messages_fts SET context_note = new.context_note WHERE rowid = old.id;
      END`,
 
   // AI memory: the model annotates what it learns across conversations.
   `CREATE TABLE IF NOT EXISTS ai_memory (
      id         INTEGER PRIMARY KEY AUTOINCREMENT,
      content    TEXT NOT NULL,
+     chat_id    INTEGER,
      created_at INTEGER DEFAULT (unixepoch())
    )`,
   `CREATE VIRTUAL TABLE IF NOT EXISTS memory_embeddings USING vec0(
@@ -155,7 +194,23 @@ const SCHEMA_STATEMENTS = [
   `CREATE TRIGGER IF NOT EXISTS ai_memory_fts_ai
      AFTER INSERT ON ai_memory BEGIN
        INSERT INTO ai_memory_fts(rowid, content) VALUES (new.id, new.content);
-     END`
+     END`,
+  // Chat history tables
+  `CREATE TABLE IF NOT EXISTS chats (
+     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+     title       TEXT NOT NULL,
+     created_at  INTEGER DEFAULT (unixepoch())
+   )`,
+  `CREATE TABLE IF NOT EXISTS chat_messages (
+     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+     chat_id     INTEGER NOT NULL,
+     role        TEXT NOT NULL,
+     content     TEXT NOT NULL,
+     sources     TEXT,
+     created_at  INTEGER DEFAULT (unixepoch()),
+     FOREIGN KEY(chat_id) REFERENCES chats(id) ON DELETE CASCADE
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_chat_msg_chat_id ON chat_messages(chat_id)`
 ]
 
 // Idempotent column additions for users upgrading from earlier schemas.
@@ -180,12 +235,62 @@ function listColumns(db: DatabaseType, table: string): string[] {
 }
 
 export function applyMigrations(db: DatabaseType): void {
+  // Check if we need to migrate embedding dimensions.
+  // We can query sqlite_master for the schema of message_embeddings.
+  try {
+    const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'message_embeddings'").get() as { sql: string } | undefined
+    if (row && row.sql) {
+      const expectedPattern = `FLOAT[${VEC_DIM}]`
+      if (!row.sql.includes(expectedPattern)) {
+        db.exec('DROP TABLE IF EXISTS message_embeddings')
+        db.exec('DROP TABLE IF EXISTS memory_embeddings')
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // Check if messages_fts exists and if it lacks context_note
+  let hasFtsTable = false
+  try {
+    const rows = db.pragma('table_info(messages_fts)') as { name: string }[]
+    if (rows.length > 0) {
+      hasFtsTable = true
+      const ftsCols = new Set(rows.map((r) => r.name))
+      if (!ftsCols.has('context_note')) {
+        // Upgrade existing messages_fts table
+        db.exec('DROP TRIGGER IF EXISTS messages_fts_ai')
+        db.exec('DROP TRIGGER IF EXISTS messages_fts_au')
+        db.exec('DROP TABLE IF EXISTS messages_fts')
+        hasFtsTable = false
+      }
+    }
+  } catch {
+    // ignore
+  }
+
   for (const sql of SCHEMA_STATEMENTS) {
     db.exec(sql)
   }
+
+  if (hasFtsTable === false) {
+    try {
+      db.exec(`
+        INSERT OR IGNORE INTO messages_fts(rowid, text, context_note)
+        SELECT id, text, context_note FROM messages
+      `)
+    } catch {
+      // best-effort
+    }
+  }
+
   const cols = new Set(listColumns(db, 'messages'))
   for (const m of POST_MIGRATIONS) {
     if (!cols.has(m.column)) db.exec(m.sql)
+  }
+  const memCols = new Set(listColumns(db, 'ai_memory'))
+  if (!memCols.has('chat_id')) {
+    db.exec('ALTER TABLE ai_memory ADD COLUMN chat_id INTEGER')
   }
 }
 
@@ -198,11 +303,66 @@ function vecToBuffer(vec: Float32Array): Buffer {
   return Buffer.from(vec.buffer, vec.byteOffset, vec.byteLength)
 }
 
+export function parseFtsQuery(query: string): string {
+  const trimmed = query.trim()
+  if (!trimmed) return ''
+
+  // If already enclosed in quotes, assume strict phrase search
+  if (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length > 2) {
+    return trimmed
+  }
+
+  // Split by whitespace, sanitize each token, format with trailing wildcard
+  const terms = trimmed
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((term) => {
+      // Remove double/single quotes, asterisks to prevent FTS5 syntax errors
+      const clean = term.replace(/["'*]/g, '').trim()
+      if (!clean) return ''
+      // Return term wrapped in quotes with a trailing wildcard
+      return `"${clean}"*`
+    })
+    .filter(Boolean)
+
+  return terms.join(' AND ')
+}
+
 export function openDatabase(filePath: string): DbInstance {
   const db = new Database(filePath)
   applyPragmas(db)
-  sqliteVec.load(db)
+  let vecPath = sqliteVec.getLoadablePath()
+  if (vecPath.includes('app.asar') && !vecPath.includes('app.asar.unpacked')) {
+    vecPath = vecPath.replace('app.asar', 'app.asar.unpacked')
+  }
+  db.loadExtension(vecPath)
   applyMigrations(db)
+
+  // Seed default global memories if ai_memory is empty
+  try {
+    const memCount = db.prepare('SELECT COUNT(*) AS count FROM ai_memory').get() as { count: number }
+    if (memCount && memCount.count === 0) {
+      const defaultMemories = [
+        'BrainTwo es un segundo cerebro digital personal que se conecta de manera segura a tu WhatsApp para indexar, buscar y organizar tus mensajes, audios y enlaces.',
+        'Toda la información y base de datos de BrainTwo se almacena localmente de forma privada en tu computadora. Nada sale de tu máquina.',
+        'Puedes usar la sección de Búsqueda de BrainTwo para encontrar de manera instantánea cualquier mensaje, conversación, audio transcrito o link que hayas enviado o recibido sin tener que scrollear.',
+        'La sección del Timeline de la aplicación muestra tu actividad de WhatsApp de manera puramente cronológica, creando un feed limpio y útil libre de algoritmos.',
+        'En la sección de Chat IA, puedes interactuar directamente con un asistente inteligente que tiene acceso a tu memoria global y contexto para ayudarte a responder preguntas sobre tus chats.',
+        'El asistente de chat utiliza la memoria global para aprender de ti a lo largo del tiempo y para proporcionarte información precisa sobre el funcionamiento de la aplicación.',
+        'Puedes preguntarle al Chat IA cosas sobre BrainTwo, como "¿qué es?", "¿dónde se guardan mis datos?" o pedirle sugerencias de uso.',
+        'Para importar tu historial antiguo de WhatsApp, abre WhatsApp en tu celular, ve a tu propio chat personal (el chat contigo mismo), pulsa "Exportar chat" (eligiendo sin archivos/medios), y carga el archivo .txt resultante en el panel de Primeros Pasos o en los Ajustes.'
+      ]
+      const insertMem = db.prepare('INSERT INTO ai_memory(content, chat_id) VALUES (?, NULL)')
+      const transaction = db.transaction((memories: string[]) => {
+        for (const content of memories) {
+          insertMem.run(content)
+        }
+      })
+      transaction(defaultMemories)
+    }
+  } catch (err) {
+    console.error('Error seeding default memories:', err)
+  }
 
   const insertMsgStmt = db.prepare(
     `INSERT OR IGNORE INTO messages
@@ -217,8 +377,8 @@ export function openDatabase(filePath: string): DbInstance {
   // One-time FTS backfill for rows that existed before the trigger was added.
   try {
     db.exec(`
-      INSERT INTO messages_fts(rowid, text)
-      SELECT m.id, m.text FROM messages m
+      INSERT INTO messages_fts(rowid, text, context_note)
+      SELECT m.id, m.text, m.context_note FROM messages m
       WHERE m.id NOT IN (SELECT rowid FROM messages_fts)
     `)
   } catch {
@@ -226,7 +386,7 @@ export function openDatabase(filePath: string): DbInstance {
   }
 
   const kwSearchStmt = db.prepare<[string, number], KeywordResult>(`
-    SELECT m.id, m.wa_msg_id, m.text, m.timestamp, m.source, m.kind
+    SELECT m.id, m.wa_msg_id, m.text, m.timestamp, m.source, m.kind, m.from_me, m.media_meta, m.created_at, m.context_note
     FROM messages_fts
     JOIN messages m ON m.id = messages_fts.rowid
     WHERE messages_fts MATCH ?
@@ -235,7 +395,7 @@ export function openDatabase(filePath: string): DbInstance {
   `)
 
   const searchStmt = db.prepare<[Buffer, number], SimilarResult>(`
-    SELECT m.id, m.wa_msg_id, m.timestamp, m.text, m.source, m.kind, e.distance
+    SELECT m.id, m.wa_msg_id, m.timestamp, m.text, m.source, m.kind, m.from_me, m.media_meta, m.created_at, m.context_note, e.distance
     FROM message_embeddings e
     JOIN messages m ON m.id = e.msg_id
     WHERE e.embedding MATCH ? AND k = ?
@@ -264,7 +424,7 @@ export function openDatabase(filePath: string): DbInstance {
   `)
 
   const withoutContextStmt = db.prepare<[number], ContextableMessage>(`
-    SELECT id, text, kind, media_meta
+    SELECT id, text, kind, media_meta, timestamp
     FROM messages
     WHERE context_note IS NULL
     ORDER BY timestamp DESC
@@ -283,25 +443,45 @@ export function openDatabase(filePath: string): DbInstance {
     'SELECT MAX(created_at) AS last FROM messages'
   )
 
+  const getMsgStmt = db.prepare<[number], { id: number; text: string; timestamp: number; context_note: string | null }>(
+    'SELECT id, text, timestamp, context_note FROM messages WHERE id = ?'
+  )
+
+  const surroundingBeforeStmt = db.prepare<[number, number, number, number], { id: number; text: string; timestamp: number }>(`
+    SELECT id, text, timestamp
+    FROM messages
+    WHERE timestamp < ? OR (timestamp = ? AND id < ?)
+    ORDER BY timestamp DESC, id DESC
+    LIMIT ?
+  `)
+
+  const surroundingAfterStmt = db.prepare<[number, number, number, number], { id: number; text: string; timestamp: number }>(`
+    SELECT id, text, timestamp
+    FROM messages
+    WHERE timestamp > ? OR (timestamp = ? AND id > ?)
+    ORDER BY timestamp ASC, id ASC
+    LIMIT ?
+  `)
+
   // ── AI Memory statements ─────────────────────────────────────────────────────
   const insertMemoryStmt = db.prepare(
-    'INSERT INTO ai_memory(content) VALUES (?)'
+    'INSERT INTO ai_memory(content, chat_id) VALUES (?, ?)'
   )
   const insertMemEmbStmt = db.prepare(
     'INSERT INTO memory_embeddings(memory_id, embedding) VALUES (?, ?)'
   )
-  const searchMemSimilarStmt = db.prepare<[Buffer, number], { id: number; content: string; created_at: number; distance: number }>(`
+  const searchMemSimilarStmt = db.prepare<[Buffer, number, number | null], { id: number; content: string; created_at: number; distance: number }>(`
     SELECT m.id, m.content, m.created_at, e.distance
     FROM memory_embeddings e
     JOIN ai_memory m ON m.id = e.memory_id
-    WHERE e.embedding MATCH ? AND k = ?
+    WHERE e.embedding MATCH ? AND k = ? AND (m.chat_id = ? OR m.chat_id IS NULL)
     ORDER BY e.distance
   `)
-  const searchMemKwStmt = db.prepare<[string, number], { id: number; content: string; created_at: number }>(`
+  const searchMemKwStmt = db.prepare<[string, number | null, number], { id: number; content: string; created_at: number }>(`
     SELECT m.id, m.content, m.created_at
     FROM ai_memory_fts
     JOIN ai_memory m ON m.id = ai_memory_fts.rowid
-    WHERE ai_memory_fts MATCH ?
+    WHERE ai_memory_fts MATCH ? AND (m.chat_id = ? OR m.chat_id IS NULL)
     ORDER BY rank
     LIMIT ?
   `)
@@ -315,6 +495,25 @@ export function openDatabase(filePath: string): DbInstance {
     ORDER BY m.id ASC
     LIMIT ?
   `)
+
+  const insertChatStmt = db.prepare(
+    'INSERT INTO chats(title) VALUES (?)'
+  )
+  const listChatsStmt = db.prepare<[], DbChat>(
+    'SELECT id, title, created_at FROM chats ORDER BY created_at DESC'
+  )
+  const deleteChatStmt = db.prepare<[number], void>(
+    'DELETE FROM chats WHERE id = ?'
+  )
+  const renameChatStmt = db.prepare<[string, number], void>(
+    'UPDATE chats SET title = ? WHERE id = ?'
+  )
+  const getChatMessagesStmt = db.prepare<[number], DbChatMessage>(
+    'SELECT id, chat_id, role, content, sources, created_at FROM chat_messages WHERE chat_id = ? ORDER BY id ASC'
+  )
+  const insertChatMessageStmt = db.prepare(
+    'INSERT INTO chat_messages(chat_id, role, content, sources) VALUES (?, ?, ?, ?)'
+  )
 
   return {
     raw: db,
@@ -345,14 +544,18 @@ export function openDatabase(filePath: string): DbInstance {
       db.exec('DELETE FROM message_embeddings')
     },
     searchKeyword(query, limit) {
-      if (!query.trim() || limit <= 0) return []
-      // Wrap in double-quotes for phrase search; escape any embedded double-quotes.
-      const safeQuery = `"${query.replace(/"/g, '""')}"`
+      const safeQuery = parseFtsQuery(query)
+      if (!safeQuery || limit <= 0) return []
       try {
         return kwSearchStmt.all(safeQuery, Math.min(limit, 100))
       } catch {
-        // FTS5 MATCH throws on malformed queries (e.g. stray AND/OR operators).
-        return []
+        // Fallback to phrase search if FTS5 MATCH throws
+        try {
+          const fallbackQuery = `"${query.trim().replace(/"/g, '""')}"`
+          return kwSearchStmt.all(fallbackQuery, Math.min(limit, 100))
+        } catch {
+          return []
+        }
       }
     },
     searchSimilar(queryVec, k) {
@@ -399,33 +602,43 @@ export function openDatabase(filePath: string): DbInstance {
     hasEmbedding(msgId) {
       return (hasEmbStmt.get(msgId)?.count ?? 0) > 0
     },
-    insertMemory(content) {
-      const r = insertMemoryStmt.run(content)
+    insertMemory(content, chatId) {
+      const r = insertMemoryStmt.run(content, chatId ?? null)
       return Number(r.lastInsertRowid)
     },
     insertMemoryEmbedding(memoryId, vec) {
       insertMemEmbStmt.run(BigInt(memoryId), vecToBuffer(vec))
     },
-    searchMemorySimilar(queryVec, k) {
+    searchMemorySimilar(queryVec, k, chatId) {
       if (k <= 0) return []
-      return searchMemSimilarStmt.all(vecToBuffer(queryVec), k).map((r) => ({
+      return searchMemSimilarStmt.all(vecToBuffer(queryVec), k, chatId ?? null).map((r) => ({
         id: r.id,
         content: r.content,
         createdAt: r.created_at * 1000,
         distance: r.distance
       }))
     },
-    searchMemoryKeyword(query, limit) {
-      if (!query.trim() || limit <= 0) return []
-      const safeQuery = `"${query.replace(/"/g, '""')}"`
+    searchMemoryKeyword(query, limit, chatId) {
+      const safeQuery = parseFtsQuery(query)
+      if (!safeQuery || limit <= 0) return []
       try {
-        return searchMemKwStmt.all(safeQuery, Math.min(limit, 50)).map((r) => ({
+        return searchMemKwStmt.all(safeQuery, chatId ?? null, Math.min(limit, 50)).map((r) => ({
           id: r.id,
           content: r.content,
           createdAt: r.created_at * 1000
         }))
       } catch {
-        return []
+        // Fallback to phrase search if FTS5 MATCH throws
+        try {
+          const fallbackQuery = `"${query.trim().replace(/"/g, '""')}"`
+          return searchMemKwStmt.all(fallbackQuery, chatId ?? null, Math.min(limit, 50)).map((r) => ({
+            id: r.id,
+            content: r.content,
+            createdAt: r.created_at * 1000
+          }))
+        } catch {
+          return []
+        }
       }
     },
     listMemories(limit) {
@@ -437,6 +650,44 @@ export function openDatabase(filePath: string): DbInstance {
     },
     listUnembeddedMemories(limit) {
       return unembeddedMemoriesStmt.all(Math.min(limit, 500))
+    },
+    createChat(title) {
+      const r = insertChatStmt.run(title)
+      return Number(r.lastInsertRowid)
+    },
+    listChats() {
+      return listChatsStmt.all()
+    },
+    deleteChat(id) {
+      deleteChatStmt.run(id)
+    },
+    renameChat(id, title) {
+      renameChatStmt.run(title, id)
+    },
+    getChatMessages(chatId) {
+      return getChatMessagesStmt.all(chatId)
+    },
+    insertChatMessage(chatId, role, content, sources) {
+      const r = insertChatMessageStmt.run(chatId, role, content, sources)
+      return Number(r.lastInsertRowid)
+    },
+    getSurroundingMessages(msgId, limit) {
+      const target = getMsgStmt.get(msgId)
+      if (!target) return []
+
+      const before = surroundingBeforeStmt.all(target.timestamp, target.timestamp, msgId, limit)
+      const after = surroundingAfterStmt.all(target.timestamp, target.timestamp, msgId, limit)
+
+      // before is in DESC order, reverse to chronological (ASC) order
+      before.reverse()
+
+      const toRow = (r: { id: number; text: string; timestamp: number; context_note?: string | null }) => ({
+        id: r.id,
+        text: r.text,
+        timestamp: r.timestamp,
+        contextNote: r.context_note ?? null
+      })
+      return [...before.map(toRow), toRow(target), ...after.map(toRow)]
     },
     close() {
       db.close()

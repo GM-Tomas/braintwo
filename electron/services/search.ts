@@ -1,10 +1,6 @@
-import type { DbInstance, KeywordResult, SimilarResult } from './db'
+import type { DbInstance, KeywordResult, SimilarResult, MediaMeta } from './db'
 import type { EmbeddingService } from './embeddings'
-
-export interface SearchResult extends SimilarResult {
-  similarity: number
-  matchSource: 'semantic' | 'keyword' | 'both'
-}
+import type { SearchResult } from '@shared/types'
 
 export interface SearchService {
   query: (text: string, k?: number) => Promise<SearchResult[]>
@@ -18,32 +14,75 @@ export interface SearchServiceDeps {
   batchSize?: number
 }
 
-// Floor calibrated for multilingual-e5-small with short WhatsApp messages.
-// Short texts (2-8 words) compress scores to 0.74-0.87; the true noise floor
-// sits around 0.75 and genuine matches start around 0.78+.
-const MIN_SIMILARITY = 0.77
-
-// Adaptive Z-filter: when many candidates pass the floor, require them to
-// stand out from the group's mean by at least Z × σ. Higher value = stricter.
-// Set higher than before because we lowered the floor, so we need the adaptive
-// filter to do more heavy lifting when there's a large candidate pool.
-const ADAPTIVE_Z = 1.0
-
-// Apply adaptive filter even when score spread is small (compressed scores from
-// short texts). Previous threshold was 0.015; lower value = filter applies more.
-const ADAPTIVE_STD_FLOOR = 0.005
+// Floor calibrated for multilingual-e5-base with short WhatsApp messages.
+const MIN_SIMILARITY = 0.75
 
 // Standard RRF constant — chosen to balance precision and recall across lists.
 const RRF_K = 60
 
-function filterByRelevance(candidates: SearchResult[]): SearchResult[] {
-  const above = candidates.filter((r) => r.similarity >= MIN_SIMILARITY)
-  if (above.length < 4) return above
-  const mean = above.reduce((s, r) => s + r.similarity, 0) / above.length
-  const variance = above.reduce((s, r) => s + (r.similarity - mean) ** 2, 0) / above.length
-  const std = Math.sqrt(variance)
-  if (std < ADAPTIVE_STD_FLOOR) return above
-  return above.filter((r) => r.similarity >= mean + ADAPTIVE_Z * std)
+function filterByRelevance(candidates: SearchResult[], isFallback = false): SearchResult[] {
+  // Pre-process candidates to flag placeholder media/messages.
+  // A placeholder is a message with no text content and either no context note or a generic placeholder context note.
+  const processed = candidates.map((r) => {
+    const isPlaceholder =
+      !r.text?.trim() &&
+      (!r.contextNote ||
+        /sin (descripci[oó]n|texto)/i.test(r.contextNote) ||
+        /^imagen$/i.test(r.contextNote))
+    return { ...r, isPlaceholder }
+  })
+
+  // 1. Exclude absolute low relevance below the floor.
+  const ABSOLUTE_FLOOR = isFallback ? 0.22 : 0.72
+  const MIN_SIM = isFallback ? 0.25 : 0.75
+  const above = processed.filter((r) => r.similarity >= ABSOLUTE_FLOOR)
+  if (above.length === 0) return []
+
+  // 2. Find the maximum similarity among non-placeholder messages.
+  const nonPlaceholders = above.filter((r) => !r.isPlaceholder)
+  const maxSim =
+    nonPlaceholders.length > 0
+      ? Math.max(...nonPlaceholders.map((r) => r.similarity))
+      : Math.max(...above.map((r) => r.similarity))
+
+  // If the absolute best match is below the noise floor, it is generally considered noise.
+  let allAreLowRelevance = false
+  const noiseFloor = isFallback ? 0.27 : 0.77
+  if (maxSim < noiseFloor) {
+    allAreLowRelevance = true
+  }
+
+  // 3. Relative margin: exclude results that are significantly weaker than the best match.
+  const MARGIN = isFallback ? 0.05 : 0.03
+
+  // 4. Tight cluster filter: if we have multiple results, but they are all very close to each other
+  // and the best match is not exceptionally high (maxSim < 0.80), it suggests a flat distribution
+  // of similarities indicating background noise.
+  if (above.length >= 2 && maxSim < (isFallback ? 0.30 : 0.80)) {
+    const mean = above.reduce((s, r) => s + r.similarity, 0) / above.length
+    const variance = above.reduce((s, r) => s + (r.similarity - mean) ** 2, 0) / above.length
+    const std = Math.sqrt(variance)
+
+    // Standard deviation threshold: if less than 1.2% (0.012), it is a tight cluster of noise.
+    if (std < 0.012) {
+      allAreLowRelevance = true
+    }
+  }
+
+  return above.map((r) => {
+    const isLow =
+      r.isPlaceholder ||
+      allAreLowRelevance ||
+      r.similarity < MIN_SIM ||
+      r.similarity < maxSim - MARGIN
+
+    // Remove the temporary isPlaceholder flag
+    const { isPlaceholder, ...rest } = r
+    return {
+      ...rest,
+      lowRelevance: isLow
+    }
+  })
 }
 
 function applyRRF(
@@ -68,17 +107,7 @@ function applyRRF(
       data.get(r.id)!.matchSource = 'both'
     } else {
       // keyword-only hit: build a SearchResult with neutral similarity values
-      data.set(r.id, {
-        id: r.id,
-        wa_msg_id: r.wa_msg_id,
-        timestamp: r.timestamp,
-        text: r.text,
-        source: r.source,
-        kind: r.kind,
-        distance: 0,
-        similarity: 0,
-        matchSource: 'keyword'
-      })
+      data.set(r.id, keywordToSearchResult(r))
     }
   }
 
@@ -112,9 +141,14 @@ export function createSearchService(deps: SearchServiceDeps): SearchService {
       const vecCandidates = deps.db
         .searchSimilar(queryVec, Math.max(1, Math.min(k * 3, 150)))
         .map(toSearchResult)
-      const filteredVec = filterByRelevance(vecCandidates)
-
-      return applyRRF(filteredVec, kwResults, k)
+      const isFallback = deps.embeddings.getStatus?.()?.status === 'fallback'
+      const filteredVec = filterByRelevance(vecCandidates, isFallback)
+      const rrf = applyRRF(filteredVec, kwResults, k)
+      return rrf.sort((a, b) => {
+        const aLow = a.lowRelevance === true ? 1 : 0
+        const bLow = b.lowRelevance === true ? 1 : 0
+        return aLow - bLow
+      })
     },
 
     async backfillMissing(limit = 500) {
@@ -144,11 +178,54 @@ export function createSearchService(deps: SearchServiceDeps): SearchService {
 }
 
 function toSearchResult(row: SimilarResult): SearchResult {
-  // sqlite-vec returns L2 distance; for normalized unit vectors: cos_sim = 1 - L2²/2
   const cosineSim = 1 - (row.distance * row.distance) / 2
+  let media: MediaMeta | null = null
+  if (row.media_meta) {
+    try {
+      media = JSON.parse(row.media_meta) as MediaMeta
+    } catch {
+      media = null
+    }
+  }
   return {
-    ...row,
+    id: row.id,
+    wa_msg_id: row.wa_msg_id,
+    timestamp: row.timestamp,
+    text: row.text,
+    source: row.source,
+    kind: row.kind,
+    media,
+    fromMe: row.from_me === 1,
+    createdAt: row.created_at != null ? row.created_at * 1000 : undefined,
+    contextNote: row.context_note ?? null,
+    distance: row.distance,
     similarity: Math.max(0, Math.min(1, cosineSim)),
     matchSource: 'semantic'
+  }
+}
+
+function keywordToSearchResult(row: KeywordResult): SearchResult {
+  let media: MediaMeta | null = null
+  if (row.media_meta) {
+    try {
+      media = JSON.parse(row.media_meta) as MediaMeta
+    } catch {
+      media = null
+    }
+  }
+  return {
+    id: row.id,
+    wa_msg_id: row.wa_msg_id,
+    timestamp: row.timestamp,
+    text: row.text,
+    source: row.source,
+    kind: row.kind,
+    media,
+    fromMe: row.from_me === 1,
+    createdAt: row.created_at != null ? row.created_at * 1000 : undefined,
+    contextNote: row.context_note ?? null,
+    distance: 0,
+    similarity: 0,
+    matchSource: 'keyword'
   }
 }

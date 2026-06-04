@@ -13,14 +13,12 @@ export default defineConfig({
   test: {
     environment: 'node',
     environmentMatchGlobs: [
-      ['src/**', 'jsdom']
+      ['__tests__/src/**/*', 'jsdom'],
+      ['**/*.tsx', 'jsdom']
     ],
     setupFiles: ['./vitest.setup.ts'],
     include: [
-      'electron/**/*.test.ts',
-      'src/**/*.test.{ts,tsx}',
-      'shared/**/*.test.ts',
-      'scripts/**/*.test.{ts,mjs}'
+      '__tests__/**/*.test.{ts,tsx,mjs}'
     ],
     coverage: {
       provider: 'v8',

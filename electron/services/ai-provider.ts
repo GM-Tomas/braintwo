@@ -9,7 +9,9 @@ export interface ProviderCallArgs {
 const DEFAULT_MODELS: Record<AiConfig['provider'], string> = {
   anthropic: 'claude-haiku-4-5',
   'openai-compat': 'gpt-4o-mini',
-  gemini: 'gemini-2.0-flash'
+  gemini: 'gemini-2.0-flash',
+  deepseek: 'deepseek-v4-pro',
+  'opencode-zen': 'big-pickle'
 }
 
 export async function callProvider(args: ProviderCallArgs): Promise<string> {
@@ -18,6 +20,10 @@ export async function callProvider(args: ProviderCallArgs): Promise<string> {
       case 'anthropic':     return await callAnthropic(args)
       case 'openai-compat': return await callOpenAiCompat(args)
       case 'gemini':        return await callGemini(args)
+      case 'deepseek':      return await callDeepSeek(args)
+      case 'opencode-zen':  return await callOpenCodeZen(args)
+      default:
+        throw new Error(`Proveedor no soportado: ${args.config.provider}`)
     }
   } catch (err) {
     // Wrap low-level network errors (ECONNRESET, ENOTFOUND, etc.) that manifest
@@ -117,4 +123,22 @@ async function callGemini({ config, systemPrompt, messages }: ProviderCallArgs):
     candidates: Array<{ content: { parts: Array<{ text: string }> } }>
   }
   return data.candidates[0]?.content.parts[0]?.text ?? ''
+}
+
+// ── DeepSeek ─────────────────────────────────────────────────────────────────
+
+async function callDeepSeek(args: ProviderCallArgs): Promise<string> {
+  const model = args.config.model?.trim() || DEFAULT_MODELS.deepseek
+  const baseUrl = args.config.baseUrl?.replace(/\/$/, '') || 'https://api.deepseek.com'
+  const configCopy = { ...args.config, model, baseUrl }
+  return callOpenAiCompat({ ...args, config: configCopy })
+}
+
+// ── OpenCode Zen ─────────────────────────────────────────────────────────────
+
+async function callOpenCodeZen(args: ProviderCallArgs): Promise<string> {
+  const model = args.config.model?.trim() || DEFAULT_MODELS['opencode-zen']
+  const baseUrl = args.config.baseUrl?.replace(/\/$/, '') || 'https://opencode.ai/zen/v1'
+  const configCopy = { ...args.config, model, baseUrl }
+  return callOpenAiCompat({ ...args, config: configCopy })
 }

@@ -71,6 +71,8 @@ export interface RecentMessage {
   kind: MessageKind
   media: MediaMeta | null
   fromMe: boolean
+  createdAt?: number
+  contextNote?: string | null
 }
 
 export type IngestSkipReason = 'no-id' | 'empty' | 'duplicate'
@@ -85,6 +87,7 @@ export interface IngestResult {
 export interface IngestPipeline {
   ingest: (msg: WAMessageLike, source: MessageSource) => IngestResult
   recent: (limit: number) => RecentMessage[]
+  getById: (id: number) => RecentMessage | null
   count: () => number
 }
 
@@ -207,6 +210,12 @@ export function createIngestPipeline(
        LIMIT ?`
   )
 
+  const getByIdStmt = db.raw.prepare<[number], RecentMessageRow>(
+    `SELECT id, wa_msg_id, timestamp, text, source, kind, media_meta, from_me, created_at, context_note
+       FROM messages
+       WHERE id = ?`
+  )
+
   return {
     ingest(msg, source) {
       const id = msg.key?.id
@@ -266,6 +275,11 @@ export function createIngestPipeline(
     recent(limit) {
       if (limit <= 0) return []
       return recentStmt.all(limit).map(rowToRecent)
+    },
+
+    getById(id: number) {
+      const row = getByIdStmt.get(id)
+      return row ? rowToRecent(row) : null
     },
 
     count() {

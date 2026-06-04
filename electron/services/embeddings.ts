@@ -25,7 +25,7 @@ export interface EmbeddingServiceDeps {
   scheduler?: (cb: () => void) => unknown
 }
 
-const DEFAULT_MODEL = 'Xenova/multilingual-e5-small'
+const DEFAULT_MODEL = 'Xenova/multilingual-e5-base'
 
 export function createEmbeddingService(deps: EmbeddingServiceDeps): EmbeddingService {
   const schedule = deps.scheduler ?? ((cb) => setImmediate(cb))

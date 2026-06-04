@@ -7,22 +7,28 @@ export default {
       colors: {
         bt: {
           // Backgrounds
-          bg: '#060a12',
-          surf: '#0c1422',
-          hover: '#101d2e',
+          bg: 'var(--bt-bg)',
+          surf: 'var(--bt-surf)',
+          hover: 'var(--bt-hover)',
+          'sidebar-bg': 'var(--bt-sidebar-bg)',
           // Surface / borders
-          border: 'rgba(255,255,255,0.06)',
-          'border-strong': 'rgba(255,255,255,0.12)',
-          faint: 'rgba(255,255,255,0.04)',
+          border: 'var(--bt-border)',
+          'border-strong': 'var(--bt-border-strong)',
+          faint: 'var(--bt-faint)',
           // Text
-          text: '#e8eef8',
-          muted: '#7a92b0',
-          dim: '#4a5d75',
+          text: 'var(--bt-text)',
+          muted: 'var(--bt-muted)',
+          dim: 'var(--bt-dim)',
           // Brand
-          primary: '#1a8fe3',
-          accent: '#2ec4a5',
-          amber: '#e8b84e',
-          red: '#e85d5d'
+          primary: 'var(--bt-primary)',
+          'primary-faint': 'var(--bt-primary-faint)',
+          accent: 'var(--bt-accent)',
+          'accent-faint': 'var(--bt-accent-faint)',
+          amber: 'var(--bt-amber)',
+          red: 'var(--bt-red)',
+          'send-btn': 'var(--bt-send-btn-bg)',
+          'send-btn-hover': 'var(--bt-send-btn-bg-hover)',
+          brand: 'var(--bt-brand)'
         }
       },
       fontFamily: {
@@ -34,12 +40,13 @@ export default {
         ribbon: '0.18em'
       },
       backgroundImage: {
-        'bt-grad': 'linear-gradient(135deg, #1a8fe3, #2ec4a5)'
+        'bt-grad': 'linear-gradient(135deg, var(--bt-primary), var(--bt-accent))'
       },
       boxShadow: {
-        'bt-modal': '0 30px 80px rgba(0,0,0,0.5)',
-        'bt-glow-teal': '0 0 8px #2ec4a5',
-        'bt-glow-blue': '0 0 8px #1a8fe3'
+        'bt-modal': 'var(--bt-shadow-modal)',
+        'bt-glow-teal': '0 0 8px var(--bt-accent)',
+        'bt-glow-blue': '0 0 8px var(--bt-primary)',
+        'bt-nav-active': 'var(--bt-nav-active-shadow)'
       },
       keyframes: {
         fadeIn: {

@@ -79,7 +79,10 @@ export function nextBackoff(
   return Math.min(base * 2, maxMs)
 }
 
-export function deriveTransition(update: RawConnectionUpdate): DerivedTransition {
+export function deriveTransition(
+  update: RawConnectionUpdate,
+  currentState: WAConnectionState = 'connecting'
+): DerivedTransition {
   if (update.connection === 'open') {
     return {
       state: 'open',
@@ -116,8 +119,17 @@ export function deriveTransition(update: RawConnectionUpdate): DerivedTransition
     }
   }
 
+  if (update.connection === 'connecting') {
+    return {
+      state: 'connecting',
+      qr: null,
+      shouldReconnect: false,
+      isLoggedOut: false
+    }
+  }
+
   return {
-    state: 'connecting',
+    state: currentState,
     qr: null,
     shouldReconnect: false,
     isLoggedOut: false

@@ -6,6 +6,8 @@ import type {
   AiChatResponse,
   AppErrorEvent,
   ChatMessage,
+  DbChat,
+  DbChatMessage,
   DbStats,
   ImportProgress,
   ModelProgress,
@@ -30,7 +32,9 @@ export interface BrainTwoApi {
     getPlatform: () => Promise<NodeJS.Platform>
     getMessageCount: () => Promise<number>
     getRecentMessages: (limit: number) => Promise<RecentMessage[]>
+    getMessageById: (id: number) => Promise<RecentMessage | null>
     getSyncStatus: () => Promise<SyncStatus>
+    setTitleBarOverlay: (opts: { color: string; symbolColor: string }) => Promise<void>
     getSettings: () => Promise<UserSettings>
     setSettings: (settings: Partial<UserSettings>) => Promise<UserSettings>
     getDbStats: () => Promise<DbStats>
@@ -59,7 +63,14 @@ export interface BrainTwoApi {
   ai: {
     getConfig: () => Promise<AiConfig | null>
     setConfig: (config: Partial<AiConfig>) => Promise<void>
-    send: (messages: ChatMessage[]) => Promise<AiChatResponse>
+    send: (messages: ChatMessage[], goodSourceId?: number, chatId?: number) => Promise<AiChatResponse>
+    listChats: () => Promise<DbChat[]>
+    getChatMessages: (chatId: number) => Promise<DbChatMessage[]>
+    createChat: (title: string) => Promise<number>
+    deleteChat: (chatId: number) => Promise<void>
+    renameChat: (chatId: number, title: string) => Promise<void>
+    saveChatMessage: (chatId: number, role: 'user' | 'assistant', content: string, sources: string | null) => Promise<number>
+    deleteLastMessage: (chatId: number) => Promise<void>
   }
 }
 
@@ -110,7 +121,10 @@ export function createApi(
       getMessageCount: () => ipcRenderer.invoke('app:get-message-count'),
       getRecentMessages: (limit: number) =>
         ipcRenderer.invoke('app:get-recent-messages', limit),
+      getMessageById: (id: number) => ipcRenderer.invoke('app:get-message-by-id', id),
       getSyncStatus: () => ipcRenderer.invoke('app:get-sync-status'),
+      setTitleBarOverlay: (opts: { color: string; symbolColor: string }) =>
+        ipcRenderer.invoke('app:set-title-bar-overlay', opts),
       getSettings: () => ipcRenderer.invoke('settings:get'),
       setSettings: (settings: Partial<UserSettings>) =>
         ipcRenderer.invoke('settings:set', settings),
@@ -140,7 +154,14 @@ export function createApi(
     ai: {
       getConfig: () => ipcRenderer.invoke('ai:get-config'),
       setConfig: (config: Partial<AiConfig>) => ipcRenderer.invoke('ai:set-config', config),
-      send: (messages: ChatMessage[]) => ipcRenderer.invoke('ai:send', messages)
+      send: (messages: ChatMessage[], goodSourceId?: number, chatId?: number) => ipcRenderer.invoke('ai:send', messages, goodSourceId, chatId),
+      listChats: () => ipcRenderer.invoke('ai:list-chats'),
+      getChatMessages: (chatId: number) => ipcRenderer.invoke('ai:get-chat-messages', chatId),
+      createChat: (title: string) => ipcRenderer.invoke('ai:create-chat', title),
+      deleteChat: (chatId: number) => ipcRenderer.invoke('ai:delete-chat', chatId),
+      renameChat: (chatId: number, title: string) => ipcRenderer.invoke('ai:rename-chat', chatId, title),
+      saveChatMessage: (chatId: number, role: 'user' | 'assistant', content: string, sources: string | null) => ipcRenderer.invoke('ai:save-chat-message', chatId, role, content, sources),
+      deleteLastMessage: (chatId: number) => ipcRenderer.invoke('ai:delete-last-message', chatId)
     }
   }
 }

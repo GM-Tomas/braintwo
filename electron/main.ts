@@ -4,8 +4,6 @@ import {
   Notification,
   Menu,
   Tray,
-  dialog,
-  ipcMain,
   nativeImage,
   session,
   shell
@@ -13,26 +11,21 @@ import {
 import pino from 'pino'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
-import { createWhatsAppService, type WhatsAppService } from './services/whatsapp'
-import type { WAConnectionState } from './services/whatsapp-state'
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { createWhatsAppService } from './services/whatsapp'
 import { openDatabase, type DbInstance } from './services/db'
 import { createEmbeddingService, type EmbeddingService } from './services/embeddings'
 import { createSearchService, type SearchService } from './services/search'
-import { importExportFile, type ImportProgress } from './services/export-parser'
-import { createSyncStatusTracker, type SyncStatusTracker } from './services/sync-status'
-import { readSettings, writeSettings } from './services/settings'
-import { readAiConfig, writeAiConfig } from './services/ai-config'
-import { createAiChatService, type AiChatService } from './services/ai-chat'
-import { createContextService, type ContextService } from './services/context'
-import type { AiConfig, ChatMessage } from '@shared/types'
+import { createSyncStatusTracker } from './services/sync-status'
+import { readAiConfig } from './services/ai-config'
+import { createAiChatService } from './services/ai-chat'
+import { createContextService } from './services/context'
 import {
   createIngestPipeline,
   extractKind,
   extractMediaMeta,
   extractText,
   extractTimestampMs,
-  type IngestPipeline,
   type RecentMessage
 } from './services/ingest'
 import {
@@ -40,9 +33,10 @@ import {
   buildResourcePath,
   pickTrayIconName,
   buildTrayMenuTemplate,
-  createMessageBatcher,
-  type MessageBatcher
+  createMessageBatcher
 } from './main-helpers'
+import { registerAllHandlers } from './ipc/register'
+import type { AppContext } from './app-context'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -50,23 +44,30 @@ const isDev = !app.isPackaged
 const startedHidden = process.argv.includes('--hidden')
 const LOG_CAP_BYTES = 1_000_000
 
-let mainWindow: BrowserWindow | null = null
-let tray: Tray | null = null
-let isQuitting = false
-let whatsapp: WhatsAppService | null = null
-let lastConnectionState: WAConnectionState = 'disconnected'
-let lastQr: string | null = null
-let db: DbInstance | null = null
-let ingest: IngestPipeline | null = null
-let dbPath: string | null = null
 let embeddings: EmbeddingService | null = null
-let search: SearchService | null = null
-let aiChat: AiChatService | null = null
-let contextSvc: ContextService | null = null
-let syncStatus: SyncStatusTracker = createSyncStatusTracker()
-let messageBatcher: MessageBatcher<RecentMessage> | null = null
 let catchupTimer: ReturnType<typeof setTimeout> | null = null
 let catchupInserted = 0
+
+const context: AppContext = {
+  app,
+  mainWindow: { value: null },
+  tray: { value: null },
+  whatsapp: { value: null },
+  db: { value: null },
+  ingest: { value: null },
+  search: { value: null },
+  aiChat: { value: null },
+  contextSvc: { value: null },
+  syncStatus: createSyncStatusTracker(),
+  messageBatcher: { value: null },
+  dbPath: { value: null },
+  isQuitting: { value: false },
+  lastConnectionState: { value: 'disconnected' },
+  lastQr: { value: null },
+  showWindow,
+  broadcast,
+  reportError
+}
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
@@ -79,10 +80,10 @@ app.on('second-instance', () => {
 })
 
 app.on('before-quit', () => {
-  isQuitting = true
-  void whatsapp?.stop()
-  messageBatcher?.flush()
-  db?.close()
+  context.isQuitting.value = true
+  void context.whatsapp.value?.stop()
+  context.messageBatcher.value?.flush()
+  context.db.value?.close()
 })
 
 const resourceOpts = () => ({
@@ -105,7 +106,7 @@ function buildTrayMenu(status: string): Menu {
     buildTrayMenuTemplate(status, {
       onOpen: showWindow,
       onQuit: () => {
-        isQuitting = true
+        context.isQuitting.value = true
         app.quit()
       }
     })
@@ -115,22 +116,22 @@ function buildTrayMenu(status: string): Menu {
 function createTray(): void {
   const iconName = pickTrayIconName(process.platform)
   const icon = nativeImage.createFromPath(buildResourcePath(resourceOpts(), iconName))
-  tray = new Tray(icon)
-  tray.setToolTip('BrainTwo')
-  tray.setContextMenu(buildTrayMenu('Iniciando…'))
-  tray.on('click', () => showWindow())
-  tray.on('double-click', () => showWindow())
+  context.tray.value = new Tray(icon)
+  context.tray.value.setToolTip('BrainTwo')
+  context.tray.value.setContextMenu(buildTrayMenu('Iniciando…'))
+  context.tray.value.on('click', () => showWindow())
+  context.tray.value.on('double-click', () => showWindow())
 }
 
 function updateTrayStatus(status: string): void {
-  if (!tray) return
-  tray.setContextMenu(buildTrayMenu(status))
-  tray.setToolTip(`BrainTwo — ${status}`)
+  if (!context.tray.value) return
+  context.tray.value.setContextMenu(buildTrayMenu(status))
+  context.tray.value.setToolTip(`BrainTwo — ${status}`)
 }
 
 function broadcast(channel: string, payload: unknown): void {
-  if (!mainWindow || mainWindow.isDestroyed()) return
-  mainWindow.webContents.send(channel, payload)
+  if (!context.mainWindow.value || context.mainWindow.value.isDestroyed()) return
+  context.mainWindow.value.webContents.send(channel, payload)
 }
 
 function reportError(code: string, message: string, recoverable = true): void {
@@ -138,19 +139,25 @@ function reportError(code: string, message: string, recoverable = true): void {
 }
 
 function publishSyncStatus(): void {
-  const status = syncStatus.get()
+  const status = context.syncStatus.get()
   broadcast('sync:state-changed', status)
   updateTrayStatus(status.label)
 }
 
 function createWindow(): void {
-  mainWindow = new BrowserWindow({
+  context.mainWindow.value = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 900,
     minHeight: 700,
     show: false,
     autoHideMenuBar: true,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#070c14',
+      symbolColor: '#7a90b8',
+      height: 36
+    },
     backgroundColor: '#060a12',
     icon: nativeImage.createFromPath(buildResourcePath(resourceOpts(), 'icon-256.png')),
     webPreferences: {
@@ -161,130 +168,168 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => {
-    if (!startedHidden) mainWindow?.show()
+  context.mainWindow.value.on('ready-to-show', () => {
+    if (!startedHidden) context.mainWindow.value?.show()
   })
 
-  mainWindow.on('close', (event) => {
-    if (!isQuitting) {
+  context.mainWindow.value.on('close', (event) => {
+    if (!context.isQuitting.value) {
       event.preventDefault()
-      mainWindow?.hide()
+      context.mainWindow.value?.hide()
     }
   })
 
-  mainWindow.on('closed', () => {
-    mainWindow = null
+  context.mainWindow.value.on('closed', () => {
+    context.mainWindow.value = null
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
+  context.mainWindow.value.webContents.setWindowOpenHandler((details) => {
     void shell.openExternal(details.url)
     return { action: 'deny' }
   })
 
-  mainWindow.webContents.on('did-finish-load', () => {
-    broadcast('wa:connection-state', lastConnectionState)
-    if (lastQr) broadcast('wa:qr', lastQr)
+  context.mainWindow.value.webContents.on('did-finish-load', () => {
+    broadcast('wa:connection-state', context.lastConnectionState.value)
+    if (context.lastQr.value) broadcast('wa:qr', context.lastQr.value)
   })
 
-  // Forward renderer console (incl. errors) to the terminal in dev so blank
-  // screens have a visible cause. Levels: 0=verbose 1=info 2=warning 3=error.
   if (isDev) {
-    mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    context.mainWindow.value.webContents.on('console-message', (_event, level, message, line, sourceId) => {
       const tag = ['[V]', '[I]', '[W]', '[E]'][level] ?? '[?]'
       // eslint-disable-next-line no-console
       console.log(`[renderer]${tag} ${message}  (${sourceId}:${line})`)
     })
-    mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    context.mainWindow.value.webContents.on('did-fail-load', (_e, code, desc, url) => {
       // eslint-disable-next-line no-console
       console.error(`[renderer:fail-load] ${code} ${desc} ${url}`)
     })
-    mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    context.mainWindow.value.webContents.on('render-process-gone', (_e, details) => {
       // eslint-disable-next-line no-console
       console.error(`[renderer:gone] ${JSON.stringify(details)}`)
     })
-    mainWindow.webContents.on('preload-error', (_e, preloadPath, error) => {
+    context.mainWindow.value.webContents.on('preload-error', (_e, preloadPath, error) => {
       // eslint-disable-next-line no-console
       console.error(`[preload:error] ${preloadPath}\n${error.stack ?? error.message}`)
     })
   }
 
   if (process.env['ELECTRON_RENDERER_URL']) {
-    void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-    if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' })
+    void context.mainWindow.value.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    // if (isDev) context.mainWindow.value.webContents.openDevTools({ mode: 'detach' })
   } else {
-    void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    void context.mainWindow.value.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
 
 function showWindow(): void {
-  if (!mainWindow) {
+  if (!context.mainWindow.value) {
     createWindow()
     return
   }
-  if (mainWindow.isMinimized()) mainWindow.restore()
-  if (!mainWindow.isVisible()) mainWindow.show()
-  mainWindow.focus()
+  if (context.mainWindow.value.isMinimized()) context.mainWindow.value.restore()
+  if (!context.mainWindow.value.isVisible()) context.mainWindow.value.show()
+  context.mainWindow.value.focus()
+}
+
+function checkAndClearFallbackEmbeddings(db: DbInstance, search: SearchService): void {
+  try {
+    const sample = db.raw.prepare('SELECT embedding FROM message_embeddings LIMIT 1').get() as { embedding: Buffer } | undefined
+    if (sample && sample.embedding) {
+      const floatArr = new Float32Array(
+        sample.embedding.buffer,
+        sample.embedding.byteOffset,
+        sample.embedding.byteLength / Float32Array.BYTES_PER_ELEMENT
+      )
+      let nonZero = 0
+      for (let i = 0; i < floatArr.length; i++) {
+        if (floatArr[i] !== 0) nonZero++
+      }
+      if (nonZero < 500) {
+        db.clearEmbeddings()
+        void search.backfillMissing(50_000).catch(() => { /* ignore */ })
+      }
+    }
+  } catch {
+    // Ignore database errors
+  }
 }
 
 function openStorage(): void {
-  dbPath = join(app.getPath('userData'), 'braintwo.db')
-  db = openDatabase(dbPath)
+  context.dbPath.value = join(app.getPath('userData'), 'braintwo.db')
+  context.db.value = openDatabase(context.dbPath.value)
   const ingestLogger = isDev
     ? pino({ level: 'info', name: 'ingest' })
     : createFileLogger('ingest')
-  ingest = createIngestPipeline(db, ingestLogger)
-  ingestLogger?.info({ dbPath, count: ingest.count() }, 'storage opened')
+  context.ingest.value = createIngestPipeline(context.db.value, ingestLogger)
+  ingestLogger?.info({ dbPath: context.dbPath.value, count: context.ingest.value.count() }, 'storage opened')
   const modelsDir = join(app.getPath('userData'), 'models')
-  // Version tag encodes the model AND the embedding prefix convention.
-  // Bump this string whenever either changes to trigger a full re-index.
-  const EMBEDDING_VERSION = 'multilingual-e5-small:passage:v1'
+  const EMBEDDING_VERSION = 'multilingual-e5-base:passage:v4'
   const versionFile = join(app.getPath('userData'), 'embedding_version.txt')
   let storedVersion = ''
   try { storedVersion = readFileSync(versionFile, 'utf8').trim() } catch { /* first run */ }
-  if (storedVersion !== EMBEDDING_VERSION && db.countEmbeddings() > 0) {
-    db.clearEmbeddings()
+  if (storedVersion !== EMBEDDING_VERSION) {
+    if (context.db.value.countEmbeddings() > 0) {
+      context.db.value.clearEmbeddings()
+    }
+    try {
+      context.db.value.raw.exec('UPDATE messages SET context_note = NULL')
+    } catch { /* ignore */ }
   }
   writeFileSync(versionFile, EMBEDDING_VERSION)
   embeddings = createEmbeddingService({
     cacheDir: modelsDir,
-    onProgress: (progress) => broadcast('search:model-progress', progress)
+    onProgress: (progress) => {
+      broadcast('search:model-progress', progress)
+      if (progress.status === 'ready' && context.db.value && context.search.value) {
+        checkAndClearFallbackEmbeddings(context.db.value, context.search.value)
+      }
+    }
   })
-  search = createSearchService({ db, embeddings })
-  aiChat = createAiChatService({
-    db,
-    search,
+  context.search.value = createSearchService({ db: context.db.value, embeddings })
+  context.aiChat.value = createAiChatService({
+    db: context.db.value,
+    search: context.search.value,
     embed: (text) => embeddings!.embed(text, 'passage')
   })
-  contextSvc = createContextService({
-    db,
+  context.contextSvc.value = createContextService({
+    db: context.db.value,
     embeddings,
     getAiConfig: () => readAiConfig(app.getPath('userData')),
     onError: (msg) => reportError('context.generation_failed', msg)
   })
-  void contextSvc.backfill()
-  // Backfill embeddings for any memories stored without one (e.g. from a previous session).
+  void context.contextSvc.value.backfill()
   void (async () => {
-    const unembedded = db.listUnembeddedMemories(200)
+    const unembedded = context.db.value!.listUnembeddedMemories(200)
     for (const m of unembedded) {
       try {
         const vec = await embeddings!.embed(m.content, 'passage')
-        db.insertMemoryEmbedding(m.id, vec)
+        context.db.value!.insertMemoryEmbedding(m.id, vec)
       } catch { /* best-effort */ }
     }
   })()
-  void search.backfillMissing(50_000).catch((err: unknown) => {
+
+  // If local model is already downloaded, check and heal on startup
+  const modelPath = join(modelsDir, 'Xenova', 'multilingual-e5-base', 'onnx', 'model_quantized.onnx')
+  if (existsSync(modelPath)) {
+    checkAndClearFallbackEmbeddings(context.db.value, context.search.value)
+  }
+
+  // Warm up embedding service / trigger background download on startup
+  void embeddings.embed('warmup', 'query').catch(() => { /* ignore */ })
+
+  void context.search.value.backfillMissing(50_000).catch((err: unknown) => {
     reportError('search.backfill_failed', err instanceof Error ? err.message : String(err))
   })
-  messageBatcher = createMessageBatcher<RecentMessage>({
+  context.messageBatcher.value = createMessageBatcher<RecentMessage>({
     broadcast: (batch) => broadcast('app:messages-batch', batch)
   })
 }
 
 function queueEmbedding(rowId: number, text: string): void {
-  if (!db || !embeddings || !text.trim()) return
+  if (!context.db.value || !embeddings || !text.trim()) return
   void embeddings
     .embed(text)
-    .then((vec) => db?.insertEmbedding(rowId, vec))
+    .then((vec) => context.db.value?.insertEmbedding(rowId, vec))
     .catch((err: unknown) => {
       reportError('search.embed_failed', err instanceof Error ? err.message : String(err))
     })
@@ -292,14 +337,14 @@ function queueEmbedding(rowId: number, text: string): void {
 
 function noteCatchupMessage(): void {
   catchupInserted++
-  syncStatus.startCatchup()
+  context.syncStatus.startCatchup()
   publishSyncStatus()
   if (catchupTimer) clearTimeout(catchupTimer)
   catchupTimer = setTimeout(() => {
     const count = catchupInserted
     catchupInserted = 0
     catchupTimer = null
-    syncStatus.finishCatchup(count)
+    context.syncStatus.finishCatchup(count)
     publishSyncStatus()
     if (count > 0 && Notification.isSupported()) {
       new Notification({
@@ -312,41 +357,37 @@ function noteCatchupMessage(): void {
 
 function startWhatsApp(): void {
   const authPath = join(app.getPath('userData'), 'auth')
-  // In dev we surface info-level logs (Baileys handshake, messages.upsert
-  // counters, history-set deltas) to the terminal; in prod we stay silent.
   const waLogger = isDev
     ? pino({ level: 'info', name: 'wa' })
     : createFileLogger('wa')
-  whatsapp = createWhatsAppService({ authPath, logger: waLogger })
+  context.whatsapp.value = createWhatsAppService({ authPath, logger: waLogger })
 
-  whatsapp.on('connection-state', (state) => {
-    lastConnectionState = state
-    if (state === 'open') lastQr = null
-    syncStatus.setConnection(state)
+  context.whatsapp.value.on('connection-state', (state) => {
+    context.lastConnectionState.value = state
+    if (state === 'open') context.lastQr.value = null
+    context.syncStatus.setConnection(state)
     updateTrayStatus(statusLabel(state))
     broadcast('wa:connection-state', state)
     publishSyncStatus()
   })
 
-  whatsapp.on('qr', (qr) => {
-    lastQr = qr
+  context.whatsapp.value.on('qr', (qr) => {
+    context.lastQr.value = qr
     broadcast('wa:qr', qr)
   })
 
-  whatsapp.on('logged-out', () => {
-    lastQr = null
+  context.whatsapp.value.on('logged-out', () => {
+    context.lastQr.value = null
     broadcast('wa:logged-out', undefined)
   })
 
-  whatsapp.on('message', ({ raw, source }) => {
-    if (!ingest || !messageBatcher) return
-    const result = ingest.ingest(raw, source)
+  context.whatsapp.value.on('message', ({ raw, source }) => {
+    if (!context.ingest.value || !context.messageBatcher.value) return
+    const result = context.ingest.value.ingest(raw, source)
     if (!result.inserted || result.rowId === null) return
     const id = raw.key?.id
     if (!id) return
-    // Build the renderer-friendly row directly from inputs to avoid an extra
-    // SELECT — the values are already validated by ingestMessage.
-    messageBatcher.push({
+    context.messageBatcher.value.push({
       id: result.rowId,
       wa_msg_id: id,
       timestamp: extractTimestampMs(raw),
@@ -357,13 +398,13 @@ function startWhatsApp(): void {
       fromMe: raw.key?.fromMe === true
     })
     queueEmbedding(result.rowId, extractText(raw))
-    contextSvc?.queue(result.rowId, extractKind(raw), extractText(raw), extractMediaMeta(raw))
+    context.contextSvc.value?.queue(result.rowId, extractKind(raw), extractText(raw), extractMediaMeta(raw), extractTimestampMs(raw))
     if (source === 'offline-sync' || source === 'history-sync') {
       noteCatchupMessage()
     }
   })
 
-  void whatsapp.start()
+  void context.whatsapp.value.start()
 }
 
 function createFileLogger(name: string): pino.Logger {
@@ -380,102 +421,7 @@ function createFileLogger(name: string): pino.Logger {
   return pino({ level: 'info', name }, pino.destination({ dest: logPath, sync: false }))
 }
 
-ipcMain.handle('app:open-window', () => {
-  showWindow()
-})
-
-ipcMain.handle('app:quit', () => {
-  isQuitting = true
-  app.quit()
-})
-
-ipcMain.handle('app:get-version', () => app.getVersion())
-
-ipcMain.handle('app:get-platform', () => process.platform)
-
-ipcMain.handle('app:get-message-count', () => ingest?.count() ?? 0)
-
-ipcMain.handle('app:get-recent-messages', (_e, limit: number) => {
-  return ingest?.recent(Math.max(0, Math.min(limit, 500))) ?? []
-})
-
-ipcMain.handle('app:get-sync-status', () => syncStatus.get())
-
-ipcMain.handle('settings:get', () => readSettings(app))
-
-ipcMain.handle('settings:set', (_e, patch: Parameters<typeof writeSettings>[1]) => {
-  return writeSettings(app, patch)
-})
-
-ipcMain.handle('db:stats', () => db?.stats(dbPath ?? undefined) ?? {
-  messages: 0,
-  embeddings: 0,
-  sizeBytes: 0,
-  lastIngestAt: null
-})
-
-ipcMain.handle('app:open-userdata-folder', async () => {
-  await shell.openPath(app.getPath('userData'))
-})
-
-ipcMain.handle('search:query', async (_e, text: string, k = 12) => {
-  return search?.query(text, k) ?? []
-})
-
-ipcMain.handle('ai:get-config', () => readAiConfig(app.getPath('userData')))
-
-ipcMain.handle('ai:set-config', (_e, patch: Partial<AiConfig>) => {
-  writeAiConfig(app.getPath('userData'), patch)
-})
-
-ipcMain.handle('ai:send', async (_e, messages: ChatMessage[]) => {
-  if (!aiChat) throw new Error('Storage not ready')
-  const config = readAiConfig(app.getPath('userData'))
-  if (!config?.apiKey) throw new Error('IA no configurada. Configurá un proveedor en Settings.')
-  const today = new Date().toISOString().split('T')[0]!
-  return aiChat.send(config, messages, today)
-})
-
-ipcMain.handle('export:import', async () => {
-  if (!db) {
-    throw new Error('Storage is not ready')
-  }
-  const selected = await dialog.showOpenDialog({
-    title: 'Importar export de WhatsApp',
-    properties: ['openFile'],
-    filters: [{ name: 'WhatsApp export', extensions: ['txt'] }]
-  })
-  if (selected.canceled || selected.filePaths.length === 0) {
-    return { processed: 0, total: 0, inserted: 0, skipped: 0, done: true } satisfies ImportProgress
-  }
-  const result = await importExportFile(selected.filePaths[0]!, {
-    db,
-    onProgress: (progress) => broadcast('sync:progress', progress)
-  })
-  void search?.backfillMissing(50_000).catch((err: unknown) => {
-    reportError('search.backfill_failed', err instanceof Error ? err.message : String(err))
-  })
-  return result
-})
-
-ipcMain.handle('wa:get-connection-state', () => lastConnectionState)
-
-ipcMain.handle('wa:get-current-qr', () => lastQr)
-
-ipcMain.handle('wa:request-qr', async () => {
-  if (!whatsapp) return
-  await whatsapp.stop()
-  await whatsapp.start()
-})
-
-ipcMain.handle('wa:logout', async () => {
-  await whatsapp?.logout()
-})
-
 void app.whenReady().then(() => {
-  // CSP is enforced at the network layer in production only; in dev we rely
-  // on Vite's normal same-origin loading without a strict policy that would
-  // block HMR scripts/styles.
   if (!isDev) {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       callback({
@@ -496,6 +442,7 @@ void app.whenReady().then(() => {
 
   configureAutostart()
   openStorage()
+  registerAllHandlers(context)
   createTray()
   startWhatsApp()
   createWindow()

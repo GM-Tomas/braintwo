@@ -34,6 +34,11 @@ export type IconName =
   | 'sticker'
   | 'help'
   | 'chat'
+  | 'panel-left-close'
+  | 'panel-left-open'
+  | 'sun'
+  | 'moon'
+  | 'send'
 
 export function Icon({
   name,
@@ -218,6 +223,47 @@ function renderPath(
       return (
         <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" {...s} />
       )
+    case 'panel-left-close':
+      return (
+        <>
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" {...s} />
+          <line x1="9" y1="3" x2="9" y2="21" {...s} />
+          <path d="M16 15l-3-3 3-3" {...s} />
+        </>
+      )
+    case 'panel-left-open':
+      return (
+        <>
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" {...s} />
+          <line x1="9" y1="3" x2="9" y2="21" {...s} />
+          <path d="M14 9l3 3-3 3" {...s} />
+        </>
+      )
+    case 'sun':
+      return (
+        <>
+          <circle cx="12" cy="12" r="5" {...s} />
+          <line x1="12" y1="1" x2="12" y2="3" {...s} />
+          <line x1="12" y1="21" x2="12" y2="23" {...s} />
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" {...s} />
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" {...s} />
+          <line x1="1" y1="12" x2="3" y2="12" {...s} />
+          <line x1="21" y1="12" x2="23" y2="12" {...s} />
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" {...s} />
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" {...s} />
+        </>
+      )
+    case 'moon':
+      return (
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" {...s} />
+      )
+    case 'send':
+      return (
+        <>
+          <line x1="22" y1="2" x2="11" y2="13" {...s} />
+          <polygon points="22 2 15 22 11 13 2 9 22 2" {...s} />
+        </>
+      )
     default:
       return null
   }
@@ -242,8 +288,8 @@ export function BrainMark({ size = 28, className }: BrainMarkProps) {
     >
       <defs>
         <linearGradient id={id} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#1a8fe3" />
-          <stop offset="100%" stopColor="#2ec4a5" />
+          <stop offset="0%" stopColor="var(--bt-primary)" />
+          <stop offset="100%" stopColor="var(--bt-accent)" />
         </linearGradient>
       </defs>
       <g

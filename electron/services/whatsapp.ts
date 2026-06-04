@@ -148,6 +148,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
 
   async start(): Promise<void> {
     this.stopped = false
+    this.currentBackoffMs = 0
     await this.connect()
   }
 
@@ -166,6 +167,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
 
   async logout(): Promise<void> {
     this.stopped = true
+    this.currentBackoffMs = 0
     this.clearReconnect()
     if (this.socket?.logout) {
       try {
@@ -207,7 +209,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       // fetchLatestBaileysVersion does an HTTP GET to a remote repo; if it
       // fails (offline, blocked, slow DNS) we don't want to block pairing.
       // Fall back to a known-good version so the socket still initializes.
-      let version: unknown = [2, 3000, 1023223]
+      let version: unknown = [2, 3000, 1035194821]
       try {
         const fetched = await this.versionFactory()
         if (fetched?.version) version = fetched.version
@@ -233,7 +235,12 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
         logger: this.logger
       })
 
+      // Capture the socket reference so that events arriving from a stale
+      // socket (after stop/logout replaced or nulled this.socket) are ignored.
+      const capturedSocket = this.socket
+
       this.socket.ev.on('creds.update', (...args: unknown[]) => {
+        if (this.socket !== capturedSocket) return
         const update = args[0] as { me?: MinimalWaUser } | undefined
         if (update?.me) {
           this.authCreds = { ...(this.authCreds ?? {}), me: update.me }
@@ -246,11 +253,13 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       })
 
       this.socket.ev.on('connection.update', (...args: unknown[]) => {
+        if (this.socket !== capturedSocket) return
         const update = (args[0] ?? {}) as Parameters<typeof deriveTransition>[0]
         this.handleConnectionUpdate(update)
       })
 
       this.socket.ev.on('messages.upsert', (...args: unknown[]) => {
+        if (this.socket !== capturedSocket) return
         const evt = (args[0] ?? {}) as {
           type?: string
           messages?: WAMessageLike[]
@@ -259,6 +268,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       })
 
       this.socket.ev.on('messaging-history.set', (...args: unknown[]) => {
+        if (this.socket !== capturedSocket) return
         const evt = (args[0] ?? {}) as { messages?: WAMessageLike[] }
         this.handleHistorySet(evt)
       })
@@ -271,13 +281,24 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
   }
 
   private handleConnectionUpdate(
-    update: Parameters<typeof deriveTransition>[0]
-  ): void {
-    const t = deriveTransition(update)
+     update: Parameters<typeof deriveTransition>[0]
+   ): void {
+     if (this.stopped) return
+     const t = deriveTransition(update, this.state)
 
     if (t.qr) {
       this.currentQr = t.qr
+      this.currentBackoffMs = 0
       this.emit('qr', t.qr)
+    }
+
+    if (t.isLoggedOut) {
+      // Delay state transition and 'logged-out' event until auth files are
+      // fully removed. This prevents a new connect() (triggered by the user
+      // clicking "Generar QR de nuevo") from racing against a partial rmAuth
+      // and loading stale revoked credentials — which causes WA to reject the QR.
+      void this.handleServerLoggedOut()
+      return
     }
 
     this.transitionTo(t.state)
@@ -288,9 +309,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       this.flushPendingMessages('connection.open')
     }
 
-    if (t.isLoggedOut) {
-      this.handleServerLoggedOut()
-    } else if (t.shouldReconnect) {
+    if (t.shouldReconnect) {
       this.scheduleReconnectIfNeeded()
     }
   }
@@ -425,14 +444,20 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
     )
   }
 
-  private handleServerLoggedOut(): void {
+  private async handleServerLoggedOut(): Promise<void> {
+    this.stopped = true
+    this.currentBackoffMs = 0
     this.clearReconnect()
     this.socket = null
     this.authCreds = null
     this.pendingMessages = []
-    void this.rmAuth(this.authPath).catch((err: unknown) => {
+    this.currentQr = null
+    try {
+      await this.rmAuth(this.authPath)
+    } catch (err: unknown) {
       this.logger.warn({ err }, 'rmAuth after server logout failed')
-    })
+    }
+    this.transitionTo('logged-out')
     this.emit('logged-out')
   }
 

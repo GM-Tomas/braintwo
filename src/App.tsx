@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react'
-import type { AppErrorEvent, SyncStatus, View, WAConnectionState } from '@shared/types'
-import { Onboarding, WelcomeCards } from './views/Onboarding'
+import { useCallback, useEffect, useState } from 'react'
+import type { AppErrorEvent, DbChat, View, WAConnectionState } from '@shared/types'
+import { Onboarding, FTU } from './views/Onboarding'
 import { Search } from './views/Search'
 import { Timeline } from './views/Timeline'
 import { Settings } from './views/Settings'
 import { Chat } from './views/Chat'
 import { Sidebar } from './components/Sidebar'
+import { useDependencies } from '@/core/infrastructure/DependenciesContext'
+import { ConnectionEntity } from '@shared/domain/connection.entity'
 
 type Phase = 'welcome' | 'qr' | 'app'
 
@@ -36,29 +38,154 @@ function initialPhase(): Phase {
 }
 
 export default function App() {
+  const { connectionService, settingsRepository, aiService } = useDependencies()
   const [phase, setPhase] = useState<Phase>(() => initialPhase())
   const [view, setView] = useState<View>(() =>
-    readFlag(ONBOARDED_KEY) ? 'search' : 'onboarding'
+    readFlag(ONBOARDED_KEY) ? 'chat' : 'onboarding'
   )
   const [autoRouted, setAutoRouted] = useState(false)
   const [waState, setWaState] = useState<WAConnectionState>('connecting')
   const [version, setVersion] = useState<string>('')
   const [platform, setPlatform] = useState<NodeJS.Platform | null>(null)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
-  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
+  const [syncStatus, setSyncStatus] = useState<ConnectionEntity | null>(null)
   const [appError, setAppError] = useState<AppErrorEvent | null>(null)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem('braintwo:theme')
+      return (saved === 'light' || saved === 'dark') ? saved : 'dark'
+    } catch {
+      return 'dark'
+    }
+  })
+
+  // Chat management state
+  const [chats, setChats] = useState<DbChat[]>([])
+  const [activeChatId, setActiveChatId] = useState<number | null>(null)
+  const [editingChatId, setEditingChatId] = useState<number | null>(null)
+  const [editingTitle, setEditingTitle] = useState('')
+  const [deleteConfirmChatId, setDeleteConfirmChatId] = useState<number | null>(null)
+
+  const loadChats = useCallback(async () => {
+    try {
+      const list = await aiService.listChats()
+      const WELCOME_CHAT_CREATED_KEY = 'braintwo:welcome-chat-created'
+      if (list.length === 0 && !localStorage.getItem(WELCOME_CHAT_CREATED_KEY)) {
+        const title = 'Bienvenido a BrainTwo'
+        const chatId = await aiService.createChat(title)
+
+        const welcomeMessage = `¡Hola! 👋 ¡Te damos la bienvenida a **BrainTwo**! 🧠✨
+
+Este es tu segundo cerebro digital, diseñado para ayudarte a buscar, recordar y analizar todo lo que pasa por tu WhatsApp de forma 100% segura y local. 🔒💻
+
+Aquí tienes un resumen de lo que puedes hacer:
+1. 🔍 **Buscador Inteligente**: Encuentra mensajes, enlaces y transcripciones de audios al instante desde la pestaña de **Búsqueda**.
+2. 📅 **Timeline**: Revisa todo tu historial de forma cronológica, como un feed personal limpio y sin algoritmos.
+3. 💬 **Asistente IA**: Este chat sirve para conversar con un asistente de Inteligencia Artificial que tiene acceso a tus conversaciones y a la memoria de la aplicación.
+
+¡Pregúntame lo que quieras! Por ejemplo:
+* *¿Qué es BrainTwo y cómo funciona?* 🤖
+* *¿Cómo puedo importar chats viejos?* 📂
+* *¿Dónde se guardan mis datos?* 🏠
+
+¿En qué te puedo ayudar hoy? 😊`
+
+        await aiService.saveChatMessage(chatId, 'assistant', welcomeMessage, null)
+        localStorage.setItem(WELCOME_CHAT_CREATED_KEY, '1')
+
+        const updatedList = await aiService.listChats()
+        setChats(updatedList)
+        setActiveChatId(chatId)
+      } else {
+        setChats(list)
+      }
+    } catch (err) {
+      console.error('Error loading chats:', err)
+    }
+  }, [aiService, setActiveChatId])
+
+  const startNewChat = useCallback(() => {
+    setActiveChatId(null)
+    setEditingChatId(null)
+  }, [])
+
+  const handleDeleteChat = useCallback(async (id: number) => {
+    try {
+      await aiService.deleteChat(id)
+      setDeleteConfirmChatId(null)
+      if (activeChatId === id) {
+        startNewChat()
+      }
+      await loadChats()
+    } catch (err) {
+      console.error('Error deleting chat:', err)
+    }
+  }, [aiService, activeChatId, startNewChat, loadChats])
+
+  const saveRename = useCallback(async () => {
+    if (editingChatId === null) return
+    const title = editingTitle.trim()
+    if (!title) {
+      setEditingChatId(null)
+      return
+    }
+    try {
+      await aiService.renameChat(editingChatId, title)
+      setEditingChatId(null)
+      await loadChats()
+    } catch (err) {
+      console.error('Error renaming chat:', err)
+    }
+  }, [aiService, editingChatId, editingTitle, loadChats])
 
   useEffect(() => {
-    void window.braintwo.wa.getConnectionState().then(setWaState)
-    void window.braintwo.app.getVersion().then(setVersion)
-    void window.braintwo.app.getPlatform().then(setPlatform)
-    void window.braintwo.app.getSyncStatus().then(setSyncStatus)
-    const off = window.braintwo.wa.onConnectionState((state) => {
+    if (view === 'chat') {
+      void loadChats()
+    }
+  }, [view, loadChats])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('braintwo:theme', theme)
+    } catch {
+      // ignore
+    }
+    if (theme === 'light') {
+      document.documentElement.classList.add('light')
+    } else {
+      document.documentElement.classList.remove('light')
+    }
+    const overlay = theme === 'light'
+      ? { color: '#ffffff', symbolColor: '#1e293b' }
+      : { color: '#070c14', symbolColor: '#7a90b8' }
+    window.braintwo.app.setTitleBarOverlay(overlay).catch(() => {})
+  }, [theme])
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'))
+  }
+
+  useEffect(() => {
+    void connectionService.getConnectionState().then(setWaState)
+    void settingsRepository.getVersion().then(setVersion)
+    void settingsRepository.getPlatform().then((p) => setPlatform(p as NodeJS.Platform))
+    void connectionService.getSyncStatus().then(setSyncStatus)
+    
+    void connectionService.getCurrentQr().then((qr) => {
+      if (qr) {
+        setPhase((prev) => {
+          if (prev !== 'app') return prev
+          setView('onboarding')
+          return 'qr'
+        })
+      }
+    })
+
+    const off = connectionService.onConnectionState((state) => {
       setWaState(state)
       setSyncStatus((prev) =>
         prev
-          ? {
-              ...prev,
+          ? new ConnectionEntity({
               state: state === 'open' ? 'idle' : state,
               label:
                 state === 'open'
@@ -67,22 +194,36 @@ export default function App() {
                     ? 'Reconectando'
                     : state === 'logged-out'
                       ? 'Sesion cerrada'
-                      : 'Conectando'
-            }
+                      : 'Conectando',
+              lastPrimaryActivityAt: prev.lastPrimaryActivityAt,
+              stalePrimaryDays: prev.stalePrimaryDays,
+              newMessages: prev.newMessages
+            })
           : prev
       )
     })
-    const offSync = window.braintwo.app.onSyncStateChanged(setSyncStatus)
-    const offError = window.braintwo.app.onError((err) => {
+
+    const offQr = connectionService.onQr(() => {
+      setPhase((prev) => {
+        if (prev !== 'app') return prev
+        setView('onboarding')
+        return 'qr'
+      })
+    })
+
+    const offSync = connectionService.onSyncStateChanged(setSyncStatus)
+    const offError = connectionService.onError((err) => {
       setAppError(err)
       window.setTimeout(() => setAppError(null), 5000)
     })
+
     return () => {
       off()
+      offQr()
       offSync()
       offError()
     }
-  }, [])
+  }, [connectionService, settingsRepository])
 
   useEffect(() => {
     if (waState === 'open') {
@@ -90,38 +231,25 @@ export default function App() {
       writeFlag(FTU_KEY, true)
       if (phase !== 'app') setPhase('app')
       if (!autoRouted) {
-        setView('search')
+        setView('chat')
         setAutoRouted(true)
       }
       return
     }
     if (waState === 'logged-out') {
       setPhase(readFlag(ONBOARDED_KEY) || readFlag(FTU_KEY) ? 'qr' : 'welcome')
+      writeFlag(ONBOARDED_KEY, false)
       setView('onboarding')
       setShowLogoutConfirm(false)
     }
   }, [waState, autoRouted, phase])
 
-  if (phase === 'welcome') {
+  if (phase === 'welcome' || phase === 'qr') {
     return (
       <div className="flex h-full bg-bt-bg text-bt-text font-sans">
-        <main className="flex flex-1 flex-col overflow-hidden">
-          <WelcomeCards
-            onContinue={() => {
-              writeFlag(FTU_KEY, true)
-              setPhase('qr')
-            }}
-          />
-        </main>
-      </div>
-    )
-  }
-
-  if (phase === 'qr') {
-    return (
-      <div className="flex h-full bg-bt-bg text-bt-text font-sans">
-        <main className="flex flex-1 flex-col overflow-hidden">
-          <Onboarding />
+        <main className="relative flex flex-1 flex-col overflow-hidden">
+          <div className="app-drag absolute inset-x-0 top-0 h-9 z-10" />
+          <FTU startAtQr={phase === 'qr'} theme={theme} toggleTheme={toggleTheme} />
         </main>
       </div>
     )
@@ -137,16 +265,46 @@ export default function App() {
         version={version}
         platform={platform}
         onLogout={() => setShowLogoutConfirm(true)}
+        theme={theme}
+        toggleTheme={toggleTheme}
+        chats={chats}
+        activeChatId={activeChatId}
+        editingChatId={editingChatId}
+        editingTitle={editingTitle}
+        onSelectChat={(id) => {
+          setView('chat')
+          setActiveChatId(id)
+        }}
+        onNewChat={() => {
+          setView('chat')
+          startNewChat()
+        }}
+        onDeleteChat={setDeleteConfirmChatId}
+        onStartRename={(id, title) => {
+          setEditingChatId(id)
+          setEditingTitle(title)
+        }}
+        onSaveRename={saveRename}
+        onCancelRename={() => setEditingChatId(null)}
+        setEditingTitle={setEditingTitle}
       />
-      <main className="flex flex-1 flex-col overflow-hidden">
+      <main className="relative flex flex-1 flex-col overflow-hidden">
+        <div className="app-drag absolute inset-x-0 top-0 h-9 z-10" />
         {view === 'onboarding' && <Onboarding />}
         {view === 'search' && <Search />}
         {view === 'timeline' && <Timeline />}
-        {view === 'chat' && <Chat onNavigate={setView} />}
+        {view === 'chat' && (
+          <Chat
+            onNavigate={setView}
+            activeChatId={activeChatId}
+            setActiveChatId={setActiveChatId}
+            loadChats={loadChats}
+          />
+        )}
         {view === 'settings' && <Settings onLogout={() => setShowLogoutConfirm(true)} />}
       </main>
       {appError && (
-        <div className="fixed bottom-5 right-5 z-50 max-w-[360px] rounded-[8px] border border-bt-red/40 bg-[#160b10] px-4 py-3 text-sm text-bt-text shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
+        <div className="fixed bottom-5 right-5 z-50 max-w-[360px] rounded-[8px] border border-bt-red/40 bg-bt-surf px-4 py-3 text-sm text-bt-text shadow-bt-modal">
           {appError.message}
         </div>
       )}
@@ -159,7 +317,7 @@ export default function App() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="logout-title"
-            className="w-full max-w-[360px] rounded-[8px] border border-bt-border bg-[#0a101b] p-5 shadow-[0_20px_80px_rgba(0,0,0,0.45)]"
+            className="w-full max-w-[360px] rounded-[8px] border border-bt-border bg-bt-surf p-5 shadow-bt-modal"
           >
             <h2
               id="logout-title"
@@ -183,11 +341,47 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   setShowLogoutConfirm(false)
-                  void window.braintwo.wa.logout()
+                  void connectionService.logout()
                 }}
                 className="h-9 rounded-[8px] bg-bt-red px-4 text-[13px] font-semibold text-white transition-colors hover:bg-bt-red/90"
               >
                 Cerrar sesión
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {deleteConfirmChatId !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px]"
+          role="presentation"
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-chat-title"
+            className="w-full max-w-[360px] rounded-[12px] border border-bt-border bg-bt-surf p-5 shadow-bt-modal animate-fade-in text-bt-text"
+          >
+            <h3 id="delete-chat-title" className="font-display text-[18px] font-semibold text-bt-text">
+              ¿Eliminar conversación?
+            </h3>
+            <p className="mt-2 text-[13px] text-bt-muted leading-relaxed">
+              Esta acción no se puede deshacer. Se borrarán de forma permanente todos los mensajes de esta conversación.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmChatId(null)}
+                className="h-8 rounded-[8px] border border-bt-border px-3.5 text-[12px] font-medium text-bt-muted hover:bg-bt-hover hover:text-bt-text transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteChat(deleteConfirmChatId)}
+                className="h-8 rounded-[8px] bg-bt-red px-3.5 text-[12px] font-semibold text-white hover:bg-bt-red/90 transition-colors"
+              >
+                Eliminar
               </button>
             </div>
           </section>

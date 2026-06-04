@@ -16,11 +16,10 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@shared/*": ["shared/*"]
+      "@/*": ["./src/*"],
+      "@shared/*": ["./shared/*"]
     }
   },
-  "include": ["src", "shared", "vitest.setup.ts"]
+  "include": ["src", "shared", "vitest.setup.ts", "__tests__"]
 }
