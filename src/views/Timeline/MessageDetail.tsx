@@ -66,7 +66,7 @@ export function MessageDetail({ message, onClose }: MessageDetailProps) {
       aria-label="Detalle del mensaje"
     >
       {/* Header */}
-      <div className="flex items-center gap-4 border-b border-bt-border px-8 py-5">
+      <div className="relative z-20 flex items-center gap-4 border-b border-bt-border px-8 py-5">
         <button
           type="button"
           onClick={onClose}

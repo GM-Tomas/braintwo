@@ -202,6 +202,31 @@ describe('search service', () => {
       const b = results.find(r => r.wa_msg_id === 'b')!
       expect(b.lowRelevance).toBe(false)
     })
+
+    it('adjusts similarity thresholds in fallback mode to allow lower similarity matches', async () => {
+      const mockDb = {
+        searchKeyword: () => [],
+        searchSimilar: () => [
+          { id: 1, wa_msg_id: 'a', timestamp: 1, text: 'Turno', source: 'export', kind: 'text', from_me: 0, media_meta: null, created_at: null, context_note: null, distance: simToDistance(0.30) }
+        ]
+      } as unknown as DbInstance
+
+      const mockEmbeddingsFallback = {
+        embed: async () => new Float32Array(VEC_DIM),
+        getStatus: () => ({ status: 'fallback', message: 'Fallback mode' })
+      } as unknown as EmbeddingService
+
+      const service = createSearchService({
+        db: mockDb,
+        embeddings: mockEmbeddingsFallback,
+        scheduler: (cb) => cb()
+      })
+
+      const results = await service.query('test query', 5)
+      expect(results).toHaveLength(1)
+      expect(results[0]!.wa_msg_id).toBe('a')
+      expect(results[0]!.lowRelevance).toBe(false)
+    })
   })
 })
 

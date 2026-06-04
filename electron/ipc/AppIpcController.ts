@@ -45,5 +45,10 @@ export class AppIpcController {
     ipcMain.handle('app:get-sync-status', () => {
       return context.syncStatus.get()
     })
+
+    ipcMain.handle('app:set-title-bar-overlay', (_e, opts: { color: string; symbolColor: string }) => {
+      if (!context.mainWindow.value || context.mainWindow.value.isDestroyed()) return
+      context.mainWindow.value.setTitleBarOverlay({ ...opts, height: 36 })
+    })
   }
 }

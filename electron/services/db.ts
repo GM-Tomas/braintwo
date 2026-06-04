@@ -331,7 +331,11 @@ export function parseFtsQuery(query: string): string {
 export function openDatabase(filePath: string): DbInstance {
   const db = new Database(filePath)
   applyPragmas(db)
-  sqliteVec.load(db)
+  let vecPath = sqliteVec.getLoadablePath()
+  if (vecPath.includes('app.asar') && !vecPath.includes('app.asar.unpacked')) {
+    vecPath = vecPath.replace('app.asar', 'app.asar.unpacked')
+  }
+  db.loadExtension(vecPath)
   applyMigrations(db)
 
   // Seed default global memories if ai_memory is empty

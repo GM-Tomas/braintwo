@@ -13,7 +13,7 @@
     "build": "node scripts/run-evite.mjs build",
     "prebuild": "node scripts/rebuild-for-electron.mjs",
     "preview": "node scripts/run-evite.mjs preview",
-    "package": "node scripts/run-evite.mjs build && electron-builder",
+    "package": "node -e \"import('fs').then(fs => fs.rmSync('.abi', {recursive:true, force:true})).catch(()=>{})\" && npm run rebuild:electron && node scripts/run-evite.mjs build && electron-builder",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",

@@ -52,7 +52,7 @@ export function MessageBubble({
 
       <div className={`flex max-w-[85%] flex-col gap-2 ${isUser ? 'items-end' : 'items-start'}`}>
         <div
-          className={`rounded-[12px] px-4 py-3 text-[14px] leading-relaxed ${
+          className={`rounded-[12px] px-4 py-3 text-[14px] leading-relaxed whitespace-pre-wrap ${
             isUser
                ? 'bg-bt-primary text-white'
                : 'border border-bt-border bg-bt-surf text-bt-text'

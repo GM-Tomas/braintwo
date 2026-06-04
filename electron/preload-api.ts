@@ -34,6 +34,7 @@ export interface BrainTwoApi {
     getRecentMessages: (limit: number) => Promise<RecentMessage[]>
     getMessageById: (id: number) => Promise<RecentMessage | null>
     getSyncStatus: () => Promise<SyncStatus>
+    setTitleBarOverlay: (opts: { color: string; symbolColor: string }) => Promise<void>
     getSettings: () => Promise<UserSettings>
     setSettings: (settings: Partial<UserSettings>) => Promise<UserSettings>
     getDbStats: () => Promise<DbStats>
@@ -122,6 +123,8 @@ export function createApi(
         ipcRenderer.invoke('app:get-recent-messages', limit),
       getMessageById: (id: number) => ipcRenderer.invoke('app:get-message-by-id', id),
       getSyncStatus: () => ipcRenderer.invoke('app:get-sync-status'),
+      setTitleBarOverlay: (opts: { color: string; symbolColor: string }) =>
+        ipcRenderer.invoke('app:set-title-bar-overlay', opts),
       getSettings: () => ipcRenderer.invoke('settings:get'),
       setSettings: (settings: Partial<UserSettings>) =>
         ipcRenderer.invoke('settings:set', settings),

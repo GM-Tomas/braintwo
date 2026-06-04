@@ -89,6 +89,13 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+.app-drag {
+  -webkit-app-region: drag;
+}
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 input::placeholder,
 textarea::placeholder {
   color: var(--bt-dim);

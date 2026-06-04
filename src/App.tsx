@@ -155,6 +155,10 @@ Aquí tienes un resumen de lo que puedes hacer:
     } else {
       document.documentElement.classList.remove('light')
     }
+    const overlay = theme === 'light'
+      ? { color: '#ffffff', symbolColor: '#1e293b' }
+      : { color: '#070c14', symbolColor: '#7a90b8' }
+    window.braintwo.app.setTitleBarOverlay(overlay).catch(() => {})
   }, [theme])
 
   const toggleTheme = () => {
@@ -243,7 +247,8 @@ Aquí tienes un resumen de lo que puedes hacer:
   if (phase === 'welcome' || phase === 'qr') {
     return (
       <div className="flex h-full bg-bt-bg text-bt-text font-sans">
-        <main className="flex flex-1 flex-col overflow-hidden">
+        <main className="relative flex flex-1 flex-col overflow-hidden">
+          <div className="app-drag absolute inset-x-0 top-0 h-9 z-10" />
           <FTU startAtQr={phase === 'qr'} theme={theme} toggleTheme={toggleTheme} />
         </main>
       </div>
@@ -283,7 +288,8 @@ Aquí tienes un resumen de lo que puedes hacer:
         onCancelRename={() => setEditingChatId(null)}
         setEditingTitle={setEditingTitle}
       />
-      <main className="flex flex-1 flex-col overflow-hidden">
+      <main className="relative flex flex-1 flex-col overflow-hidden">
+        <div className="app-drag absolute inset-x-0 top-0 h-9 z-10" />
         {view === 'onboarding' && <Onboarding />}
         {view === 'search' && <Search />}
         {view === 'timeline' && <Timeline />}

@@ -89,7 +89,7 @@ export function Sidebar({
     >
       {/* Cabecera con Marca y Botón de Colapsar */}
       <div
-        className={`mb-6 flex ${
+        className={`app-drag mb-6 flex ${
           collapsed ? 'justify-center items-center w-full' : 'w-full flex-col'
         }`}
       >
@@ -107,7 +107,7 @@ export function Sidebar({
                 onClick={toggleCollapse}
                 aria-label="Colapsar menú"
                 title="Colapsar menú"
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-bt-dim hover:bg-bt-hover hover:text-bt-text transition-colors duration-150"
+                className="app-no-drag flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-bt-dim hover:bg-bt-hover hover:text-bt-text transition-colors duration-150"
               >
                 <Icon name="panel-left-close" size={16} />
               </button>
@@ -120,7 +120,7 @@ export function Sidebar({
             onClick={toggleCollapse}
             aria-label="Expandir menú"
             title="Expandir menú"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] border border-bt-border/30 bg-white/[0.015] text-bt-dim hover:bg-bt-hover hover:text-bt-text transition-colors duration-150"
+            className="app-no-drag flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] border border-bt-border/30 bg-white/[0.015] text-bt-dim hover:bg-bt-hover hover:text-bt-text transition-colors duration-150"
           >
             <Icon name="panel-left-open" size={18} />
           </button>
