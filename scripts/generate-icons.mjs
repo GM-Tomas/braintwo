@@ -11,7 +11,8 @@ const sizes = {
   'tray-icon@2x.png': 32,
   'tray-icon@3x.png': 48,
   'icon-256.png': 256,
-  'icon-512.png': 512
+  'icon-512.png': 512,
+  'icon.png': 512
 }
 
 for (const [name, size] of Object.entries(sizes)) {

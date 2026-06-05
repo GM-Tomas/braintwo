@@ -50,12 +50,16 @@ export function FTU({
   const [waState, setWaState] = useState<WAConnectionState>('connecting')
   const [qr, setQr] = useState<string | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+  const [timeLeft, setTimeLeft] = useState(60)
 
   useEffect(() => {
     void window.braintwo.wa.getConnectionState().then(setWaState)
     void window.braintwo.wa.getCurrentQr().then(setQr)
     const offState = window.braintwo.wa.onConnectionState(setWaState)
-    const offQr = window.braintwo.wa.onQr(setQr)
+    const offQr = window.braintwo.wa.onQr((newQr) => {
+      setQr(newQr)
+      setTimeLeft(60)
+    })
     const offLoggedOut = window.braintwo.wa.onLoggedOut(() => {
       setQr(null)
       setQrDataUrl(null)
@@ -66,6 +70,14 @@ export function FTU({
       offLoggedOut()
     }
   }, [])
+
+  useEffect(() => {
+    if (!qr || waState === 'open') return
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [qr, waState])
 
   useEffect(() => {
     let cancelled = false
@@ -103,7 +115,18 @@ export function FTU({
         <div className="flex w-full max-w-[360px] flex-col items-center">
           {current.kind === 'splash' && <FTUSplashCard />}
           {current.kind === 'feature' && <FTUFeatureCard step={current} />}
-          {current.kind === 'qr' && <FTUQrCard waState={waState} qrDataUrl={qrDataUrl} />}
+          {current.kind === 'qr' && (
+            <FTUQrCard
+              waState={waState}
+              qrDataUrl={qrDataUrl}
+              timeLeft={timeLeft}
+              onReload={() => {
+                setQr(null)
+                setQrDataUrl(null)
+                void window.braintwo.wa.requestQr()
+              }}
+            />
+          )}
         </div>
       </div>
 
@@ -183,9 +206,13 @@ function FTUFeatureCard({ step }: { step: FTUFeature }) {
 function FTUQrCard({
   waState,
   qrDataUrl,
+  timeLeft,
+  onReload,
 }: {
   waState: WAConnectionState
   qrDataUrl: string | null
+  timeLeft: number
+  onReload: () => void
 }) {
   return (
     <div className="flex flex-col items-center gap-6 text-center">
@@ -198,14 +225,14 @@ function FTUQrCard({
         </p>
       </div>
 
-      <div className="flex h-[264px] w-[264px] items-center justify-center overflow-hidden rounded-[16px] border border-bt-border-strong bg-bt-surf">
+      <div className="group relative flex h-[264px] w-[264px] items-center justify-center overflow-hidden rounded-[16px] border border-bt-border-strong bg-bt-surf">
         {waState === 'logged-out' ? (
           <div className="flex flex-col items-center gap-3 px-6 text-center">
             <Icon name="wa" size={28} className="text-bt-red" />
             <p className="text-sm text-bt-muted">La sesión se cerró desde el celular.</p>
             <button
               type="button"
-              onClick={() => void window.braintwo.wa.requestQr()}
+              onClick={onReload}
               className="rounded-[8px] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
               style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
             >
@@ -213,14 +240,30 @@ function FTUQrCard({
             </button>
           </div>
         ) : qrDataUrl ? (
-          <img src={qrDataUrl} alt="QR para vincular WhatsApp" width={248} height={248} />
+          <>
+            <img src={qrDataUrl} alt="QR para vincular WhatsApp" width={248} height={248} />
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-bt-surf/80 opacity-0 transition-opacity group-hover:opacity-100">
+              <button
+                type="button"
+                onClick={onReload}
+                className="flex h-12 w-12 items-center justify-center rounded-full bg-bt-primary text-white shadow-lg transition-transform hover:scale-105 active:scale-95"
+                title="Recargar QR"
+              >
+                <Icon name="refresh" size={24} />
+              </button>
+              <p className="mt-2 text-xs font-medium text-bt-text">Recargar QR</p>
+            </div>
+            <div className="absolute bottom-2 right-2 rounded-full bg-bt-bg/80 px-2 py-0.5 text-[10px] font-mono text-bt-muted backdrop-blur-sm">
+              Expira en {timeLeft}s
+            </div>
+          </>
         ) : waState === 'disconnected' ? (
           <div className="flex flex-col items-center gap-3 px-6 text-center">
             <span className="h-2 w-2 rounded-full bg-bt-muted" />
             <p className="text-sm text-bt-muted">No se pudo conectar con WhatsApp.</p>
             <button
               type="button"
-              onClick={() => void window.braintwo.wa.requestQr()}
+              onClick={onReload}
               className="rounded-[8px] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
               style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
             >
@@ -244,13 +287,17 @@ export function Onboarding() {
   const [state, setState] = useState<WAConnectionState>('connecting')
   const [qr, setQr] = useState<string | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+  const [timeLeft, setTimeLeft] = useState(60)
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null)
 
   useEffect(() => {
     void window.braintwo.wa.getConnectionState().then((s) => setState(s))
     void window.braintwo.wa.getCurrentQr().then((q) => setQr(q))
     const offState = window.braintwo.wa.onConnectionState((s) => setState(s))
-    const offQr = window.braintwo.wa.onQr((q) => setQr(q))
+    const offQr = window.braintwo.wa.onQr((q) => {
+      setQr(q)
+      setTimeLeft(60)
+    })
     const offLoggedOut = window.braintwo.wa.onLoggedOut(() => {
       setQr(null)
       setQrDataUrl(null)
@@ -265,6 +312,14 @@ export function Onboarding() {
       offProgress()
     }
   }, [])
+
+  useEffect(() => {
+    if (!qr || state === 'open') return
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [qr, state])
 
   useEffect(() => {
     let cancelled = false
@@ -294,7 +349,16 @@ export function Onboarding() {
 
       <div className="flex flex-1 overflow-y-auto px-14 py-10">
         <div className="mx-auto grid w-full max-w-3xl gap-6 md:grid-cols-[300px_1fr] md:items-start">
-          <PairingPanel state={state} qrDataUrl={qrDataUrl} />
+          <PairingPanel
+            state={state}
+            qrDataUrl={qrDataUrl}
+            timeLeft={timeLeft}
+            onReload={() => {
+              setQr(null)
+              setQrDataUrl(null)
+              void window.braintwo.wa.requestQr()
+            }}
+          />
           <div className="flex flex-col gap-6">
             <Steps state={state} hasQr={!!qrDataUrl} />
             <SuccessNote state={state} />
@@ -355,9 +419,11 @@ function ImportHistoryPanel({ progress }: { progress: ImportProgress | null }) {
 interface PanelProps {
   state: WAConnectionState
   qrDataUrl: string | null
+  timeLeft: number
+  onReload: () => void
 }
 
-function PairingPanel({ state, qrDataUrl }: PanelProps) {
+function PairingPanel({ state, qrDataUrl, timeLeft, onReload }: PanelProps) {
   if (state === 'open') {
     return (
       <Card>
@@ -386,7 +452,7 @@ function PairingPanel({ state, qrDataUrl }: PanelProps) {
             type="button"
             className="rounded-[10px] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
             style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
-            onClick={() => void window.braintwo.wa.requestQr()}
+            onClick={onReload}
           >
             Generar QR de nuevo
           </button>
@@ -398,7 +464,7 @@ function PairingPanel({ state, qrDataUrl }: PanelProps) {
   if (qrDataUrl) {
     return (
       <Card padded={false}>
-        <div className="flex h-[300px] w-full items-center justify-center bg-bt-bg p-2">
+        <div className="group relative flex h-[300px] w-full items-center justify-center bg-bt-bg p-2">
           <img
             src={qrDataUrl}
             alt="QR para vincular WhatsApp"
@@ -406,6 +472,20 @@ function PairingPanel({ state, qrDataUrl }: PanelProps) {
             height={280}
             className="rounded-md"
           />
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-bt-bg/80 opacity-0 transition-opacity group-hover:opacity-100">
+            <button
+              type="button"
+              onClick={onReload}
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-bt-primary text-white shadow-lg transition-transform hover:scale-105 active:scale-95"
+              title="Recargar QR"
+            >
+              <Icon name="refresh" size={24} />
+            </button>
+            <p className="mt-2 text-xs font-medium text-bt-text">Recargar QR</p>
+          </div>
+          <div className="absolute bottom-4 right-4 rounded-full bg-bt-surf/80 px-2 py-0.5 text-[10px] font-mono text-bt-muted backdrop-blur-sm">
+            Expira en {timeLeft}s
+          </div>
         </div>
       </Card>
     )
@@ -420,7 +500,7 @@ function PairingPanel({ state, qrDataUrl }: PanelProps) {
             type="button"
             className="rounded-[10px] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
             style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
-            onClick={() => void window.braintwo.wa.requestQr()}
+            onClick={onReload}
           >
             Reintentar
           </button>
