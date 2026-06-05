@@ -39,6 +39,7 @@ export type IconName =
   | 'sun'
   | 'moon'
   | 'send'
+  | 'refresh'
 
 export function Icon({
   name,
@@ -262,6 +263,13 @@ function renderPath(
         <>
           <line x1="22" y1="2" x2="11" y2="13" {...s} />
           <polygon points="22 2 15 22 11 13 2 9 22 2" {...s} />
+        </>
+      )
+    case 'refresh':
+      return (
+        <>
+          <path d="M23 4v6h-6" {...s} />
+          <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" {...s} />
         </>
       )
     default:
