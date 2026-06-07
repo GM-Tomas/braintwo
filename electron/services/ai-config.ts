@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { logError } from './logger'
 import { join } from 'node:path'
 import type { AiConfig } from '@shared/types'
 
@@ -44,8 +45,8 @@ export function readAiConfig(userDataPath: string): AiConfig | null {
   if (!existsSync(userDataPath)) {
     try {
       mkdirSync(userDataPath, { recursive: true })
-    } catch {
-      // Ignore
+    } catch (err) {
+      logError('ai-config:read', err, 'Failed to create user data directory')
     }
   }
 
@@ -53,7 +54,8 @@ export function readAiConfig(userDataPath: string): AiConfig | null {
     try {
       writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), 'utf8')
       return defaultConfig
-    } catch {
+    } catch (err) {
+      logError('ai-config:read', err, 'Failed to write default config')
       return defaultConfig
     }
   }
@@ -78,14 +80,15 @@ export function readAiConfig(userDataPath: string): AiConfig | null {
       }
       try {
         writeFileSync(configPath, JSON.stringify(healedConfig, null, 2), 'utf8')
-      } catch {
-        // Ignore
+      } catch (err) {
+        logError('ai-config:read', err, 'Failed to write healed config')
       }
       return healedConfig
     }
 
     return parsed
-  } catch {
+  } catch (err) {
+    logError('ai-config:read', err, 'Failed to read or parse config file')
     return null
   }
 }
@@ -95,8 +98,8 @@ export function writeAiConfig(userDataPath: string, patch: Partial<AiConfig>): v
   if (!existsSync(userDataPath)) {
     try {
       mkdirSync(userDataPath, { recursive: true })
-    } catch {
-      // Ignore
+    } catch (err) {
+      logError('ai-config:write', err, 'Failed to create user data directory')
     }
   }
   const current = readAiConfig(userDataPath) ?? {}

@@ -7,6 +7,7 @@ import makeWASocket, {
   makeCacheableSignalKeyStore
 } from '@whiskeysockets/baileys'
 import pino, { type Logger } from 'pino'
+import { logError } from './logger'
 import {
   deriveTransition,
   isSelfChat,
@@ -75,7 +76,7 @@ export interface WhatsAppService {
   logout(): Promise<void>
   getState(): WAConnectionState
   getCurrentQr(): string | null
-  on(event: 'qr', listener: (qr: string) => void): this
+  on(event: 'qr', listener: (qr: string | null) => void): this
   on(event: 'connection-state', listener: (state: WAConnectionState) => void): this
   on(event: 'logged-out', listener: () => void): this
   on(event: 'message', listener: (msg: IngestableMessage) => void): this
@@ -158,11 +159,23 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
     if (this.socket?.end) {
       try {
         this.socket.end(undefined)
-      } catch {
-        /* socket may already be closed */
+      } catch (err) {
+        logError('whatsapp:stop', err, 'Failed ending socket (socket may already be closed)')
       }
     }
     this.socket = null
+    this.currentQr = null
+    this.emit('qr', null)
+
+    // Clear unauthenticated auth files to prevent stale pairing states
+    if (!this.authCreds?.me) {
+      try {
+        await this.rmAuth(this.authPath)
+      } catch (err) {
+        logError('whatsapp:stop', err, 'Failed to clear unauthenticated auth path during stop')
+      }
+      this.authCreds = null
+    }
   }
 
   async logout(): Promise<void> {
@@ -172,8 +185,8 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
     if (this.socket?.logout) {
       try {
         await this.socket.logout()
-      } catch {
-        /* if server already kicked us, the call may fail */
+      } catch (err) {
+        logError('whatsapp:logout', err, 'Failed socket.logout (if server already kicked us, this may fail)')
       }
     }
     this.socket = null
@@ -182,6 +195,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
     await this.rmAuth(this.authPath)
     this.transitionTo('logged-out')
     this.currentQr = null
+    this.emit('qr', null)
     this.emit('logged-out')
   }
 
@@ -203,6 +217,8 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
     this.connecting = true
     try {
       this.transitionTo('connecting')
+      this.currentQr = null
+      this.emit('qr', null)
 
       const auth = await this.authStateFactory(this.authPath)
       this.authCreds = auth.state.creds
@@ -214,7 +230,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
         const fetched = await this.versionFactory()
         if (fetched?.version) version = fetched.version
       } catch (err) {
-        this.logger.warn({ err }, 'fetchLatestBaileysVersion failed, using fallback')
+        logError('whatsapp:connect', err, 'fetchLatestBaileysVersion failed, using fallback')
       }
 
       this.socket = this.socketFactory({
@@ -246,7 +262,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
           this.authCreds = { ...(this.authCreds ?? {}), me: update.me }
         }
         void Promise.resolve(auth.saveCreds(...(args as []))).catch((err: unknown) => {
-          this.logger.warn({ err }, 'saveCreds failed')
+          logError('whatsapp:saveCreds', err, 'saveCreds failed')
         }).finally(() => {
           this.flushPendingMessages('creds.update')
         })
@@ -274,6 +290,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       })
     } catch (err) {
       this.logger.error({ err }, 'whatsapp connect failed')
+      this.transitionTo('disconnected')
       this.scheduleReconnectIfNeeded()
     } finally {
       this.connecting = false
@@ -290,6 +307,9 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       this.currentQr = t.qr
       this.currentBackoffMs = 0
       this.emit('qr', t.qr)
+    } else if (t.state === 'disconnected' || t.state === 'logged-out' || t.state === 'open') {
+      this.currentQr = null
+      this.emit('qr', null)
     }
 
     if (t.isLoggedOut) {
@@ -455,20 +475,24 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
     try {
       await this.rmAuth(this.authPath)
     } catch (err: unknown) {
-      this.logger.warn({ err }, 'rmAuth after server logout failed')
+      logError('whatsapp:handleServerLoggedOut', err, 'rmAuth after server logout failed')
     }
     this.transitionTo('logged-out')
+    this.emit('qr', null)
     this.emit('logged-out')
   }
 
   private scheduleReconnectIfNeeded(): void {
     if (this.stopped) return
     this.clearReconnect()
-    this.currentBackoffMs = nextBackoff(
-      this.currentBackoffMs,
-      this.initialBackoffMs,
-      this.maxBackoffMs
-    )
+    const isPairing = !this.authCreds?.me
+    this.currentBackoffMs = isPairing
+      ? this.initialBackoffMs
+      : nextBackoff(
+          this.currentBackoffMs,
+          this.initialBackoffMs,
+          this.maxBackoffMs
+        )
     this.reconnectHandle = this.scheduleReconnect(() => {
       this.reconnectHandle = null
       void this.connect()

@@ -1,4 +1,5 @@
 import type { AiConfig } from '@shared/types'
+import { logError } from './logger'
 import type { ContextableMessage, DbInstance, MediaMeta, MessageKind } from './db'
 import type { EmbeddingService } from './embeddings'
 import { callProvider } from './ai-provider'
@@ -96,6 +97,7 @@ export function createContextService(deps: ContextServiceDeps): ContextService {
             deps.db.insertEmbedding(item.id, vec)
           }
         } catch (err) {
+          logError('context:processQueue', err, `Failed to generate context or embedding for message ID ${item.id}`)
           deps.onError?.(
             `context: id=${item.id} — ${err instanceof Error ? err.message : String(err)}`
           )
@@ -131,7 +133,11 @@ export function createContextService(deps: ContextServiceDeps): ContextService {
       for (const row of rows) {
         let media: MediaMeta | null = null
         if (row.media_meta) {
-          try { media = JSON.parse(row.media_meta) as MediaMeta } catch { /* ignore */ }
+          try {
+            media = JSON.parse(row.media_meta) as MediaMeta
+          } catch (err) {
+            logError('context:backfill', err, `Failed parsing media_meta for message ID ${row.id}`)
+          }
         }
         enqueue({ id: row.id, kind: row.kind, text: row.text, media, timestamp: row.timestamp })
       }

@@ -1,6 +1,7 @@
 import Database, { type Database as DatabaseType } from 'better-sqlite3'
 import * as sqliteVec from 'sqlite-vec'
 import { statSync } from 'node:fs'
+import { logError } from './logger'
 
 export const VEC_DIM = 768
 
@@ -246,8 +247,8 @@ export function applyMigrations(db: DatabaseType): void {
         db.exec('DROP TABLE IF EXISTS memory_embeddings')
       }
     }
-  } catch {
-    // ignore
+  } catch (err) {
+    logError('db:migrations', err, 'Failed checking embedding table columns')
   }
 
   // Check if messages_fts exists and if it lacks context_note
@@ -265,8 +266,8 @@ export function applyMigrations(db: DatabaseType): void {
         hasFtsTable = false
       }
     }
-  } catch {
-    // ignore
+  } catch (err) {
+    logError('db:migrations', err, 'Failed checking table_info(messages_fts)')
   }
 
   for (const sql of SCHEMA_STATEMENTS) {
@@ -279,8 +280,8 @@ export function applyMigrations(db: DatabaseType): void {
         INSERT OR IGNORE INTO messages_fts(rowid, text, context_note)
         SELECT id, text, context_note FROM messages
       `)
-    } catch {
-      // best-effort
+    } catch (err) {
+      logError('db:migrations', err, 'Best-effort FTS copy failed')
     }
   }
 
@@ -361,7 +362,7 @@ export function openDatabase(filePath: string): DbInstance {
       transaction(defaultMemories)
     }
   } catch (err) {
-    console.error('Error seeding default memories:', err)
+    logError('db:openDatabase', err, 'Error seeding default memories')
   }
 
   const insertMsgStmt = db.prepare(
@@ -381,8 +382,8 @@ export function openDatabase(filePath: string): DbInstance {
       SELECT m.id, m.text, m.context_note FROM messages m
       WHERE m.id NOT IN (SELECT rowid FROM messages_fts)
     `)
-  } catch {
-    // Non-fatal — FTS table may be empty on first open; best-effort.
+  } catch (err) {
+    logError('db:openDatabase', err, 'Non-fatal FTS index backfill failed')
   }
 
   const kwSearchStmt = db.prepare<[string, number], KeywordResult>(`
@@ -548,12 +549,13 @@ export function openDatabase(filePath: string): DbInstance {
       if (!safeQuery || limit <= 0) return []
       try {
         return kwSearchStmt.all(safeQuery, Math.min(limit, 100))
-      } catch {
-        // Fallback to phrase search if FTS5 MATCH throws
+      } catch (err) {
+        logError('db:searchKeyword', err, 'FTS MATCH failed, falling back to phrase search')
         try {
           const fallbackQuery = `"${query.trim().replace(/"/g, '""')}"`
           return kwSearchStmt.all(fallbackQuery, Math.min(limit, 100))
-        } catch {
+        } catch (fallbackErr) {
+          logError('db:searchKeyword', fallbackErr, 'FTS phrase fallback search failed')
           return []
         }
       }
@@ -581,7 +583,8 @@ export function openDatabase(filePath: string): DbInstance {
       if (filePath && filePath !== ':memory:') {
         try {
           sizeBytes = statSync(filePath).size
-        } catch {
+        } catch (err) {
+          logError('db:stats', err, 'Failed to read DB file size')
           sizeBytes = 0
         }
       }
@@ -627,8 +630,8 @@ export function openDatabase(filePath: string): DbInstance {
           content: r.content,
           createdAt: r.created_at * 1000
         }))
-      } catch {
-        // Fallback to phrase search if FTS5 MATCH throws
+      } catch (err) {
+        logError('db:searchMemoryKeyword', err, 'Memory FTS MATCH failed, falling back to phrase search')
         try {
           const fallbackQuery = `"${query.trim().replace(/"/g, '""')}"`
           return searchMemKwStmt.all(fallbackQuery, chatId ?? null, Math.min(limit, 50)).map((r) => ({
@@ -636,7 +639,8 @@ export function openDatabase(filePath: string): DbInstance {
             content: r.content,
             createdAt: r.created_at * 1000
           }))
-        } catch {
+        } catch (fallbackErr) {
+          logError('db:searchMemoryKeyword', fallbackErr, 'Memory FTS phrase fallback search failed')
           return []
         }
       }

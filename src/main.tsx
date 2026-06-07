@@ -11,3 +11,15 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </React.StrictMode>
 )
+
+window.addEventListener('error', (event) => {
+  if (window.braintwo?.logs?.error) {
+    void window.braintwo.logs.error('renderer:global', event.error || event.message)
+  }
+})
+
+window.addEventListener('unhandledrejection', (event) => {
+  if (window.braintwo?.logs?.error) {
+    void window.braintwo.logs.error('renderer:unhandledRejection', event.reason)
+  }
+})

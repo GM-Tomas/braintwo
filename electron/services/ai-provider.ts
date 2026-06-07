@@ -1,4 +1,5 @@
 import type { AiConfig, ChatMessage } from '@shared/types'
+import { logError } from './logger'
 
 export interface ProviderCallArgs {
   config: AiConfig
@@ -26,6 +27,7 @@ export async function callProvider(args: ProviderCallArgs): Promise<string> {
         throw new Error(`Proveedor no soportado: ${args.config.provider}`)
     }
   } catch (err) {
+    logError('ai-provider:callProvider', err, `LLM call failed for provider ${args.config.provider}`)
     // Wrap low-level network errors (ECONNRESET, ENOTFOUND, etc.) that manifest
     // as "fetch failed" into a user-readable message. These usually mean the
     // provider's API is temporarily unreachable or a rate limit closed the connection.

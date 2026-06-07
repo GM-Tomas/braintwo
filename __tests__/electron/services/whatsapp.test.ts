@@ -191,7 +191,7 @@ describe('whatsapp service', () => {
     })
 
     it('close (non-logged-out) schedules reconnect with growing backoff', async () => {
-      const h = await buildHarness()
+      const h = await buildHarness({ authMe: { id: '5491134567890@s.whatsapp.net' } })
       h.socket._trigger('connection.update', {
         connection: 'close',
         lastDisconnect: { error: { output: { statusCode: 515 } } }
@@ -208,8 +208,25 @@ describe('whatsapp service', () => {
       expect(h.reconnectCalls[h.reconnectCalls.length - 1]!.ms).toBe(4000)
     })
 
+    it('close during pairing schedules reconnect with fixed initial backoff', async () => {
+      const h = await buildHarness() // authMe is undefined -> pairing
+      h.socket._trigger('connection.update', {
+        connection: 'close',
+        lastDisconnect: { error: { output: { statusCode: 515 } } }
+      })
+      expect(h.reconnectCalls.length).toBe(1)
+      expect(h.reconnectCalls[0]!.ms).toBe(1000) // initialBackoffMs since it's pairing
+
+      h.fireReconnect()
+      h.socket._trigger('connection.update', {
+        connection: 'close',
+        lastDisconnect: { error: { output: { statusCode: 515 } } }
+      })
+      expect(h.reconnectCalls[h.reconnectCalls.length - 1]!.ms).toBe(1000)
+    })
+
     it('open after close resets backoff', async () => {
-      const h = await buildHarness()
+      const h = await buildHarness({ authMe: { id: '5491134567890@s.whatsapp.net' } })
       h.socket._trigger('connection.update', {
         connection: 'close',
         lastDisconnect: { error: { output: { statusCode: 515 } } }
@@ -226,7 +243,7 @@ describe('whatsapp service', () => {
     })
 
     it('backoff caps at maxBackoffMs', async () => {
-      const h = await buildHarness({ maxBackoffMs: 4000 })
+      const h = await buildHarness({ authMe: { id: '5491134567890@s.whatsapp.net' }, maxBackoffMs: 4000 })
       const close = () =>
         h.socket._trigger('connection.update', {
           connection: 'close',
@@ -315,6 +332,32 @@ describe('whatsapp service', () => {
       expect(sockBefore.end).toHaveBeenCalled()
     })
 
+    it('clears currentQr, emits qr null event, and deletes auth if not logged in', async () => {
+      const h = await buildHarness()
+      const onQr = vi.fn()
+      h.service.on('qr', onQr)
+      h.socket._trigger('connection.update', { qr: 'XYZ' })
+      expect(h.service.getCurrentQr()).toBe('XYZ')
+
+      await h.service.stop()
+      expect(h.service.getCurrentQr()).toBeNull()
+      expect(onQr).toHaveBeenCalledWith(null)
+      expect(h.deps.rmAuth).toHaveBeenCalledWith('/tmp/auth-test')
+    })
+
+    it('clears currentQr, emits qr null event, but does NOT delete auth if logged in', async () => {
+      const h = await buildHarness({ authMe: { id: '5491134567890@s.whatsapp.net' } })
+      const onQr = vi.fn()
+      h.service.on('qr', onQr)
+      h.socket._trigger('connection.update', { qr: 'XYZ' })
+      expect(h.service.getCurrentQr()).toBe('XYZ')
+
+      await h.service.stop()
+      expect(h.service.getCurrentQr()).toBeNull()
+      expect(onQr).toHaveBeenCalledWith(null)
+      expect(h.deps.rmAuth).not.toHaveBeenCalled()
+    })
+
     it('after stop, scheduleReconnect from a stale close is ignored', async () => {
       const h = await buildHarness()
       await h.service.stop()
@@ -393,7 +436,25 @@ describe('whatsapp service', () => {
       })
       await service.start()
       expect(reconnectCalls.length).toBe(1)
-      expect(reconnectCalls[0]!.ms).toBe(2000)
+      expect(reconnectCalls[0]!.ms).toBe(1000) // pairing backoff is fixed at initialBackoffMs
+    })
+
+    it('transitions to disconnected state on failure', async () => {
+      const service = createWhatsAppService({
+        authPath: '/tmp/x-fail',
+        socketFactory: () => makeFakeSocket(),
+        authStateFactory: vi.fn(async () => {
+          throw new Error('disk error')
+        }),
+        versionFactory: async () => ({ version: [2, 3000, 0] }),
+        browser: ['x', 'y', 'z'],
+        makeKeyStore: (k: any) => k,
+        rmAuth: async () => {},
+        scheduleReconnect: () => null,
+        cancelReconnect: () => {}
+      })
+      await service.start()
+      expect(service.getState()).toBe('disconnected')
     })
   })
 

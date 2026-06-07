@@ -5,6 +5,7 @@ import { SearchIpcController } from './SearchIpcController'
 import { AiIpcController } from './AiIpcController'
 import { WaIpcController } from './WaIpcController'
 import { ExportIpcController } from './ExportIpcController'
+import { LogsIpcController } from './LogsIpcController'
 
 export function registerAllHandlers(context: AppContext) {
   AppIpcController.register(context)
@@ -13,4 +14,5 @@ export function registerAllHandlers(context: AppContext) {
   AiIpcController.register(context)
   WaIpcController.register(context)
   ExportIpcController.register(context)
+  LogsIpcController.register()
 }

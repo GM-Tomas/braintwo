@@ -212,6 +212,12 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
       renameChat: vi.fn(async () => {}),
       saveChatMessage: vi.fn(async () => 1),
       deleteLastMessage: vi.fn(async () => {})
+    },
+    logs: {
+      info: vi.fn(async () => {}),
+      error: vi.fn(async () => {}),
+      openFile: vi.fn(async () => {}),
+      getFilePath: vi.fn(async () => 'C:\\mock\\app-logs.json')
     }
   }
 

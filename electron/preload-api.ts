@@ -72,6 +72,12 @@ export interface BrainTwoApi {
     saveChatMessage: (chatId: number, role: 'user' | 'assistant', content: string, sources: string | null) => Promise<number>
     deleteLastMessage: (chatId: number) => Promise<void>
   }
+  logs: {
+    info: (module: string, message: string, meta?: Record<string, unknown>) => Promise<void>
+    error: (module: string, error: unknown, message?: string, meta?: Record<string, unknown>) => Promise<void>
+    openFile: () => Promise<void>
+    getFilePath: () => Promise<string>
+  }
 }
 
 export interface PreloadEnv {
@@ -162,6 +168,14 @@ export function createApi(
       renameChat: (chatId: number, title: string) => ipcRenderer.invoke('ai:rename-chat', chatId, title),
       saveChatMessage: (chatId: number, role: 'user' | 'assistant', content: string, sources: string | null) => ipcRenderer.invoke('ai:save-chat-message', chatId, role, content, sources),
       deleteLastMessage: (chatId: number) => ipcRenderer.invoke('ai:delete-last-message', chatId)
+    },
+    logs: {
+      info: (module: string, message: string, meta?: Record<string, unknown>) =>
+        ipcRenderer.invoke('logs:info', module, message, meta),
+      error: (module: string, error: unknown, message?: string, meta?: Record<string, unknown>) =>
+        ipcRenderer.invoke('logs:error', module, error, message, meta),
+      openFile: () => ipcRenderer.invoke('logs:open'),
+      getFilePath: () => ipcRenderer.invoke('logs:path')
     }
   }
 }
