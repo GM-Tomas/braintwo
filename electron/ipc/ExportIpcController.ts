@@ -4,9 +4,9 @@ import { importExportFile, type ImportProgress } from '../services/export-parser
 import { logError } from '../services/logger'
 
 export class ExportIpcController {
-  static register(context: AppContext) {
+  static register(appContext: AppContext) {
     ipcMain.handle('export:import', async () => {
-      if (!context.db.value) {
+      if (!appContext.db.value) {
         throw new Error('Storage is not ready')
       }
       const selected = await dialog.showOpenDialog({
@@ -19,12 +19,13 @@ export class ExportIpcController {
       }
       try {
         const result = await importExportFile(selected.filePaths[0]!, {
-          db: context.db.value,
-          onProgress: (progress) => context.broadcast('sync:progress', progress)
+          db: appContext.db.value,
+          onProgress: (progress) => appContext.broadcast('sync:progress', progress)
         })
-        void context.search.value?.backfillMissing(50_000).catch((err: unknown) => {
+        void appContext.search.value?.backfillMissing(50_000).catch((err: unknown) => {
           logError('export:backfill', err, 'Failed to backfill missing after export import')
-          context.reportError('search.backfill_failed', err instanceof Error ? err.message : String(err))
+          const errMsg = err instanceof Error ? err.message : String(err)
+          appContext.reportError('search.backfill_failed', errMsg)
         })
         return result
       } catch (err) {
