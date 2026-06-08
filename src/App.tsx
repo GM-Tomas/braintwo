@@ -42,7 +42,7 @@ export default function App() {
   const { connectionService, settingsRepository, aiService } = useDependencies()
   const [phase, setPhase] = useState<Phase>(() => initialPhase())
   const [view, setViewRaw] = useState<View>(() =>
-    readFlag(ONBOARDED_KEY) ? 'timeline' : 'onboarding'
+    readFlag(ONBOARDED_KEY) ? 'chat' : 'onboarding'
   )
 
   // Navigation guard: a view (e.g. local AI config) can block leaving until it's complete.
@@ -81,11 +81,40 @@ export default function App() {
   const loadChats = useCallback(async () => {
     try {
       const list = await aiService.listChats()
-      setChats(list)
+      const WELCOME_CHAT_CREATED_KEY = 'braintwo:welcome-chat-created'
+      if (list.length === 0 && !localStorage.getItem(WELCOME_CHAT_CREATED_KEY)) {
+        const title = 'Bienvenido a BrainTwo'
+        const chatId = await aiService.createChat(title)
+
+        const welcomeMessage = `¡Hola! 👋 ¡Te damos la bienvenida a **BrainTwo**! 🧠✨
+
+Este es tu segundo cerebro digital, diseñado para ayudarte a buscar, recordar y analizar todo lo que pasa por tu WhatsApp de forma 100% segura y local. 🔒💻
+
+Aquí tienes un resumen de lo que puedes hacer:
+1. 🔍 **Buscador Inteligente**: Encuentra mensajes, enlaces y transcripciones de audios al instante desde la pestaña de **Búsqueda**.
+2. 📅 **Timeline**: Revisa todo tu historial de forma cronológica, como un feed personal limpio y sin algoritmos.
+3. 💬 **Asistente IA**: Este chat sirve para conversar con un asistente de Inteligencia Artificial que tiene acceso a tus conversaciones y a la memoria de la aplicación.
+
+¡Pregúntame lo que quieras! Por ejemplo:
+* *¿Qué es BrainTwo y cómo funciona?* 🤖
+* *¿Cómo puedo importar chats viejos?* 📂
+* *¿Dónde se guardan mis datos?* 🏠
+
+¿En qué te puedo ayudar hoy? 😊`
+
+        await aiService.saveChatMessage(chatId, 'assistant', welcomeMessage, null)
+        localStorage.setItem(WELCOME_CHAT_CREATED_KEY, '1')
+
+        const updatedList = await aiService.listChats()
+        setChats(updatedList)
+        setActiveChatId(chatId)
+      } else {
+        setChats(list)
+      }
     } catch (err) {
       console.error('Error loading chats:', err)
     }
-  }, [aiService])
+  }, [aiService, setActiveChatId])
 
   const startNewChat = useCallback(() => {
     setActiveChatId(null)
@@ -138,6 +167,10 @@ export default function App() {
     } else {
       document.documentElement.classList.remove('light')
     }
+    const overlay = theme === 'light'
+      ? { color: '#ffffff', symbolColor: '#1e293b' }
+      : { color: '#070c14', symbolColor: '#7a90b8' }
+    window.braintwo.app.setTitleBarOverlay(overlay).catch(() => {})
   }, [theme])
 
   const toggleTheme = () => {
@@ -210,7 +243,7 @@ export default function App() {
       writeFlag(FTU_KEY, true)
       if (phase !== 'app') setPhase('app')
       if (!autoRouted) {
-        setViewRaw('timeline')
+        setViewRaw('chat')
         setAutoRouted(true)
       }
       return
@@ -226,7 +259,8 @@ export default function App() {
   if (phase === 'welcome' || phase === 'qr') {
     return (
       <div className="flex h-full bg-bt-bg text-bt-text font-sans">
-        <main className="flex flex-1 flex-col overflow-hidden">
+        <main className="relative flex flex-1 flex-col overflow-hidden">
+          <div className="app-drag absolute inset-x-0 top-0 h-9 z-10" />
           <FTU startAtQr={phase === 'qr'} theme={theme} toggleTheme={toggleTheme} />
         </main>
       </div>
@@ -267,7 +301,8 @@ export default function App() {
         onCancelRename={() => setEditingChatId(null)}
         setEditingTitle={setEditingTitle}
       />
-      <main className="flex flex-1 flex-col overflow-hidden">
+      <main className="relative flex flex-1 flex-col overflow-hidden">
+        <div className="app-drag absolute inset-x-0 top-0 h-9 z-10" />
         {view === 'onboarding' && <Onboarding />}
         {view === 'search' && <Search />}
         {view === 'timeline' && <Timeline />}

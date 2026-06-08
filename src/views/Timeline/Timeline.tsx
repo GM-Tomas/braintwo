@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { MessageKind, ModelProgress, SearchResult } from '@shared/types'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { MessageKind, ModelProgress, SearchResult, DbStats, MessageSource } from '@shared/types'
 import { PageHeader } from '../../components/PageHeader'
 import { useDateFormatter } from '@/hooks/useDateFormatter'
 import { useIpcSubscription } from '@/hooks/useIpcSubscription'
@@ -10,6 +10,7 @@ import { KindFilter } from './KindFilter'
 import { EmptyState, FilteredEmpty } from './EmptyStates'
 import { NoteRow } from './NoteRow'
 import { MessageDetail } from './MessageDetail'
+import { Dashboard } from './Dashboard'
 
 const RECENT_LIMIT = 50
 const SEARCH_LIMIT = 80
@@ -20,6 +21,42 @@ export function Timeline() {
   const [messages, setMessages] = useState<MessageEntity[]>([])
   const [filter, setFilter] = useState<MessageKind | 'all'>('all')
   const [selected, setSelected] = useState<MessageEntity | null>(null)
+
+  const [showDashboard, setShowDashboard] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('braintwo:show-dashboard') !== '0'
+    } catch {
+      return true
+    }
+  })
+  const [dateRange, setDateRange] = useState<'all' | 'today' | '7days' | 'month'>('all')
+  const [messageSource, setMessageSource] = useState<'all' | MessageSource>('all')
+  const [direction, setDirection] = useState<'all' | 'sent' | 'received'>('all')
+  const [dbStats, setDbStats] = useState<DbStats | null>(null)
+
+  const toggleDashboard = () => {
+    setShowDashboard((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem('braintwo:show-dashboard', next ? '1' : '0')
+      } catch {
+        // ignore
+      }
+      return next
+    })
+  }
+
+  const loadDbStats = useCallback(() => {
+    window.braintwo.app
+      .getDbStats()
+      .then(setDbStats)
+      .catch(console.error)
+  }, [])
+
+  useEffect(() => {
+    loadDbStats()
+  }, [count, loadDbStats])
+
 
   // Search state
   const [q, setQ] = useState('')
@@ -93,12 +130,32 @@ export function Timeline() {
   const formatter = useDateFormatter({ dateStyle: 'short', timeStyle: 'short' })
   const searchFormatter = useDateFormatter({ dateStyle: 'medium', timeStyle: 'short' })
 
-  const visible = useMemo<MessageEntity[]>(
-    () => filter === 'all' ? messages : messages.filter((m) => m.kind === filter),
-    [messages, filter]
-  )
+  const filteredForCounts = useMemo(() => {
+    return messages.filter((m) => {
+      if (dateRange !== 'all') {
+        const now = new Date()
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+        if (dateRange === 'today' && m.timestamp < startOfToday) return false
+        if (dateRange === '7days' && m.timestamp < startOfToday - 7 * 24 * 60 * 60 * 1000) return false
+        if (dateRange === 'month' && m.timestamp < startOfToday - 30 * 24 * 60 * 60 * 1000) return false
+      }
+      if (messageSource !== 'all' && m.source !== messageSource) return false
+      if (direction !== 'all') {
+        if (direction === 'sent' && !m.fromMe) return false
+        if (direction === 'received' && m.fromMe) return false
+      }
+      return true
+    })
+  }, [messages, dateRange, messageSource, direction])
 
-  const counts = useMemo(() => kindCounts(messages), [messages])
+  const visible = useMemo<MessageEntity[]>(() => {
+    return filteredForCounts.filter((m) => {
+      if (filter !== 'all' && m.kind !== filter) return false
+      return true
+    })
+  }, [filteredForCounts, filter])
+
+  const counts = useMemo(() => kindCounts(filteredForCounts), [filteredForCounts])
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden animate-fade-in">
@@ -112,9 +169,24 @@ export function Timeline() {
             subtitle="Explorá y buscá en tu historial de WhatsApp."
             action={
               !isSearching ? (
-                <span className="text-sm text-bt-muted" aria-label="Total de mensajes">
-                  {count.toLocaleString()} {count === 1 ? 'mensaje' : 'mensajes'}
-                </span>
+                <div className="flex items-center gap-4">
+                  <span className="text-sm text-bt-muted" aria-label="Total de mensajes">
+                    {count.toLocaleString()} {count === 1 ? 'mensaje' : 'mensajes'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={toggleDashboard}
+                    className={`flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-all ${
+                      showDashboard
+                        ? 'border-bt-primary/30 bg-bt-primary-faint text-bt-primary shadow-bt-nav-active'
+                        : 'border-bt-border bg-transparent text-bt-muted hover:border-bt-primary/20 hover:text-bt-text'
+                    }`}
+                    title="Alternar Dashboard de estadísticas"
+                  >
+                    <Icon name="settings" size={13} />
+                    <span>Dashboard</span>
+                  </button>
+                </div>
               ) : undefined
             }
           />
@@ -153,6 +225,25 @@ export function Timeline() {
               </div>
             )}
           </div>
+
+          <div className={`overflow-hidden transition-all duration-500 ease-in-out ${
+            (showDashboard && !isSearching)
+              ? 'max-h-[1400px] opacity-100 border-b border-bt-border'
+              : 'max-h-0 opacity-0 pointer-events-none'
+          }`}>
+            <Dashboard
+              totalMessagesCount={count}
+              messages={messages}
+              dbStats={dbStats}
+              dateRange={dateRange}
+              setDateRange={setDateRange}
+              messageSource={messageSource}
+              setMessageSource={setMessageSource}
+              direction={direction}
+              setDirection={setDirection}
+            />
+          </div>
+
 
           {isSearching ? (
             <div className="flex-1 overflow-y-auto px-10 pb-14">

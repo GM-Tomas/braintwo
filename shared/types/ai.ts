@@ -54,6 +54,7 @@ export interface OllamaInstallProgress {
   message?: string
 }
 
+
 export interface AiConfig {
   provider: AiProvider
   apiKey: string

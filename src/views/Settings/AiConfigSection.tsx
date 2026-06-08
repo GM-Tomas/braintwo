@@ -131,6 +131,7 @@ export function AiConfigSection() {
     void aiService.setConfig({ ollama: next, profiles })
   }
 
+
   const handleProfileSelect = (profileId: string) => {
     const selected = profiles.find((p) => p.id === profileId)
     if (!selected) return
@@ -433,6 +434,7 @@ export function AiConfigSection() {
             <span className="h-1.5 w-1.5 rounded-full bg-bt-green" />
           )}
         </div>
+
 
         {/* Add Profile Pill */}
         <button

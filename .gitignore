@@ -13,3 +13,4 @@ logs/
 *.tsbuildinfo
 .abi/
 .claude/
+build/icon.png

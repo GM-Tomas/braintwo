@@ -20,7 +20,7 @@ const MIN_SIMILARITY = 0.75
 // Standard RRF constant — chosen to balance precision and recall across lists.
 const RRF_K = 60
 
-function filterByRelevance(candidates: SearchResult[]): SearchResult[] {
+function filterByRelevance(candidates: SearchResult[], isFallback = false): SearchResult[] {
   // Pre-process candidates to flag placeholder media/messages.
   // A placeholder is a message with no text content and either no context note or a generic placeholder context note.
   const processed = candidates.map((r) => {
@@ -33,7 +33,8 @@ function filterByRelevance(candidates: SearchResult[]): SearchResult[] {
   })
 
   // 1. Exclude absolute low relevance below the floor.
-  const ABSOLUTE_FLOOR = 0.72
+  const ABSOLUTE_FLOOR = isFallback ? 0.22 : 0.72
+  const MIN_SIM = isFallback ? 0.25 : 0.75
   const above = processed.filter((r) => r.similarity >= ABSOLUTE_FLOOR)
   if (above.length === 0) return []
 
@@ -44,19 +45,20 @@ function filterByRelevance(candidates: SearchResult[]): SearchResult[] {
       ? Math.max(...nonPlaceholders.map((r) => r.similarity))
       : Math.max(...above.map((r) => r.similarity))
 
-  // If the absolute best match is below 0.77, it is generally considered noise.
+  // If the absolute best match is below the noise floor, it is generally considered noise.
   let allAreLowRelevance = false
-  if (maxSim < 0.77) {
+  const noiseFloor = isFallback ? 0.27 : 0.77
+  if (maxSim < noiseFloor) {
     allAreLowRelevance = true
   }
 
   // 3. Relative margin: exclude results that are significantly weaker than the best match.
-  const MARGIN = 0.03
+  const MARGIN = isFallback ? 0.05 : 0.03
 
   // 4. Tight cluster filter: if we have multiple results, but they are all very close to each other
   // and the best match is not exceptionally high (maxSim < 0.80), it suggests a flat distribution
   // of similarities indicating background noise.
-  if (above.length >= 2 && maxSim < 0.80) {
+  if (above.length >= 2 && maxSim < (isFallback ? 0.30 : 0.80)) {
     const mean = above.reduce((s, r) => s + r.similarity, 0) / above.length
     const variance = above.reduce((s, r) => s + (r.similarity - mean) ** 2, 0) / above.length
     const std = Math.sqrt(variance)
@@ -71,7 +73,7 @@ function filterByRelevance(candidates: SearchResult[]): SearchResult[] {
     const isLow =
       r.isPlaceholder ||
       allAreLowRelevance ||
-      r.similarity < MIN_SIMILARITY ||
+      r.similarity < MIN_SIM ||
       r.similarity < maxSim - MARGIN
 
     // Remove the temporary isPlaceholder flag
@@ -139,9 +141,14 @@ export function createSearchService(deps: SearchServiceDeps): SearchService {
       const vecCandidates = deps.db
         .searchSimilar(queryVec, Math.max(1, Math.min(k * 3, 150)))
         .map(toSearchResult)
-      const filteredVec = filterByRelevance(vecCandidates)
-
-      return applyRRF(filteredVec, kwResults, k)
+      const isFallback = deps.embeddings.getStatus?.()?.status === 'fallback'
+      const filteredVec = filterByRelevance(vecCandidates, isFallback)
+      const rrf = applyRRF(filteredVec, kwResults, k)
+      return rrf.sort((a, b) => {
+        const aLow = a.lowRelevance === true ? 1 : 0
+        const bLow = b.lowRelevance === true ? 1 : 0
+        return aLow - bLow
+      })
     },
 
     async backfillMissing(limit = 500) {

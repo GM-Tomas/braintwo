@@ -12,11 +12,11 @@ import {
 import pino from 'pino'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { createWhatsAppService } from './services/whatsapp'
-import { openDatabase } from './services/db'
+import { openDatabase, type DbInstance } from './services/db'
 import { createEmbeddingService, type EmbeddingService } from './services/embeddings'
-import { createSearchService } from './services/search'
+import { createSearchService, type SearchService } from './services/search'
 import { createSyncStatusTracker } from './services/sync-status'
 import { readAiConfig } from './services/ai-config'
 import { createOllamaService } from './services/ollama'
@@ -156,6 +156,12 @@ function createWindow(): void {
     minHeight: 700,
     show: false,
     autoHideMenuBar: true,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#070c14',
+      symbolColor: '#7a90b8',
+      height: 36
+    },
     backgroundColor: '#060a12',
     icon: nativeImage.createFromPath(buildResourcePath(resourceOpts(), 'icon-256.png')),
     webPreferences: {
@@ -243,6 +249,29 @@ function showWindow(): void {
   context.mainWindow.value.focus()
 }
 
+function checkAndClearFallbackEmbeddings(db: DbInstance, search: SearchService): void {
+  try {
+    const sample = db.raw.prepare('SELECT embedding FROM message_embeddings LIMIT 1').get() as { embedding: Buffer } | undefined
+    if (sample && sample.embedding) {
+      const floatArr = new Float32Array(
+        sample.embedding.buffer,
+        sample.embedding.byteOffset,
+        sample.embedding.byteLength / Float32Array.BYTES_PER_ELEMENT
+      )
+      let nonZero = 0
+      for (let i = 0; i < floatArr.length; i++) {
+        if (floatArr[i] !== 0) nonZero++
+      }
+      if (nonZero < 500) {
+        db.clearEmbeddings()
+        void search.backfillMissing(50_000).catch(() => { /* ignore */ })
+      }
+    }
+  } catch {
+    // Ignore database errors
+  }
+}
+
 function openStorage(): void {
   context.dbPath.value = join(app.getPath('userData'), 'braintwo.db')
   context.db.value = openDatabase(context.dbPath.value)
@@ -267,7 +296,12 @@ function openStorage(): void {
   writeFileSync(versionFile, EMBEDDING_VERSION)
   embeddings = createEmbeddingService({
     cacheDir: modelsDir,
-    onProgress: (progress) => broadcast('search:model-progress', progress)
+    onProgress: (progress) => {
+      broadcast('search:model-progress', progress)
+      if (progress.status === 'ready' && context.db.value && context.search.value) {
+        checkAndClearFallbackEmbeddings(context.db.value, context.search.value)
+      }
+    }
   })
   context.search.value = createSearchService({ db: context.db.value, embeddings })
   context.aiChat.value = createAiChatService({
@@ -291,6 +325,17 @@ function openStorage(): void {
       } catch { /* best-effort */ }
     }
   })()
+
+  // If local model is already downloaded, check and heal on startup
+  const modelPath = join(modelsDir, 'Xenova', 'multilingual-e5-base', 'onnx', 'model_quantized.onnx')
+  if (existsSync(modelPath)) {
+    checkAndClearFallbackEmbeddings(context.db.value, context.search.value)
+  }
+
+  // Warm up embedding service / trigger background download on startup
+  void embeddings.embed('warmup', 'query').catch(() => { /* ignore */ })
+
+
   void context.search.value.backfillMissing(50_000).catch((err: unknown) => {
     reportError('search.backfill_failed', err instanceof Error ? err.message : String(err))
   })

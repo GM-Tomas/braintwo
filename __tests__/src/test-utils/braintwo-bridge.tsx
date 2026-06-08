@@ -97,6 +97,7 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
       lastIngestAt: null
     })),
     openUserDataFolder: vi.fn(async () => {}),
+    setTitleBarOverlay: vi.fn(async () => {}),
     searchQuery: vi.fn(async () => opts.searchResults ?? []),
     importTxt: vi.fn(async () => ({
       processed: 0,
@@ -130,6 +131,7 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
       setSettings: spies.setSettings,
       getDbStats: spies.getDbStats,
       openUserDataFolder: spies.openUserDataFolder,
+      setTitleBarOverlay: spies.setTitleBarOverlay,
       onMessagesBatch: (cb) => {
         batchListeners.push(cb)
         return () => {

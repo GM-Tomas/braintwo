@@ -331,8 +331,38 @@ export function parseFtsQuery(query: string): string {
 export function openDatabase(filePath: string): DbInstance {
   const db = new Database(filePath)
   applyPragmas(db)
-  sqliteVec.load(db)
+  let vecPath = sqliteVec.getLoadablePath()
+  if (vecPath.includes('app.asar') && !vecPath.includes('app.asar.unpacked')) {
+    vecPath = vecPath.replace('app.asar', 'app.asar.unpacked')
+  }
+  db.loadExtension(vecPath)
   applyMigrations(db)
+
+  // Seed default global memories if ai_memory is empty
+  try {
+    const memCount = db.prepare('SELECT COUNT(*) AS count FROM ai_memory').get() as { count: number }
+    if (memCount && memCount.count === 0) {
+      const defaultMemories = [
+        'BrainTwo es un segundo cerebro digital personal que se conecta de manera segura a tu WhatsApp para indexar, buscar y organizar tus mensajes, audios y enlaces.',
+        'Toda la información y base de datos de BrainTwo se almacena localmente de forma privada en tu computadora. Nada sale de tu máquina.',
+        'Puedes usar la sección de Búsqueda de BrainTwo para encontrar de manera instantánea cualquier mensaje, conversación, audio transcrito o link que hayas enviado o recibido sin tener que scrollear.',
+        'La sección del Timeline de la aplicación muestra tu actividad de WhatsApp de manera puramente cronológica, creando un feed limpio y útil libre de algoritmos.',
+        'En la sección de Chat IA, puedes interactuar directamente con un asistente inteligente que tiene acceso a tu memoria global y contexto para ayudarte a responder preguntas sobre tus chats.',
+        'El asistente de chat utiliza la memoria global para aprender de ti a lo largo del tiempo y para proporcionarte información precisa sobre el funcionamiento de la aplicación.',
+        'Puedes preguntarle al Chat IA cosas sobre BrainTwo, como "¿qué es?", "¿dónde se guardan mis datos?" o pedirle sugerencias de uso.',
+        'Para importar tu historial antiguo de WhatsApp, abre WhatsApp en tu celular, ve a tu propio chat personal (el chat contigo mismo), pulsa "Exportar chat" (eligiendo sin archivos/medios), y carga el archivo .txt resultante en el panel de Primeros Pasos o en los Ajustes.'
+      ]
+      const insertMem = db.prepare('INSERT INTO ai_memory(content, chat_id) VALUES (?, NULL)')
+      const transaction = db.transaction((memories: string[]) => {
+        for (const content of memories) {
+          insertMem.run(content)
+        }
+      })
+      transaction(defaultMemories)
+    }
+  } catch (err) {
+    console.error('Error seeding default memories:', err)
+  }
 
   const insertMsgStmt = db.prepare(
     `INSERT OR IGNORE INTO messages

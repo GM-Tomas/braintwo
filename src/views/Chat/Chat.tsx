@@ -54,6 +54,7 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
     return () => { cancelled = true; unsub() }
   }, [config, ollamaService])
 
+
   const selectChat = useCallback(async (chatId: number) => {
     setLoading(false)
     setError(null)
@@ -242,6 +243,7 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
           .
         </div>
       )}
+
 
       {/* Message list */}
       <div className="flex-1 overflow-y-auto px-14 py-6">

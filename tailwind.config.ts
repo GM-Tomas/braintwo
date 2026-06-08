@@ -21,7 +21,9 @@ export default {
           dim: 'var(--bt-dim)',
           // Brand
           primary: 'var(--bt-primary)',
+          'primary-faint': 'var(--bt-primary-faint)',
           accent: 'var(--bt-accent)',
+          'accent-faint': 'var(--bt-accent-faint)',
           amber: 'var(--bt-amber)',
           red: 'var(--bt-red)',
           'send-btn': 'var(--bt-send-btn-bg)',
