@@ -509,6 +509,24 @@ function PairingPanel({ state, qrDataUrl, timeLeft, onReload }: PanelProps) {
     )
   }
 
+  if (state === 'disconnected') {
+    return (
+      <Card>
+        <div className="flex h-[280px] w-full flex-col items-center justify-center gap-4 px-6 text-center text-sm text-bt-muted">
+          <p>No se pudo conectar con WhatsApp.</p>
+          <button
+            type="button"
+            className="rounded-[10px] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
+            onClick={() => void window.braintwo.wa.requestQr()}
+          >
+            Reintentar
+          </button>
+        </div>
+      </Card>
+    )
+  }
+
   return (
     <Card>
       <div className="flex h-[280px] w-full flex-col items-center justify-center gap-3 text-sm text-bt-muted">

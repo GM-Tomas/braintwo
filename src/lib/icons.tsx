@@ -39,6 +39,11 @@ export type IconName =
   | 'sun'
   | 'moon'
   | 'send'
+  | 'cpu'
+  | 'trash'
+  | 'loader'
+  | 'square'
+  | 'download'
   | 'refresh'
 
 export function Icon({
@@ -263,6 +268,50 @@ function renderPath(
         <>
           <line x1="22" y1="2" x2="11" y2="13" {...s} />
           <polygon points="22 2 15 22 11 13 2 9 22 2" {...s} />
+        </>
+      )
+    case 'cpu':
+      return (
+        <>
+          <rect x="4" y="4" width="16" height="16" rx="2" {...s} />
+          <rect x="9" y="9" width="6" height="6" {...s} />
+          <line x1="9" y1="1" x2="9" y2="4" {...s} />
+          <line x1="15" y1="1" x2="15" y2="4" {...s} />
+          <line x1="9" y1="20" x2="9" y2="23" {...s} />
+          <line x1="15" y1="20" x2="15" y2="23" {...s} />
+          <line x1="20" y1="9" x2="23" y2="9" {...s} />
+          <line x1="20" y1="14" x2="23" y2="14" {...s} />
+          <line x1="1" y1="9" x2="4" y2="9" {...s} />
+          <line x1="1" y1="14" x2="4" y2="14" {...s} />
+        </>
+      )
+    case 'trash':
+      return (
+        <>
+          <polyline points="3 6 5 6 21 6" {...s} />
+          <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" {...s} />
+        </>
+      )
+    case 'loader':
+      return (
+        <>
+          <line x1="12" y1="2" x2="12" y2="6" {...s} />
+          <line x1="12" y1="18" x2="12" y2="22" {...s} />
+          <line x1="4.93" y1="4.93" x2="7.76" y2="7.76" {...s} />
+          <line x1="16.24" y1="16.24" x2="19.07" y2="19.07" {...s} />
+          <line x1="2" y1="12" x2="6" y2="12" {...s} />
+          <line x1="18" y1="12" x2="22" y2="12" {...s} />
+          <line x1="4.93" y1="19.07" x2="7.76" y2="16.24" {...s} />
+          <line x1="16.24" y1="7.76" x2="19.07" y2="4.93" {...s} />
+        </>
+      )
+    case 'square':
+      return <rect x="3" y="3" width="18" height="18" rx="2" {...s} />
+    case 'download':
+      return (
+        <>
+          <path d="M12 3v13M5 13l7 7 7-7" {...s} />
+          <line x1="3" y1="21" x2="21" y2="21" {...s} />
         </>
       )
     case 'refresh':

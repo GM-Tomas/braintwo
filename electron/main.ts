@@ -6,7 +6,8 @@ import {
   Tray,
   nativeImage,
   session,
-  shell
+  shell,
+  dialog
 } from 'electron'
 import pino from 'pino'
 import { fileURLToPath } from 'node:url'
@@ -18,6 +19,7 @@ import { createEmbeddingService, type EmbeddingService } from './services/embedd
 import { createSearchService, type SearchService } from './services/search'
 import { createSyncStatusTracker } from './services/sync-status'
 import { readAiConfig } from './services/ai-config'
+import { createOllamaService } from './services/ollama'
 import { createAiChatService } from './services/ai-chat'
 import { createContextService } from './services/context'
 import {
@@ -64,6 +66,7 @@ const context: AppContext = {
   isQuitting: { value: false },
   lastConnectionState: { value: 'disconnected' },
   lastQr: { value: null },
+  ollamaService: createOllamaService(),
   showWindow,
   broadcast,
   reportError
@@ -84,6 +87,7 @@ app.on('before-quit', () => {
   void context.whatsapp.value?.stop()
   context.messageBatcher.value?.flush()
   context.db.value?.close()
+  context.ollamaService.dispose()
 })
 
 const resourceOpts = () => ({
@@ -175,7 +179,21 @@ function createWindow(): void {
   context.mainWindow.value.on('close', (event) => {
     if (!context.isQuitting.value) {
       event.preventDefault()
-      context.mainWindow.value?.hide()
+      if (context.ollamaService.isPulling() && context.mainWindow.value) {
+        void dialog.showMessageBox(context.mainWindow.value, {
+          type: 'info',
+          buttons: ['Entendido', 'Cancelar descarga'],
+          defaultId: 0,
+          title: 'Descarga en segundo plano',
+          message: 'Hay una descarga de modelo en curso.',
+          detail: 'La descarga continúa en segundo plano aunque cerrés la ventana. Para cancelarla, presioná "Cancelar descarga".'
+        }).then(({ response }) => {
+          if (response === 1) context.ollamaService.cancelPull()
+          context.mainWindow.value?.hide()
+        })
+      } else {
+        context.mainWindow.value?.hide()
+      }
     }
   })
 
@@ -317,6 +335,7 @@ function openStorage(): void {
   // Warm up embedding service / trigger background download on startup
   void embeddings.embed('warmup', 'query').catch(() => { /* ignore */ })
 
+
   void context.search.value.backfillMissing(50_000).catch((err: unknown) => {
     reportError('search.backfill_failed', err instanceof Error ? err.message : String(err))
   })
@@ -446,6 +465,19 @@ void app.whenReady().then(() => {
   createTray()
   startWhatsApp()
   createWindow()
+
+  const ollamaCfg = readAiConfig(app.getPath('userData'))?.ollama
+  if (ollamaCfg?.enabled && ollamaCfg?.autoStart) {
+    const serverUrl = ollamaCfg.serverUrl ?? 'http://localhost:11434'
+    void context.ollamaService.startServer(serverUrl).then(() => {
+      broadcast('ollama:on-status', 'running')
+      const model = ollamaCfg.activeModel
+      if (model) void context.ollamaService.warmupModel(serverUrl, model)
+    }).catch((err: unknown) => {
+      reportError('ollama.autostart_failed', err instanceof Error ? err.message : String(err))
+      broadcast('ollama:on-status', 'error')
+    })
+  }
 })
 
 app.on('window-all-closed', () => {

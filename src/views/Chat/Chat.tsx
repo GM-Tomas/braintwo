@@ -15,7 +15,7 @@ interface ChatProps {
 }
 
 export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: ChatProps) {
-  const { aiService, messageRepository } = useDependencies()
+  const { aiService, messageRepository, ollamaService } = useDependencies()
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
@@ -24,6 +24,7 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
   const [lastResponse, setLastResponse] = useState<AiChatResponse | null>(null)
   const [config, setConfig] = useState<AiConfig | null>(null)
   const [detailMessage, setDetailMessage] = useState<MessageEntity | null>(null)
+  const [ollamaRunning, setOllamaRunning] = useState<boolean | null>(null)
 
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
@@ -33,6 +34,26 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
     void aiService.getConfig().then(setConfig)
     setTimeout(() => inputRef.current?.focus(), 100)
   }, [aiService])
+
+  // When the local provider (Ollama / manual server) is active, track whether the server is up.
+  useEffect(() => {
+    if (config?.provider !== 'ollama') {
+      setOllamaRunning(null)
+      return
+    }
+    let cancelled = false
+    const check = () => {
+      void ollamaService.getStatus(config.ollama?.serverUrl)
+        .then((s) => { if (!cancelled) setOllamaRunning(s === 'running') })
+        .catch(() => { if (!cancelled) setOllamaRunning(false) })
+    }
+    check()
+    const unsub = ollamaService.onStatusChange((s) => {
+      if (!cancelled) setOllamaRunning(s === 'running')
+    })
+    return () => { cancelled = true; unsub() }
+  }, [config, ollamaService])
+
 
   const selectChat = useCallback(async (chatId: number) => {
     setLoading(false)
@@ -81,7 +102,10 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  const hasConfig = Boolean(config?.apiKey && config.provider)
+  const hasConfig = Boolean(config?.provider && (config.provider === 'ollama' || config.apiKey))
+  const localServerDown = config?.provider === 'ollama' && ollamaRunning === false
+  const localModelMissing = config?.provider === 'ollama' && ollamaRunning === true && !config.model
+  const canSend = hasConfig && !localServerDown && !localModelMissing
 
   const send = useCallback(async () => {
     const text = input.trim()
@@ -179,7 +203,7 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
       />
 
       {!hasConfig && (
-        <div className="mx-14 mt-4 rounded-[8px] border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-[13px] text-yellow-400">
+        <div className="mx-14 mt-4 rounded-[8px] border border-bt-amber/40 bg-bt-amber/10 px-4 py-3 text-[13px] text-bt-amber">
           No hay proveedor de IA configurado.{' '}
           <button
             type="button"
@@ -191,6 +215,35 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
           .
         </div>
       )}
+
+      {hasConfig && localModelMissing && (
+        <div className="mx-14 mt-4 rounded-[8px] border border-bt-amber/40 bg-bt-amber/10 px-4 py-3 text-[13px] text-bt-amber">
+          Todavía no elegiste un modelo de IA local.{' '}
+          <button
+            type="button"
+            className="underline hover:no-underline"
+            onClick={() => onNavigate('settings')}
+          >
+            Terminá la configuración en Ajustes
+          </button>
+          .
+        </div>
+      )}
+
+      {hasConfig && localServerDown && (
+        <div className="mx-14 mt-4 rounded-[8px] border border-bt-amber/40 bg-bt-amber/10 px-4 py-3 text-[13px] text-bt-amber">
+          El servidor local de IA no está corriendo.{' '}
+          <button
+            type="button"
+            className="underline hover:no-underline"
+            onClick={() => onNavigate('settings')}
+          >
+            Iniciálo en Ajustes
+          </button>
+          .
+        </div>
+      )}
+
 
       {/* Message list */}
       <div className="flex-1 overflow-y-auto px-14 py-6">
@@ -246,19 +299,23 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={loading || !hasConfig}
+            disabled={loading || !canSend}
             rows={1}
             placeholder={
-              hasConfig
-                ? 'Preguntá algo… (Enter para enviar, Shift+Enter nueva línea)'
-                : 'Configurá un proveedor de IA en Ajustes primero'
+              !hasConfig
+                ? 'Configurá un proveedor de IA en Ajustes primero'
+                : localModelMissing
+                  ? 'Elegí un modelo en Ajustes para empezar'
+                  : localServerDown
+                    ? 'El servidor local de IA no está corriendo'
+                    : 'Preguntá algo… (Enter para enviar, Shift+Enter nueva línea)'
             }
             className="max-h-[120px] flex-1 resize-none rounded-[10px] border border-bt-border bg-bt-surf px-4 py-2.5 text-[14px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/40 disabled:opacity-40"
           />
           <button
             type="button"
             onClick={() => void send()}
-            disabled={loading || !input.trim() || !hasConfig}
+            disabled={loading || !input.trim() || !canSend}
             aria-label="Enviar mensaje"
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-bt-send-btn text-white transition-colors hover:bg-bt-send-btn-hover disabled:opacity-40"
           >

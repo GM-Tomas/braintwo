@@ -57,6 +57,7 @@ export function Timeline() {
     loadDbStats()
   }, [count, loadDbStats])
 
+
   // Search state
   const [q, setQ] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
@@ -242,6 +243,7 @@ export function Timeline() {
               setDirection={setDirection}
             />
           </div>
+
 
           {isSearching ? (
             <div className="flex-1 overflow-y-auto px-10 pb-14">

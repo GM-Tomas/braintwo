@@ -11,6 +11,10 @@ import type {
   DbStats,
   ImportProgress,
   ModelProgress,
+  OllamaInstallProgress,
+  OllamaModel,
+  OllamaPullProgress,
+  OllamaStatus,
   SearchResult,
   SyncStatus,
   UserSettings
@@ -71,6 +75,20 @@ export interface BrainTwoApi {
     renameChat: (chatId: number, title: string) => Promise<void>
     saveChatMessage: (chatId: number, role: 'user' | 'assistant', content: string, sources: string | null) => Promise<number>
     deleteLastMessage: (chatId: number) => Promise<void>
+  }
+  ollama: {
+    getStatus: (serverUrl?: string) => Promise<OllamaStatus>
+    install: () => Promise<void>
+    uninstall: () => Promise<void>
+    startServer: () => Promise<void>
+    stopServer: () => Promise<void>
+    listModels: (serverUrl?: string) => Promise<OllamaModel[]>
+    pullModel: (name: string) => Promise<void>
+    cancelPull: () => Promise<void>
+    deleteModel: (name: string) => Promise<void>
+    onPullProgress: (cb: (p: OllamaPullProgress) => void) => Unsubscribe
+    onInstallProgress: (cb: (p: OllamaInstallProgress) => void) => Unsubscribe
+    onStatusChange: (cb: (status: OllamaStatus) => void) => Unsubscribe
   }
 }
 
@@ -162,6 +180,20 @@ export function createApi(
       renameChat: (chatId: number, title: string) => ipcRenderer.invoke('ai:rename-chat', chatId, title),
       saveChatMessage: (chatId: number, role: 'user' | 'assistant', content: string, sources: string | null) => ipcRenderer.invoke('ai:save-chat-message', chatId, role, content, sources),
       deleteLastMessage: (chatId: number) => ipcRenderer.invoke('ai:delete-last-message', chatId)
+    },
+    ollama: {
+      getStatus: (serverUrl?: string) => ipcRenderer.invoke('ollama:get-status', serverUrl),
+      install: () => ipcRenderer.invoke('ollama:install'),
+      uninstall: () => ipcRenderer.invoke('ollama:uninstall'),
+      startServer: () => ipcRenderer.invoke('ollama:start-server'),
+      stopServer: () => ipcRenderer.invoke('ollama:stop-server'),
+      listModels: (serverUrl?: string) => ipcRenderer.invoke('ollama:list-models', serverUrl),
+      pullModel: (name: string) => ipcRenderer.invoke('ollama:pull-model', name),
+      cancelPull: () => ipcRenderer.invoke('ollama:cancel-pull'),
+      deleteModel: (name: string) => ipcRenderer.invoke('ollama:delete-model', name),
+      onPullProgress: subscribe<OllamaPullProgress>('ollama:on-pull-progress'),
+      onInstallProgress: subscribe<OllamaInstallProgress>('ollama:on-install-progress'),
+      onStatusChange: subscribe<OllamaStatus>('ollama:on-status')
     }
   }
 }
