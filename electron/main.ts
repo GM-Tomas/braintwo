@@ -12,8 +12,9 @@ import {
 import pino from 'pino'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync, rmSync, readdirSync } from 'node:fs'
 import { createWhatsAppService } from './services/whatsapp'
+import { createTranscriptionService } from './services/transcription'
 import { openDatabase, type DbInstance } from './services/db'
 import { createEmbeddingService, type EmbeddingService } from './services/embeddings'
 import { createSearchService, type SearchService } from './services/search'
@@ -28,7 +29,8 @@ import {
   extractMediaMeta,
   extractText,
   extractTimestampMs,
-  type RecentMessage
+  type RecentMessage,
+  type WAMessageLike
 } from './services/ingest'
 import {
   statusLabel,
@@ -88,6 +90,10 @@ app.on('before-quit', () => {
   context.messageBatcher.value?.flush()
   context.db.value?.close()
   context.ollamaService.dispose()
+  try {
+    const dir = audioTempDir()
+    for (const f of readdirSync(dir)) rmSync(join(dir, f), { force: true })
+  } catch { /* best-effort */ }
 })
 
 const resourceOpts = () => ({
@@ -354,6 +360,51 @@ function queueEmbedding(rowId: number, text: string): void {
     })
 }
 
+function audioTempDir(): string {
+  const dir = join(app.getPath('userData'), 'temp', 'audio')
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+function scheduleAudioCleanup(filePath: string, ttlMs = 60 * 60 * 1000): void {
+  setTimeout(() => {
+    try { rmSync(filePath, { force: true }) } catch { /* best-effort */ }
+  }, ttlMs)
+}
+
+async function handleAudioTranscription(raw: WAMessageLike, rowId: number): Promise<void> {
+  try {
+    broadcast('audio:transcribing', { msgId: rowId })
+
+    const buffer = await context.whatsapp.value!.downloadMedia(raw)
+
+    const ext = 'ogg'
+    const fileName = `${rowId}-${Date.now()}.${ext}`
+    const filePath = join(audioTempDir(), fileName)
+    writeFileSync(filePath, buffer)
+
+    context.db.value?.updateMediaMeta(rowId, { audioLocalPath: filePath })
+
+    const config = readAiConfig(app.getPath('userData'))
+    const apiKey = config?.groq?.apiKey || process.env.GROQ_API_KEY || ''
+    if (!apiKey) {
+      console.warn('[transcription] No Groq API key configured, skipping transcription')
+      scheduleAudioCleanup(filePath)
+      return
+    }
+
+    const svc = createTranscriptionService(apiKey)
+    const transcript = await svc.transcribe(buffer)
+
+    context.db.value?.updateTranscript(rowId, transcript)
+
+    scheduleAudioCleanup(filePath)
+    broadcast('audio:transcribed', { msgId: rowId, transcript })
+  } catch (err) {
+    console.error('[transcription] Error:', err)
+  }
+}
+
 function noteCatchupMessage(): void {
   catchupInserted++
   context.syncStatus.startCatchup()
@@ -401,23 +452,39 @@ function startWhatsApp(): void {
   })
 
   context.whatsapp.value.on('message', ({ raw, source }) => {
-    if (!context.ingest.value || !context.messageBatcher.value) return
+    if (!context.ingest.value || !context.messageBatcher.value) {
+      console.log('[DEBUG] main message handler: ingest or batcher not ready')
+      return
+    }
     const result = context.ingest.value.ingest(raw, source)
-    if (!result.inserted || result.rowId === null) return
+    if (!result.inserted || result.rowId === null) {
+      console.log('[DEBUG] main message handler: not inserted', result.skipped, 'id:', raw.key?.id)
+      return
+    }
     const id = raw.key?.id
-    if (!id) return
+    if (!id) {
+      console.log('[DEBUG] main message handler: no key id after insert')
+      return
+    }
+    const kind = extractKind(raw)
+    console.log('[DEBUG] main message handler: pushing to batcher', 'rowId:', result.rowId, 'id:', id, 'source:', source, 'fromMe:', raw.key?.fromMe)
     context.messageBatcher.value.push({
       id: result.rowId,
       wa_msg_id: id,
       timestamp: extractTimestampMs(raw),
       text: extractText(raw),
       source,
-      kind: extractKind(raw),
+      kind,
       media: extractMediaMeta(raw),
       fromMe: raw.key?.fromMe === true
     })
     queueEmbedding(result.rowId, extractText(raw))
-    context.contextSvc.value?.queue(result.rowId, extractKind(raw), extractText(raw), extractMediaMeta(raw), extractTimestampMs(raw))
+    context.contextSvc.value?.queue(result.rowId, kind, extractText(raw), extractMediaMeta(raw), extractTimestampMs(raw))
+
+    if (kind === 'audio' && result.rowId) {
+      void handleAudioTranscription(raw, result.rowId)
+    }
+
     if (source === 'offline-sync' || source === 'history-sync') {
       noteCatchupMessage()
     }

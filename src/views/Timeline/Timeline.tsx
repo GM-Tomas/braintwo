@@ -58,6 +58,17 @@ export function Timeline() {
   }, [count, loadDbStats])
 
 
+  // Transcription state
+  const [transcriptions, setTranscriptions] = useState<Record<number, { transcribing: boolean; transcript?: string }>>({})
+
+  useIpcSubscription(window.braintwo.app.onTranscribing, ({ msgId }) => {
+    setTranscriptions((prev) => ({ ...prev, [msgId]: { transcribing: true } }))
+  })
+
+  useIpcSubscription(window.braintwo.app.onTranscribed, ({ msgId, transcript }) => {
+    setTranscriptions((prev) => ({ ...prev, [msgId]: { transcribing: false, transcript } }))
+  })
+
   // Search state
   const [q, setQ] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
@@ -277,6 +288,8 @@ export function Timeline() {
                           similarity={r.similarity}
                           matchSource={r.matchSource}
                           lowRelevance={r.lowRelevance}
+                          transcribing={transcriptions[m.id]?.transcribing}
+                          transcript={transcriptions[m.id]?.transcript}
                         />
                       )
                     })}
@@ -303,6 +316,8 @@ export function Timeline() {
                             formatted={formatter.format(new Date(m.timestamp))}
                             isSelected={selected ? (selected as MessageEntity).id === m.id : false}
                             onClick={() => setSelected(m)}
+                            transcribing={transcriptions[m.id]?.transcribing}
+                            transcript={transcriptions[m.id]?.transcript}
                           />
                         ))}
                       </ul>

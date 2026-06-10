@@ -55,6 +55,10 @@ export interface OllamaInstallProgress {
 }
 
 
+export interface GroqConfig {
+  apiKey?: string
+}
+
 export interface AiConfig {
   provider: AiProvider
   apiKey: string
@@ -69,6 +73,7 @@ export interface AiConfig {
   activeProfileId?: string
   profiles?: AiConfigProfile[]
   ollama?: Partial<OllamaConfig>
+  groq?: GroqConfig
 }
 
 export interface ChatMessage {

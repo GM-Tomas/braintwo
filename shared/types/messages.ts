@@ -18,6 +18,8 @@ export interface MediaMeta {
   transcript?: string
   /** True if the audio came as a voice note (push-to-talk) vs a regular file. */
   ptt?: boolean
+  /** Local path to a temporary audio file (set during Groq transcription). */
+  audioLocalPath?: string
 }
 
 export interface RecentMessage {

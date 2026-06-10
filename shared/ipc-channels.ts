@@ -52,5 +52,9 @@ export const IPC_CHANNELS = {
     ON_STATUS: 'ollama:on-status',
     ON_PULL_PROGRESS: 'ollama:on-pull-progress',
     ON_INSTALL_PROGRESS: 'ollama:on-install-progress',
+  },
+  AUDIO: {
+    TRANSCRIBING: 'audio:transcribing',
+    TRANSCRIBED: 'audio:transcribed',
   }
 } as const

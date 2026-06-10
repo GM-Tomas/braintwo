@@ -10,6 +10,8 @@ interface NoteRowProps {
   similarity?: number
   matchSource?: 'semantic' | 'keyword' | 'both'
   lowRelevance?: boolean
+  transcribing?: boolean
+  transcript?: string
 }
 
 export function NoteRow({
@@ -19,7 +21,9 @@ export function NoteRow({
   onClick,
   similarity,
   matchSource,
-  lowRelevance
+  lowRelevance,
+  transcribing,
+  transcript
 }: NoteRowProps) {
   const style = KIND_STYLE[message.kind] ?? KIND_STYLE.other
   return (
@@ -49,7 +53,7 @@ export function NoteRow({
           <Icon name={style.icon} size={15} className={style.iconColor} />
         </div>
         <div className="min-w-0 flex-1">
-          <NotePreview message={message} kindLabel={style.label} />
+          <NotePreview message={message} kindLabel={style.label} transcribing={transcribing} transcript={transcript} />
           <div className="mt-2 flex items-center gap-2.5 text-[11.5px] text-bt-dim">
             <span className="inline-flex items-center gap-1.5 text-bt-muted">
               <span
@@ -102,7 +106,17 @@ export function NoteRow({
   )
 }
 
-function NotePreview({ message, kindLabel }: { message: MessageEntity; kindLabel: string }) {
+function NotePreview({
+  message,
+  kindLabel,
+  transcribing,
+  transcript
+}: {
+  message: MessageEntity
+  kindLabel: string
+  transcribing?: boolean
+  transcript?: string
+}) {
   if (message.text) {
     return (
       <p className="line-clamp-2 whitespace-pre-wrap text-[14.5px] leading-relaxed text-bt-text">
@@ -113,7 +127,18 @@ function NotePreview({ message, kindLabel }: { message: MessageEntity; kindLabel
   return (
     <div className="flex items-baseline gap-2 text-[14.5px] leading-relaxed">
       <span className="text-bt-text">{kindLabel}</span>
-      <span className="text-[12.5px] text-bt-muted">{message.getMediaSummary()}</span>
+      {transcribing ? (
+        <span className="flex items-center gap-1.5 text-[12.5px] text-bt-muted">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-bt-accent" />
+          Transcribiendo…
+        </span>
+      ) : transcript ? (
+        <span className="text-[12.5px] italic text-bt-muted opacity-70 line-clamp-1">
+          &ldquo;{transcript}&rdquo;
+        </span>
+      ) : (
+        <span className="text-[12.5px] text-bt-muted">{message.getMediaSummary()}</span>
+      )}
     </div>
   )
 }

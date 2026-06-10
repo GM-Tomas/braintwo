@@ -74,7 +74,8 @@ export function readAiConfig(userDataPath: string): AiConfig | null {
           ...parsed?.providers
         },
         activeProfileId: parsed?.activeProfileId || defaultConfig.activeProfileId,
-        profiles: parsed?.profiles && parsed.profiles.length > 0 ? parsed.profiles : defaultConfig.profiles
+        profiles: parsed?.profiles && parsed.profiles.length > 0 ? parsed.profiles : defaultConfig.profiles,
+        groq: parsed?.groq || undefined
       }
       try {
         writeFileSync(configPath, JSON.stringify(healedConfig, null, 2), 'utf8')

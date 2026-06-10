@@ -51,6 +51,8 @@ export interface BrainTwoBridge {
     onMessagesBatch: (cb: (batch: RecentMessage[]) => void) => Unsubscribe
     onSyncStateChanged: (cb: (status: SyncStatus) => void) => Unsubscribe
     onError: (cb: (error: AppErrorEvent) => void) => Unsubscribe
+    onTranscribing: (cb: (payload: { msgId: number }) => void) => Unsubscribe
+    onTranscribed: (cb: (payload: { msgId: number; transcript: string }) => void) => Unsubscribe
   }
   search: {
     query: (text: string, k?: number) => Promise<SearchResult[]>

@@ -46,6 +46,8 @@ export interface BrainTwoApi {
     onMessagesBatch: (cb: (batch: RecentMessage[]) => void) => Unsubscribe
     onSyncStateChanged: (cb: (status: SyncStatus) => void) => Unsubscribe
     onError: (cb: (error: AppErrorEvent) => void) => Unsubscribe
+    onTranscribing: (cb: (payload: { msgId: number }) => void) => Unsubscribe
+    onTranscribed: (cb: (payload: { msgId: number; transcript: string }) => void) => Unsubscribe
   }
   search: {
     query: (text: string, k?: number) => Promise<SearchResult[]>
@@ -150,7 +152,9 @@ export function createApi(
       openUserDataFolder: () => ipcRenderer.invoke('app:open-userdata-folder'),
       onMessagesBatch: subscribe<RecentMessage[]>('app:messages-batch'),
       onSyncStateChanged: subscribe<SyncStatus>('sync:state-changed'),
-      onError: subscribe<AppErrorEvent>('app:error')
+      onError: subscribe<AppErrorEvent>('app:error'),
+      onTranscribing: subscribe<{ msgId: number }>('audio:transcribing'),
+      onTranscribed: subscribe<{ msgId: number; transcript: string }>('audio:transcribed')
     },
     search: {
       query: (text: string, k = 12) => ipcRenderer.invoke('search:query', text, k),
