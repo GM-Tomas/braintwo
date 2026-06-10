@@ -16,8 +16,9 @@ const RECENT_LIMIT = 50
 const SEARCH_LIMIT = 80
 
 export function Timeline() {
-  const { messageRepository } = useDependencies()
+  const { messageRepository, aiService } = useDependencies()
   const [count, setCount] = useState<number>(0)
+  const [noGroqKey, setNoGroqKey] = useState(false)
   const [messages, setMessages] = useState<MessageEntity[]>([])
   const [filter, setFilter] = useState<MessageKind | 'all'>('all')
   const [selected, setSelected] = useState<MessageEntity | null>(null)
@@ -87,10 +88,13 @@ export function Timeline() {
     void messageRepository.getRecentMessages(RECENT_LIMIT).then((rows) => {
       if (mounted) setMessages(rows)
     })
+    void aiService.getConfig().then((cfg) => {
+      if (mounted) setNoGroqKey(!cfg?.groq?.apiKey)
+    })
     return () => {
       mounted = false
     }
-  }, [messageRepository])
+  }, [messageRepository, aiService])
 
   useIpcSubscription(messageRepository.onMessagesBatch, (batch) => {
     if (batch.length === 0) return
@@ -203,7 +207,7 @@ export function Timeline() {
           />
 
           {/* Search bar */}
-          <div className="px-10 pb-3 pt-1">
+          <div className="px-10 pb-3 pt-6">
             <div
               className="flex items-center gap-3 rounded-[12px] border bg-bt-surf px-4 py-3 transition-colors duration-150"
               style={{ borderColor: isSearching ? 'var(--bt-input-focus-border)' : 'var(--bt-border)' }}
@@ -257,7 +261,7 @@ export function Timeline() {
 
 
           {isSearching ? (
-            <div className="flex-1 overflow-y-auto px-10 pb-14">
+            <div className="flex-1 overflow-y-auto px-10 py-8">
               {searchLoading ? (
                 <div className="py-16 text-center text-[13px] text-bt-dim">
                   Buscando en tus mensajes...
@@ -290,6 +294,7 @@ export function Timeline() {
                           lowRelevance={r.lowRelevance}
                           transcribing={transcriptions[m.id]?.transcribing}
                           transcript={transcriptions[m.id]?.transcript}
+                          noApiKey={noGroqKey && m.kind === 'audio' && !transcriptions[m.id]?.transcribing && !transcriptions[m.id]?.transcript}
                         />
                       )
                     })}
@@ -301,7 +306,7 @@ export function Timeline() {
             <>
               <KindFilter active={filter} onChange={setFilter} counts={counts} total={messages.length} />
               <div className="flex flex-1 overflow-hidden">
-                <div className="flex-1 overflow-y-auto px-10 pb-14 pt-2">
+                <div className="flex-1 overflow-y-auto px-10 py-8">
                   <div className="w-full">
                     {messages.length === 0 ? (
                       <EmptyState />
@@ -318,6 +323,7 @@ export function Timeline() {
                             onClick={() => setSelected(m)}
                             transcribing={transcriptions[m.id]?.transcribing}
                             transcript={transcriptions[m.id]?.transcript}
+                            noApiKey={noGroqKey && m.kind === 'audio' && !transcriptions[m.id]?.transcribing && !transcriptions[m.id]?.transcript}
                           />
                         ))}
                       </ul>

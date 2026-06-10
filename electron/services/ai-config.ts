@@ -20,6 +20,9 @@ export function readAiConfig(userDataPath: string): AiConfig | null {
         model: 'big-pickle'
       }
     },
+    groq: {
+      apiKey: process.env.GROQ_API_KEY ?? ''
+    },
     activeProfileId: defaultId,
     profiles: [
       {

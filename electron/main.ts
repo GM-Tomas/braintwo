@@ -15,7 +15,7 @@ import { dirname, join } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync, rmSync, readdirSync } from 'node:fs'
 import { createWhatsAppService } from './services/whatsapp'
 import { createTranscriptionService } from './services/transcription'
-import { openDatabase, type DbInstance } from './services/db'
+import { openDatabase, type DbInstance, type MediaMeta } from './services/db'
 import { createEmbeddingService, type EmbeddingService } from './services/embeddings'
 import { createSearchService, type SearchService } from './services/search'
 import { createSyncStatusTracker } from './services/sync-status'
@@ -372,7 +372,12 @@ function scheduleAudioCleanup(filePath: string, ttlMs = 60 * 60 * 1000): void {
   }, ttlMs)
 }
 
-async function handleAudioTranscription(raw: WAMessageLike, rowId: number): Promise<void> {
+async function handleAudioTranscription(
+  raw: WAMessageLike,
+  rowId: number,
+  mediaMeta: MediaMeta | null,
+  timestampMs: number
+): Promise<void> {
   try {
     broadcast('audio:transcribing', { msgId: rowId })
 
@@ -397,6 +402,7 @@ async function handleAudioTranscription(raw: WAMessageLike, rowId: number): Prom
     const transcript = await svc.transcribe(buffer)
 
     context.db.value?.updateTranscript(rowId, transcript)
+    context.contextSvc.value?.queue(rowId, 'audio', transcript, mediaMeta, timestampMs)
 
     scheduleAudioCleanup(filePath)
     broadcast('audio:transcribed', { msgId: rowId, transcript })
@@ -467,22 +473,25 @@ function startWhatsApp(): void {
       return
     }
     const kind = extractKind(raw)
+    const mediaMeta = extractMediaMeta(raw)
+    const timestampMs = extractTimestampMs(raw)
     console.log('[DEBUG] main message handler: pushing to batcher', 'rowId:', result.rowId, 'id:', id, 'source:', source, 'fromMe:', raw.key?.fromMe)
     context.messageBatcher.value.push({
       id: result.rowId,
       wa_msg_id: id,
-      timestamp: extractTimestampMs(raw),
+      timestamp: timestampMs,
       text: extractText(raw),
       source,
       kind,
-      media: extractMediaMeta(raw),
+      media: mediaMeta,
       fromMe: raw.key?.fromMe === true
     })
     queueEmbedding(result.rowId, extractText(raw))
-    context.contextSvc.value?.queue(result.rowId, kind, extractText(raw), extractMediaMeta(raw), extractTimestampMs(raw))
 
     if (kind === 'audio' && result.rowId) {
-      void handleAudioTranscription(raw, result.rowId)
+      void handleAudioTranscription(raw, result.rowId, mediaMeta, timestampMs)
+    } else {
+      context.contextSvc.value?.queue(result.rowId, kind, extractText(raw), mediaMeta, timestampMs)
     }
 
     if (source === 'offline-sync' || source === 'history-sync') {

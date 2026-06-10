@@ -12,6 +12,7 @@ interface NoteRowProps {
   lowRelevance?: boolean
   transcribing?: boolean
   transcript?: string
+  noApiKey?: boolean
 }
 
 export function NoteRow({
@@ -23,7 +24,8 @@ export function NoteRow({
   matchSource,
   lowRelevance,
   transcribing,
-  transcript
+  transcript,
+  noApiKey
 }: NoteRowProps) {
   const style = KIND_STYLE[message.kind] ?? KIND_STYLE.other
   return (
@@ -69,6 +71,26 @@ export function NoteRow({
             >
               {formatted}
             </time>
+            {noApiKey ? (
+              <>
+                <span>·</span>
+                <span
+                  className="inline-flex items-center gap-1 text-bt-red cursor-pointer"
+                  title="API key de Groq no configurada — clic para ir a Ajustes"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    window.dispatchEvent(new CustomEvent('navigate-to-settings'))
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-80 hover:opacity-100 transition-opacity">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                  </svg>
+                  <span className="text-[11px]">sin API key</span>
+                </span>
+              </>
+            ) : null}
             {message.fromMe ? (
               <>
                 <span>·</span>
@@ -117,13 +139,14 @@ function NotePreview({
   transcribing?: boolean
   transcript?: string
 }) {
-  if (message.text) {
+  if (message.text && message.kind !== 'audio') {
     return (
       <p className="line-clamp-2 whitespace-pre-wrap text-[14.5px] leading-relaxed text-bt-text">
         {message.text}
       </p>
     )
   }
+  const hasTranscript = transcript || (message.kind === 'audio' && message.text)
   return (
     <div className="flex items-baseline gap-2 text-[14.5px] leading-relaxed">
       <span className="text-bt-text">{kindLabel}</span>
@@ -132,9 +155,9 @@ function NotePreview({
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-bt-accent" />
           Transcribiendo…
         </span>
-      ) : transcript ? (
+      ) : hasTranscript ? (
         <span className="text-[12.5px] italic text-bt-muted opacity-70 line-clamp-1">
-          &ldquo;{transcript}&rdquo;
+          &ldquo;{transcript || message.text}&rdquo;
         </span>
       ) : (
         <span className="text-[12.5px] text-bt-muted">{message.getMediaSummary()}</span>

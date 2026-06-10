@@ -238,6 +238,12 @@ Aquí tienes un resumen de lo que puedes hacer:
   }, [connectionService, settingsRepository])
 
   useEffect(() => {
+    const handler = () => setView('settings')
+    window.addEventListener('navigate-to-settings', handler)
+    return () => window.removeEventListener('navigate-to-settings', handler)
+  }, [setView])
+
+  useEffect(() => {
     if (waState === 'open') {
       writeFlag(ONBOARDED_KEY, true)
       writeFlag(FTU_KEY, true)
