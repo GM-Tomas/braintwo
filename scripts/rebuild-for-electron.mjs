@@ -2,8 +2,8 @@
 // Rebuilds better-sqlite3 against Electron's NODE_MODULE_VERSION.
 // Skips when a marker file says we're already built for that ABI.
 // Pair with rebuild-for-node.mjs for round-tripping between dev and tests.
-import { execSync } from 'node:child_process'
-import { existsSync, writeFileSync, unlinkSync, mkdirSync } from 'node:fs'
+import { rebuild } from '@electron/rebuild'
+import { existsSync, writeFileSync, unlinkSync, mkdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -22,10 +22,14 @@ if (existsSync(ELECTRON_MARKER)) {
 
 console.log('[rebuild] Rebuilding better-sqlite3 against Electron ABI…')
 try {
-  execSync('npx @electron/rebuild -f -w better-sqlite3', {
-    stdio: 'inherit',
-    cwd: root,
-    env: { ...process.env, NODE_OPTIONS: '' }
+  const electronPkg = JSON.parse(
+    readFileSync(join(root, 'node_modules', 'electron', 'package.json'), 'utf-8')
+  )
+  await rebuild({
+    buildPath: root,
+    electronVersion: electronPkg.version,
+    force: true,
+    onlyModules: ['better-sqlite3']
   })
   writeFileSync(ELECTRON_MARKER, new Date().toISOString())
   try {
