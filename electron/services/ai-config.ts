@@ -22,7 +22,7 @@ export function readAiConfig(userDataPath: string): AiConfig | null {
       }
     },
     groq: {
-      apiKey: process.env.GROQ_API_KEY ?? ''
+      apiKey: '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'
     },
     activeProfileId: defaultId,
     profiles: [
@@ -80,7 +80,7 @@ export function readAiConfig(userDataPath: string): AiConfig | null {
         },
         activeProfileId: parsed?.activeProfileId || defaultConfig.activeProfileId,
         profiles: parsed?.profiles && parsed.profiles.length > 0 ? parsed.profiles : defaultConfig.profiles,
-        groq: parsed?.groq || undefined
+        groq: parsed?.groq || defaultConfig.groq
       }
       try {
         writeFileSync(configPath, JSON.stringify(healedConfig, null, 2), 'utf8')
