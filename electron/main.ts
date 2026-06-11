@@ -43,7 +43,7 @@ import {
 import { registerAllHandlers } from './ipc/register'
 import type { AppContext } from './app-context'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
+const mainDir = dirname(fileURLToPath(import.meta.url))
 
 const isDev = !app.isPackaged
 const startedHidden = process.argv.includes('--hidden')
@@ -99,7 +99,7 @@ app.on('before-quit', () => {
 const resourceOpts = () => ({
   isPackaged: app.isPackaged,
   resourcesPath: process.resourcesPath,
-  dirname: __dirname
+  dirname: mainDir
 })
 
 function configureAutostart(): void {
@@ -171,7 +171,7 @@ function createWindow(): void {
     backgroundColor: '#060a12',
     icon: nativeImage.createFromPath(buildResourcePath(resourceOpts(), 'icon-256.png')),
     webPreferences: {
-      preload: join(__dirname, '../preload/preload.cjs'),
+      preload: join(mainDir, '../preload/preload.cjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false
@@ -241,7 +241,7 @@ function createWindow(): void {
     void context.mainWindow.value.loadURL(process.env['ELECTRON_RENDERER_URL'])
     // if (isDev) context.mainWindow.value.webContents.openDevTools({ mode: 'detach' })
   } else {
-    void context.mainWindow.value.loadFile(join(__dirname, '../renderer/index.html'))
+    void context.mainWindow.value.loadFile(join(mainDir, '../renderer/index.html'))
   }
 }
 
