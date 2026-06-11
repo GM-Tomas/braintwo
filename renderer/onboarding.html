@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com">
+  <title>BrainTwo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;1,300;1,400&family=Nunito:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/onboarding.css">
+</head>
+<body>
+  <div class="titlebar">
+    <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+    <span class="app-name">BrainTwo</span>
+  </div>
+
+  <main class="onboarding">
+    <div class="steps">
+      <div class="step done"><span class="step-n">1</span> instalar app</div>
+      <div class="step-line"></div>
+      <div class="step active"><span class="step-n active">2</span> conectar whatsapp</div>
+      <div class="step-line"></div>
+      <div class="step"><span class="step-n">3</span> listo</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">conectar whatsapp</div>
+      <div class="card-body">
+        <div id="qr-container">
+          <canvas id="qr-canvas"></canvas>
+        </div>
+        <p class="hint">
+          Abrí WhatsApp en tu celular<br>
+          → Dispositivos vinculados → Vincular dispositivo<br>
+          → Escaneá este código
+        </p>
+        <div class="status" id="status">
+          <span class="status-dot"></span>
+          <span id="status-text">esperando escaneo...</span>
+        </div>
+        <div class="divider"></div>
+        <p class="privacy-note">
+          Tus datos nunca salen de tu computadora.<br>
+          Esta sesión vive solo en tu disco.
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="js/onboarding.js"></script>
+</body>
+</html>

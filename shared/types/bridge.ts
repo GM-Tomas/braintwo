@@ -1,9 +1,9 @@
 import type { RecentMessage } from './messages'
 import type { SearchResult, ModelProgress } from './search'
-import type { AiConfig, ChatMessage, AiChatResponse, DbChat, DbChatMessage } from './ai'
+import type { AiConfig, ChatMessage, AiChatResponse, DbChat, DbChatMessage, OllamaStatus, OllamaModel, OllamaPullProgress, OllamaInstallProgress } from './ai'
 import type { WAConnectionState, SyncStatus, AppErrorEvent } from './sync'
 
-export type View = 'onboarding' | 'search' | 'timeline' | 'settings' | 'chat'
+export type View = 'onboarding' | 'search' | 'timeline' | 'dashboard' | 'settings' | 'chat'
 
 export type Unsubscribe = () => void
 
@@ -51,6 +51,8 @@ export interface BrainTwoBridge {
     onMessagesBatch: (cb: (batch: RecentMessage[]) => void) => Unsubscribe
     onSyncStateChanged: (cb: (status: SyncStatus) => void) => Unsubscribe
     onError: (cb: (error: AppErrorEvent) => void) => Unsubscribe
+    onTranscribing: (cb: (payload: { msgId: number }) => void) => Unsubscribe
+    onTranscribed: (cb: (payload: { msgId: number; transcript: string }) => void) => Unsubscribe
   }
   search: {
     query: (text: string, k?: number) => Promise<SearchResult[]>
@@ -69,6 +71,10 @@ export interface BrainTwoBridge {
     onQr: (cb: (qr: string) => void) => Unsubscribe
     onLoggedOut: (cb: () => void) => Unsubscribe
   }
+  ignore: {
+    toggle: (msgId: number) => Promise<boolean>
+    getIds: () => Promise<number[]>
+  }
   ai: {
     getConfig: () => Promise<AiConfig | null>
     setConfig: (config: Partial<AiConfig>) => Promise<void>
@@ -86,6 +92,20 @@ export interface BrainTwoBridge {
     error: (module: string, error: unknown, message?: string, meta?: Record<string, unknown>) => Promise<void>
     openFile: () => Promise<void>
     getFilePath: () => Promise<string>
+  }
+  ollama: {
+    getStatus: (serverUrl?: string) => Promise<OllamaStatus>
+    install: () => Promise<void>
+    uninstall: () => Promise<void>
+    startServer: () => Promise<void>
+    stopServer: () => Promise<void>
+    listModels: (serverUrl?: string) => Promise<OllamaModel[]>
+    pullModel: (name: string) => Promise<void>
+    cancelPull: () => Promise<void>
+    deleteModel: (name: string) => Promise<void>
+    onPullProgress: (cb: (p: OllamaPullProgress) => void) => Unsubscribe
+    onInstallProgress: (cb: (p: OllamaInstallProgress) => void) => Unsubscribe
+    onStatusChange: (cb: (status: OllamaStatus) => void) => Unsubscribe
   }
 }
 

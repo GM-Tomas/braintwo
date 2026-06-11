@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com">
+  <title>BrainTwo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;1,300;1,400&family=Nunito:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/notes.css">
+</head>
+<body>
+  <div class="titlebar">
+    <div class="dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+    <span class="app-name">BrainTwo</span>
+    <div class="sync-badge" id="sync-badge">
+      <span class="sync-orb"></span>
+      <span id="sync-text">al día</span>
+    </div>
+  </div>
+
+  <div class="nav-tabs">
+    <button class="tab active" onclick="switchTab('notes', this)">notas</button>
+    <button class="tab" onclick="switchTab('search', this)">buscar</button>
+    <button class="tab" id="btn-config" onclick="window.electronAPI.navigate('config')">configuración</button>
+  </div>
+
+  <div class="content">
+    <!-- TAB: NOTAS -->
+    <div class="tab-view show" id="tab-notes">
+      <div class="two-pane">
+        <div class="list-pane">
+          <div class="pane-header">
+            <span class="pane-title">mis notas</span>
+            <span class="pane-count" id="note-count">—</span>
+          </div>
+          <div class="note-list" id="note-list">
+            <div class="loading">cargando notas...</div>
+          </div>
+        </div>
+        <div class="detail-pane" id="detail-pane">
+          <div class="empty-state">
+            <p>Seleccioná una nota para verla</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: BUSCAR -->
+    <div class="tab-view" id="tab-search">
+      <div class="search-area">
+        <div class="search-box">
+          <span class="search-icon">◎</span>
+          <input class="search-input" id="search-input" placeholder="¿Qué ideas anoté sobre el proyecto?" />
+          <button class="search-btn" id="search-btn">buscar</button>
+        </div>
+
+        <div class="rag-result" id="rag-result" style="display:none">
+          <div class="rag-label">
+            <span class="rag-pip"></span>
+            respuesta
+          </div>
+          <div class="rag-text" id="rag-text"></div>
+          <div class="rag-sources-label">fuentes</div>
+          <div class="rag-sources" id="rag-sources"></div>
+        </div>
+
+        <div class="searching" id="searching" style="display:none">
+          <span class="sync-orb"></span> buscando...
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/notes.js"></script>
+</body>
+</html>

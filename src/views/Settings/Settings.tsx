@@ -5,6 +5,7 @@ import { useDependencies } from '@/core/infrastructure/DependenciesContext'
 import { SessionSection } from './SessionSection'
 import { LocalFolderSection } from './LocalFolderSection'
 import { AiConfigSection } from './AiConfigSection'
+import { GroqSection } from './GroqSection'
 
 interface SettingsProps {
   onLogout: () => void
@@ -29,6 +30,7 @@ export function Settings({ onLogout }: SettingsProps) {
       <div className="flex-1 overflow-y-auto px-14 py-8">
         <div className="mx-auto grid max-w-4xl gap-5 md:grid-cols-2">
           <AiConfigSection />
+          <GroqSection />
           <SessionSection
             settings={settings}
             onSettingsChange={setSettings}

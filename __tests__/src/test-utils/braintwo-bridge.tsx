@@ -152,7 +152,9 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
           const i = errorListeners.indexOf(cb)
           if (i >= 0) errorListeners.splice(i, 1)
         }
-      }
+      },
+      onTranscribing: () => () => {},
+      onTranscribed: () => () => {}
     },
     search: {
       query: spies.searchQuery,
@@ -213,11 +215,29 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
       saveChatMessage: vi.fn(async () => 1),
       deleteLastMessage: vi.fn(async () => {})
     },
+    ignore: {
+      toggle: vi.fn(async () => false),
+      getIds: vi.fn(async () => [])
+    },
     logs: {
       info: vi.fn(async () => {}),
       error: vi.fn(async () => {}),
       openFile: vi.fn(async () => {}),
       getFilePath: vi.fn(async () => 'C:\\mock\\app-logs.json')
+    },
+    ollama: {
+      getStatus: vi.fn(async () => 'not-installed' as const),
+      install: vi.fn(async () => {}),
+      uninstall: vi.fn(async () => {}),
+      startServer: vi.fn(async () => {}),
+      stopServer: vi.fn(async () => {}),
+      listModels: vi.fn(async () => []),
+      pullModel: vi.fn(async () => {}),
+      cancelPull: vi.fn(async () => {}),
+      deleteModel: vi.fn(async () => {}),
+      onPullProgress: vi.fn(() => () => {}),
+      onInstallProgress: vi.fn(() => () => {}),
+      onStatusChange: vi.fn(() => () => {})
     }
   }
 

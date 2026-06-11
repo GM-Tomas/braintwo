@@ -73,6 +73,7 @@ export interface RecentMessage {
   fromMe: boolean
   createdAt?: number
   contextNote?: string | null
+  ignored?: boolean
 }
 
 export type IngestSkipReason = 'no-id' | 'empty' | 'duplicate'
@@ -89,6 +90,8 @@ export interface IngestPipeline {
   recent: (limit: number) => RecentMessage[]
   getById: (id: number) => RecentMessage | null
   count: () => number
+  toggleIgnored: (id: number) => boolean
+  getIgnoredIds: () => number[]
 }
 
 // Long-style timestamps from protobuf can arrive as `{ low, high, unsigned }`.
@@ -204,14 +207,14 @@ export function createIngestPipeline(
   logger?: Logger
 ): IngestPipeline {
   const recentStmt = db.raw.prepare<[number], RecentMessageRow>(
-    `SELECT id, wa_msg_id, timestamp, text, source, kind, media_meta, from_me, created_at, context_note
+    `SELECT id, wa_msg_id, timestamp, text, source, kind, media_meta, from_me, created_at, context_note, ignored
        FROM messages
        ORDER BY timestamp DESC
        LIMIT ?`
   )
 
   const getByIdStmt = db.raw.prepare<[number], RecentMessageRow>(
-    `SELECT id, wa_msg_id, timestamp, text, source, kind, media_meta, from_me, created_at, context_note
+    `SELECT id, wa_msg_id, timestamp, text, source, kind, media_meta, from_me, created_at, context_note, ignored
        FROM messages
        WHERE id = ?`
   )
@@ -284,6 +287,14 @@ export function createIngestPipeline(
 
     count() {
       return db.countMessages()
+    },
+
+    toggleIgnored(id: number) {
+      return db.toggleIgnored(id)
+    },
+
+    getIgnoredIds() {
+      return db.getIgnoredIds()
     }
   }
 }
@@ -299,6 +310,7 @@ interface RecentMessageRow {
   from_me: number | null
   created_at: number | null
   context_note: string | null
+  ignored: number | null
 }
 
 function rowToRecent(row: RecentMessageRow): RecentMessage {
@@ -320,6 +332,7 @@ function rowToRecent(row: RecentMessageRow): RecentMessage {
     media,
     fromMe: row.from_me === 1,
     createdAt: row.created_at != null ? row.created_at * 1000 : undefined,
-    contextNote: row.context_note ?? null
+    contextNote: row.context_note ?? null,
+    ignored: row.ignored === 1
   }
 }

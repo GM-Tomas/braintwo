@@ -1,13 +1,24 @@
 import type { MessageKind } from '@shared/types'
+import { Icon } from '@/lib/icons'
 
 interface KindFilterProps {
   active: MessageKind | 'all'
   onChange: (k: MessageKind | 'all') => void
   counts: Record<MessageKind, number>
   total: number
+  className?: string
 }
 
-export function KindFilter({ active, onChange, counts, total }: KindFilterProps) {
+const FILTER_ICONS: Record<string, import('@/lib/icons').IconName | null> = {
+  all: null,
+  text: 'chat',
+  audio: 'mic',
+  image: 'image',
+  video: 'video',
+  document: 'file'
+}
+
+export function KindFilter({ active, onChange, counts, total, className }: KindFilterProps) {
   const items: { id: MessageKind | 'all'; label: string; count: number }[] = [
     { id: 'all', label: 'Todo', count: total },
     { id: 'text', label: 'Textos', count: counts.text },
@@ -17,9 +28,10 @@ export function KindFilter({ active, onChange, counts, total }: KindFilterProps)
     { id: 'document', label: 'Archivos', count: counts.document }
   ]
   return (
-    <div className="flex flex-wrap items-center gap-2 px-14 pt-5">
+    <div className={`flex flex-wrap items-center gap-2 ${className ?? 'px-14 pt-5'}`}>
       {items.map((f) => {
         const isActive = active === f.id
+        const iconName = FILTER_ICONS[f.id]
         return (
           <button
             key={f.id}
@@ -32,6 +44,7 @@ export function KindFilter({ active, onChange, counts, total }: KindFilterProps)
                 : 'border-bt-border bg-transparent text-bt-muted hover:border-bt-primary/20 hover:text-bt-text'
             }`}
           >
+            {iconName && <Icon name={iconName} size={12} />}
             <span>{f.label}</span>
             <span className="text-bt-dim">{f.count}</span>
           </button>

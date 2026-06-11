@@ -12,7 +12,8 @@ const DEFAULT_MODELS: Record<AiConfig['provider'], string> = {
   'openai-compat': 'gpt-4o-mini',
   gemini: 'gemini-2.0-flash',
   deepseek: 'deepseek-v4-pro',
-  'opencode-zen': 'big-pickle'
+  'opencode-zen': 'big-pickle',
+  ollama: 'qwen3:1.7b'
 }
 
 export async function callProvider(args: ProviderCallArgs): Promise<string> {
@@ -23,6 +24,7 @@ export async function callProvider(args: ProviderCallArgs): Promise<string> {
       case 'gemini':        return await callGemini(args)
       case 'deepseek':      return await callDeepSeek(args)
       case 'opencode-zen':  return await callOpenCodeZen(args)
+      case 'ollama':        return await callOllama(args)
       default:
         throw new Error(`Proveedor no soportado: ${args.config.provider}`)
     }
@@ -142,5 +144,14 @@ async function callOpenCodeZen(args: ProviderCallArgs): Promise<string> {
   const model = args.config.model?.trim() || DEFAULT_MODELS['opencode-zen']
   const baseUrl = args.config.baseUrl?.replace(/\/$/, '') || 'https://opencode.ai/zen/v1'
   const configCopy = { ...args.config, model, baseUrl }
+  return callOpenAiCompat({ ...args, config: configCopy })
+}
+
+// ── Ollama (local) ────────────────────────────────────────────────────────────
+
+async function callOllama(args: ProviderCallArgs): Promise<string> {
+  const model = args.config.model?.trim() || DEFAULT_MODELS['ollama']
+  const serverUrl = (args.config.ollama?.serverUrl ?? 'http://localhost:11434').replace(/\/$/, '')
+  const configCopy = { ...args.config, model, baseUrl: `${serverUrl}/v1`, apiKey: '' }
   return callOpenAiCompat({ ...args, config: configCopy })
 }

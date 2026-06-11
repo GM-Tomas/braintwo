@@ -11,6 +11,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { id: 'timeline', icon: 'home', label: 'Mis mensajes' },
+  { id: 'dashboard', icon: 'folder', label: 'Dashboard' },
   { id: 'chat', icon: 'chat', label: 'Chat IA' }
 ]
 
@@ -82,7 +83,7 @@ export function Sidebar({
 
   return (
     <aside
-      className={`flex shrink-0 flex-col border-r border-bt-border bg-bt-sidebar-bg py-5 transition-all duration-300 ${
+      className={`flex shrink-0 flex-col border-r border-bt-border bg-bt-sidebar-bg pt-10 pb-6 transition-all duration-300 ${
         collapsed ? 'w-[68px] px-3.5 items-center' : 'w-[208px] px-4'
       }`}
       aria-label="Navegacion principal"

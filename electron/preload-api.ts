@@ -11,6 +11,10 @@ import type {
   DbStats,
   ImportProgress,
   ModelProgress,
+  OllamaInstallProgress,
+  OllamaModel,
+  OllamaPullProgress,
+  OllamaStatus,
   SearchResult,
   SyncStatus,
   UserSettings
@@ -42,6 +46,8 @@ export interface BrainTwoApi {
     onMessagesBatch: (cb: (batch: RecentMessage[]) => void) => Unsubscribe
     onSyncStateChanged: (cb: (status: SyncStatus) => void) => Unsubscribe
     onError: (cb: (error: AppErrorEvent) => void) => Unsubscribe
+    onTranscribing: (cb: (payload: { msgId: number }) => void) => Unsubscribe
+    onTranscribed: (cb: (payload: { msgId: number; transcript: string }) => void) => Unsubscribe
   }
   search: {
     query: (text: string, k?: number) => Promise<SearchResult[]>
@@ -60,6 +66,10 @@ export interface BrainTwoApi {
     onQr: (cb: (qr: string) => void) => Unsubscribe
     onLoggedOut: (cb: () => void) => Unsubscribe
   }
+  ignore: {
+    toggle: (msgId: number) => Promise<boolean>
+    getIds: () => Promise<number[]>
+  }
   ai: {
     getConfig: () => Promise<AiConfig | null>
     setConfig: (config: Partial<AiConfig>) => Promise<void>
@@ -77,6 +87,20 @@ export interface BrainTwoApi {
     error: (module: string, error: unknown, message?: string, meta?: Record<string, unknown>) => Promise<void>
     openFile: () => Promise<void>
     getFilePath: () => Promise<string>
+  }
+  ollama: {
+    getStatus: (serverUrl?: string) => Promise<OllamaStatus>
+    install: () => Promise<void>
+    uninstall: () => Promise<void>
+    startServer: () => Promise<void>
+    stopServer: () => Promise<void>
+    listModels: (serverUrl?: string) => Promise<OllamaModel[]>
+    pullModel: (name: string) => Promise<void>
+    cancelPull: () => Promise<void>
+    deleteModel: (name: string) => Promise<void>
+    onPullProgress: (cb: (p: OllamaPullProgress) => void) => Unsubscribe
+    onInstallProgress: (cb: (p: OllamaInstallProgress) => void) => Unsubscribe
+    onStatusChange: (cb: (status: OllamaStatus) => void) => Unsubscribe
   }
 }
 
@@ -138,7 +162,9 @@ export function createApi(
       openUserDataFolder: () => ipcRenderer.invoke('app:open-userdata-folder'),
       onMessagesBatch: subscribe<RecentMessage[]>('app:messages-batch'),
       onSyncStateChanged: subscribe<SyncStatus>('sync:state-changed'),
-      onError: subscribe<AppErrorEvent>('app:error')
+      onError: subscribe<AppErrorEvent>('app:error'),
+      onTranscribing: subscribe<{ msgId: number }>('audio:transcribing'),
+      onTranscribed: subscribe<{ msgId: number; transcript: string }>('audio:transcribed')
     },
     search: {
       query: (text: string, k = 12) => ipcRenderer.invoke('search:query', text, k),
@@ -157,8 +183,12 @@ export function createApi(
       onQr: subscribe<string>('wa:qr'),
       onLoggedOut: subscribe<void>('wa:logged-out')
     },
+    ignore: {
+      toggle: (msgId: number) => ipcRenderer.invoke('ignore:toggle', msgId),
+      getIds: () => ipcRenderer.invoke('ignore:get-ids')
+    },
     ai: {
-      getConfig: () => ipcRenderer.invoke('ai:get-config'),
+    getConfig: () => ipcRenderer.invoke('ai:get-config'),
       setConfig: (config: Partial<AiConfig>) => ipcRenderer.invoke('ai:set-config', config),
       send: (messages: ChatMessage[], goodSourceId?: number, chatId?: number) => ipcRenderer.invoke('ai:send', messages, goodSourceId, chatId),
       listChats: () => ipcRenderer.invoke('ai:list-chats'),
@@ -176,6 +206,20 @@ export function createApi(
         ipcRenderer.invoke('logs:error', module, error, message, meta),
       openFile: () => ipcRenderer.invoke('logs:open'),
       getFilePath: () => ipcRenderer.invoke('logs:path')
+    },
+    ollama: {
+      getStatus: (serverUrl?: string) => ipcRenderer.invoke('ollama:get-status', serverUrl),
+      install: () => ipcRenderer.invoke('ollama:install'),
+      uninstall: () => ipcRenderer.invoke('ollama:uninstall'),
+      startServer: () => ipcRenderer.invoke('ollama:start-server'),
+      stopServer: () => ipcRenderer.invoke('ollama:stop-server'),
+      listModels: (serverUrl?: string) => ipcRenderer.invoke('ollama:list-models', serverUrl),
+      pullModel: (name: string) => ipcRenderer.invoke('ollama:pull-model', name),
+      cancelPull: () => ipcRenderer.invoke('ollama:cancel-pull'),
+      deleteModel: (name: string) => ipcRenderer.invoke('ollama:delete-model', name),
+      onPullProgress: subscribe<OllamaPullProgress>('ollama:on-pull-progress'),
+      onInstallProgress: subscribe<OllamaInstallProgress>('ollama:on-install-progress'),
+      onStatusChange: subscribe<OllamaStatus>('ollama:on-status')
     }
   }
 }

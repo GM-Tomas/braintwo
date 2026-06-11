@@ -19,11 +19,13 @@ const MEDIA_KEY_LABEL: Record<string, string> = {
 interface MessageDetailProps {
   message: MessageEntity
   onClose: () => void
+  onToggleIgnore?: (msgId: number) => void
 }
 
-export function MessageDetail({ message, onClose }: MessageDetailProps) {
+export function MessageDetail({ message, onClose, onToggleIgnore }: MessageDetailProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const style = KIND_STYLE[message.kind] ?? KIND_STYLE.other
+  const isIgnored = !!message.ignored
 
   const longFormatter = useDateFormatter({ dateStyle: 'long', timeStyle: 'short' })
 
@@ -55,8 +57,7 @@ export function MessageDetail({ message, onClose }: MessageDetailProps) {
         ]
       : []),
     { label: 'Tipo', value: <span className={`capitalize ${style.iconColor}`}>{message.kind}</span> },
-    { label: 'Fuente', value: SOURCE_LABEL[message.source] },
-    { label: 'Enviado por mí', value: message.fromMe ? 'Sí' : 'No' }
+    { label: 'Fuente', value: SOURCE_LABEL[message.source] }
   ]
 
   return (
@@ -81,10 +82,38 @@ export function MessageDetail({ message, onClose }: MessageDetailProps) {
         >
           <Icon name={style.icon} size={15} className={style.iconColor} />
         </div>
-        <div>
+        <div className="flex-1">
           <h2 className="text-[16px] font-semibold text-bt-text">Detalle del mensaje</h2>
           <p className="text-[13px] text-bt-dim capitalize">{style.label}</p>
         </div>
+        {onToggleIgnore && (
+          <button
+            type="button"
+            onClick={() => onToggleIgnore(message.id)}
+            className={`flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-medium transition-all ${
+              isIgnored
+                ? 'border-bt-amber/30 text-bt-amber bg-bt-amber/[0.06]'
+                : 'border-bt-border/60 text-bt-muted hover:border-bt-amber/20 hover:text-bt-amber'
+            }`}
+            title={isIgnored ? 'Incluir en contexto IA' : 'Excluir del contexto IA'}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              {isIgnored ? (
+                <>
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                  <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                </>
+              ) : (
+                <>
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </>
+              )}
+            </svg>
+            <span>{isIgnored ? 'Incluir' : 'Ignorar'}</span>
+          </button>
+        )}
       </div>
 
       {/* Scrollable body */}

@@ -6,19 +6,22 @@ import {
   Tray,
   nativeImage,
   session,
-  shell
+  shell,
+  dialog
 } from 'electron'
 import pino from 'pino'
 import { initLogger, logInfo, logError, getCentralLogger } from './services/logger'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync } from 'node:fs'
 import { createWhatsAppService } from './services/whatsapp'
-import { openDatabase, type DbInstance } from './services/db'
+import { createTranscriptionService } from './services/transcription'
+import { openDatabase, type DbInstance, type MediaMeta } from './services/db'
 import { createEmbeddingService, type EmbeddingService } from './services/embeddings'
 import { createSearchService, type SearchService } from './services/search'
 import { createSyncStatusTracker } from './services/sync-status'
 import { readAiConfig } from './services/ai-config'
+import { createOllamaService } from './services/ollama'
 import { createAiChatService } from './services/ai-chat'
 import { createContextService } from './services/context'
 import {
@@ -27,7 +30,8 @@ import {
   extractMediaMeta,
   extractText,
   extractTimestampMs,
-  type RecentMessage
+  type RecentMessage,
+  type WAMessageLike
 } from './services/ingest'
 import {
   statusLabel,
@@ -64,6 +68,7 @@ const context: AppContext = {
   isQuitting: { value: false },
   lastConnectionState: { value: 'disconnected' },
   lastQr: { value: null },
+  ollamaService: createOllamaService(),
   showWindow,
   broadcast,
   reportError
@@ -84,6 +89,11 @@ app.on('before-quit', () => {
   void context.whatsapp.value?.stop()
   context.messageBatcher.value?.flush()
   context.db.value?.close()
+  context.ollamaService.dispose()
+  try {
+    const dir = audioTempDir()
+    for (const f of readdirSync(dir)) rmSync(join(dir, f), { force: true })
+  } catch { /* best-effort */ }
 })
 
 const resourceOpts = () => ({
@@ -175,7 +185,21 @@ function createWindow(): void {
   context.mainWindow.value.on('close', (event) => {
     if (!context.isQuitting.value) {
       event.preventDefault()
-      context.mainWindow.value?.hide()
+      if (context.ollamaService.isPulling() && context.mainWindow.value) {
+        void dialog.showMessageBox(context.mainWindow.value, {
+          type: 'info',
+          buttons: ['Entendido', 'Cancelar descarga'],
+          defaultId: 0,
+          title: 'Descarga en segundo plano',
+          message: 'Hay una descarga de modelo en curso.',
+          detail: 'La descarga continúa en segundo plano aunque cerrés la ventana. Para cancelarla, presioná "Cancelar descarga".'
+        }).then(({ response }) => {
+          if (response === 1) context.ollamaService.cancelPull()
+          context.mainWindow.value?.hide()
+        })
+      } else {
+        context.mainWindow.value?.hide()
+      }
     }
   })
 
@@ -354,6 +378,57 @@ function queueEmbedding(rowId: number, text: string): void {
     })
 }
 
+function audioTempDir(): string {
+  const dir = join(app.getPath('userData'), 'temp', 'audio')
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+function scheduleAudioCleanup(filePath: string, ttlMs = 60 * 60 * 1000): void {
+  setTimeout(() => {
+    try { rmSync(filePath, { force: true }) } catch { /* best-effort */ }
+  }, ttlMs)
+}
+
+async function handleAudioTranscription(
+  raw: WAMessageLike,
+  rowId: number,
+  mediaMeta: MediaMeta | null,
+  timestampMs: number
+): Promise<void> {
+  try {
+    broadcast('audio:transcribing', { msgId: rowId })
+
+    const buffer = await context.whatsapp.value!.downloadMedia(raw)
+
+    const ext = 'ogg'
+    const fileName = `${rowId}-${Date.now()}.${ext}`
+    const filePath = join(audioTempDir(), fileName)
+    writeFileSync(filePath, buffer)
+
+    context.db.value?.updateMediaMeta(rowId, { audioLocalPath: filePath })
+
+    const config = readAiConfig(app.getPath('userData'))
+    const apiKey = config?.groq?.apiKey || process.env.GROQ_API_KEY || ''
+    if (!apiKey) {
+      console.warn('[transcription] No Groq API key configured, skipping transcription')
+      scheduleAudioCleanup(filePath)
+      return
+    }
+
+    const svc = createTranscriptionService(apiKey)
+    const transcript = await svc.transcribe(buffer)
+
+    context.db.value?.updateTranscript(rowId, transcript)
+    context.contextSvc.value?.queue(rowId, 'audio', transcript, mediaMeta, timestampMs)
+
+    scheduleAudioCleanup(filePath)
+    broadcast('audio:transcribed', { msgId: rowId, transcript })
+  } catch (err) {
+    console.error('[transcription] Error:', err)
+  }
+}
+
 function noteCatchupMessage(): void {
   catchupInserted++
   context.syncStatus.startCatchup()
@@ -401,23 +476,42 @@ function startWhatsApp(): void {
   })
 
   context.whatsapp.value.on('message', ({ raw, source }) => {
-    if (!context.ingest.value || !context.messageBatcher.value) return
+    if (!context.ingest.value || !context.messageBatcher.value) {
+      console.log('[DEBUG] main message handler: ingest or batcher not ready')
+      return
+    }
     const result = context.ingest.value.ingest(raw, source)
-    if (!result.inserted || result.rowId === null) return
+    if (!result.inserted || result.rowId === null) {
+      console.log('[DEBUG] main message handler: not inserted', result.skipped, 'id:', raw.key?.id)
+      return
+    }
     const id = raw.key?.id
-    if (!id) return
+    if (!id) {
+      console.log('[DEBUG] main message handler: no key id after insert')
+      return
+    }
+    const kind = extractKind(raw)
+    const mediaMeta = extractMediaMeta(raw)
+    const timestampMs = extractTimestampMs(raw)
+    console.log('[DEBUG] main message handler: pushing to batcher', 'rowId:', result.rowId, 'id:', id, 'source:', source, 'fromMe:', raw.key?.fromMe)
     context.messageBatcher.value.push({
       id: result.rowId,
       wa_msg_id: id,
-      timestamp: extractTimestampMs(raw),
+      timestamp: timestampMs,
       text: extractText(raw),
       source,
-      kind: extractKind(raw),
-      media: extractMediaMeta(raw),
+      kind,
+      media: mediaMeta,
       fromMe: raw.key?.fromMe === true
     })
     queueEmbedding(result.rowId, extractText(raw))
-    context.contextSvc.value?.queue(result.rowId, extractKind(raw), extractText(raw), extractMediaMeta(raw), extractTimestampMs(raw))
+
+    if (kind === 'audio' && result.rowId) {
+      void handleAudioTranscription(raw, result.rowId, mediaMeta, timestampMs)
+    } else {
+      context.contextSvc.value?.queue(result.rowId, kind, extractText(raw), mediaMeta, timestampMs)
+    }
+
     if (source === 'offline-sync' || source === 'history-sync') {
       noteCatchupMessage()
     }
@@ -455,6 +549,19 @@ void app.whenReady().then(() => {
   createTray()
   startWhatsApp()
   createWindow()
+
+  const ollamaCfg = readAiConfig(app.getPath('userData'))?.ollama
+  if (ollamaCfg?.enabled && ollamaCfg?.autoStart) {
+    const serverUrl = ollamaCfg.serverUrl ?? 'http://localhost:11434'
+    void context.ollamaService.startServer(serverUrl).then(() => {
+      broadcast('ollama:on-status', 'running')
+      const model = ollamaCfg.activeModel
+      if (model) void context.ollamaService.warmupModel(serverUrl, model)
+    }).catch((err: unknown) => {
+      reportError('ollama.autostart_failed', err instanceof Error ? err.message : String(err))
+      broadcast('ollama:on-status', 'error')
+    })
+  }
 })
 
 app.on('window-all-closed', () => {
