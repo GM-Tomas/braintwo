@@ -306,6 +306,34 @@ describe('db service', () => {
       expect(() => closeDb()).not.toThrow()
     })
   })
+
+  describe('toggleIgnored / getIgnoredIds', () => {
+    it('flips ignored flag on toggle and returns the new state', () => {
+      const { rowId: id } = db.insertMessage(baseMsg({ wa_msg_id: 'i-1' }))
+      expect(db.toggleIgnored(id!)).toBe(true)
+      expect(db.toggleIgnored(id!)).toBe(false)
+    })
+
+    it('returns false (no-op) when id does not exist', () => {
+      expect(db.toggleIgnored(9999)).toBe(false)
+    })
+
+    it('getIgnoredIds returns only ids currently flagged', () => {
+      const a = db.insertMessage(baseMsg({ wa_msg_id: 'a' })).rowId!
+      db.insertMessage(baseMsg({ wa_msg_id: 'b' }))
+      const c = db.insertMessage(baseMsg({ wa_msg_id: 'c' })).rowId!
+      db.toggleIgnored(a)
+      db.toggleIgnored(c)
+      expect(db.getIgnoredIds().sort((x, y) => x - y)).toEqual([a, c].sort((x, y) => x - y))
+      db.toggleIgnored(a)
+      expect(db.getIgnoredIds()).toEqual([c])
+    })
+
+    it('newly-inserted messages are not ignored by default', () => {
+      db.insertMessage(baseMsg({ wa_msg_id: 'fresh' }))
+      expect(db.getIgnoredIds()).toEqual([])
+    })
+  })
 })
 
 describe('db file persistence', () => {
