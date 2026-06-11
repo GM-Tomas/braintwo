@@ -18,6 +18,9 @@ asar: true
 asarUnpack:
   - "**/*.node"
   - "**/*.dylib"
+  - node_modules/sqlite-vec/**/*
+  - node_modules/sqlite-vec-*/**/*
+  - node_modules/better-sqlite3/**/*
 win:
   icon: build/icon.png
   target:
@@ -29,6 +32,7 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
   runAfterFinish: true
+  deleteAppDataOnUninstall: true
 msi:
   runAfterFinish: true
   perMachine: false

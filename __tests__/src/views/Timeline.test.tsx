@@ -80,7 +80,7 @@ describe('<Timeline />', () => {
   it('shows empty-state when there are no messages', async () => {
     render(<Timeline />)
     expect(
-      await screen.findByText(/Aún no hay mensajes/)
+      await screen.findByText(/Todavia no hay mensajes/)
     ).toBeInTheDocument()
   })
 
@@ -115,7 +115,7 @@ describe('<Timeline />', () => {
 
   it('appends incoming batch to the list and bumps the count', async () => {
     render(<Timeline />)
-    await screen.findByText(/Aún no hay mensajes/)
+    await screen.findByText(/Todavia no hay mensajes/)
 
     act(() =>
       h.emitMessagesBatch([
@@ -124,7 +124,7 @@ describe('<Timeline />', () => {
     )
 
     await waitFor(() => {
-      expect(screen.queryByText(/Aún no hay mensajes/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Todavia no hay mensajes/)).not.toBeInTheDocument()
       expect(screen.getByText('fresh')).toBeInTheDocument()
       expect(screen.getByText(/1 mensaje$/)).toBeInTheDocument()
     })
@@ -153,9 +153,9 @@ describe('<Timeline />', () => {
     })
     render(<Timeline />)
     await waitFor(() => {
-      expect(screen.getAllByText('Tiempo real')[0]).toBeInTheDocument()
-      expect(screen.getAllByText('Sincronización diferida')[0]).toBeInTheDocument()
-      expect(screen.getAllByText('Histórico')[0]).toBeInTheDocument()
+      expect(screen.getAllByText('Directo')[0]).toBeInTheDocument()
+      expect(screen.getAllByText('Offline')[0]).toBeInTheDocument()
+      expect(screen.getAllByText('Historial')[0]).toBeInTheDocument()
       expect(screen.getAllByText('Importado')[0]).toBeInTheDocument()
     })
   })

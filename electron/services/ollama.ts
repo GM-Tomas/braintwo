@@ -1,5 +1,5 @@
 import { execSync, spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdirSync, chmodSync, createWriteStream, unlinkSync, copyFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, chmodSync, createWriteStream, unlinkSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import type {

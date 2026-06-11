@@ -27,7 +27,7 @@ function highlightText(text: string, query: string) {
   if (terms.length === 0) return text
   const pattern = new RegExp(`(${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi')
   const parts = text.split(pattern)
-  return parts.map((part, i) =>
+  return parts.map((part) =>
     terms.some((t) => t.toLowerCase() === part.toLowerCase())
       ? `<mark class="${MARK_CLASS}">${part}</mark>`
       : part

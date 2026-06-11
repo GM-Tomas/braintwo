@@ -153,10 +153,10 @@ describe('<App />', () => {
 
       const user = userEvent.setup()
       await user.click(screen.getByRole('button', { name: 'Mis mensajes' }))
-      expect(screen.getByText(/Aún no hay mensajes/i)).toBeInTheDocument()
+      expect(screen.getByText(/Todavia no hay mensajes/i)).toBeInTheDocument()
 
       act(() => h.emitConnectionState('open'))
-      expect(screen.getByText(/Aún no hay mensajes/i)).toBeInTheDocument()
+      expect(screen.getByText(/Todavia no hay mensajes/i)).toBeInTheDocument()
     })
 
     it('logged-out from app phase falls back to QR (skipping welcome)', async () => {
@@ -185,7 +185,7 @@ describe('<App />', () => {
       expect(screen.getByText('Preguntá sobre tus mensajes de WhatsApp.')).toBeInTheDocument()
 
       await user.click(screen.getByRole('button', { name: 'Mis mensajes' }))
-      expect(screen.getByText(/Aún no hay mensajes/)).toBeInTheDocument()
+      expect(screen.getByText(/Todavia no hay mensajes/)).toBeInTheDocument()
 
       await user.click(screen.getByRole('button', { name: 'Chat IA' }))
       expect(screen.getByText('Preguntá sobre tus mensajes de WhatsApp.')).toBeInTheDocument()

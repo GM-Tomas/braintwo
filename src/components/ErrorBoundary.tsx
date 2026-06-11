@@ -20,6 +20,11 @@ export class ErrorBoundary extends Component<Props, State> {
     this.setState({ error, info })
     // eslint-disable-next-line no-console
     console.error('[App ErrorBoundary]', error, info.componentStack)
+    if (window.braintwo?.logs?.error) {
+      void window.braintwo.logs.error('renderer:ErrorBoundary', error, 'React rendering crash captured by ErrorBoundary', {
+        componentStack: info.componentStack
+      })
+    }
   }
 
   render(): ReactNode {

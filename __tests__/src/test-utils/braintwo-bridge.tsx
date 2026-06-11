@@ -215,6 +215,16 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
       saveChatMessage: vi.fn(async () => 1),
       deleteLastMessage: vi.fn(async () => {})
     },
+    ignore: {
+      toggle: vi.fn(async () => false),
+      getIds: vi.fn(async () => [])
+    },
+    logs: {
+      info: vi.fn(async () => {}),
+      error: vi.fn(async () => {}),
+      openFile: vi.fn(async () => {}),
+      getFilePath: vi.fn(async () => 'C:\\mock\\app-logs.json')
+    },
     ollama: {
       getStatus: vi.fn(async () => 'not-installed' as const),
       install: vi.fn(async () => {}),

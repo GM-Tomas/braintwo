@@ -1,4 +1,5 @@
 import type { AiConfig, AiChatResponse, ChatMessage, RetrievedContext } from '@shared/types'
+import { logError } from './logger'
 import type { DbInstance, DbStats, MemoryResult } from './db'
 import type { SearchService } from './search'
 import { callProvider } from './ai-provider'
@@ -42,14 +43,18 @@ export function createAiChatService(deps: AiChatDeps): AiChatService {
 
       // ── Step 2: Multi-query hybrid retrieval ───────────────────────────
       const [allVectorHits, allKwHits, allMemHits] = await Promise.all([
-        Promise.all(queries.map((q) => deps.search.query(q, VEC_K_PER_QUERY).catch((): [] => []))),
+        Promise.all(queries.map((q) => deps.search.query(q, VEC_K_PER_QUERY).catch((err): [] => {
+          logError('ai-chat:search', err, `Failed vector query search for term: ${q}`)
+          return []
+        }))),
         Promise.all(queries.map((q) => Promise.resolve(deps.db.searchKeyword(q, KW_PER_QUERY)))),
         // Memory: vector search on first query, keyword on all
         (async () => {
           try {
             const queryVec = await deps.embed(question)
             return deps.db.searchMemorySimilar(queryVec, MEM_K, chatId)
-          } catch {
+          } catch (err) {
+            logError('ai-chat:memory_vector_search', err, 'Failed to perform memory vector search')
             return [] as MemoryResult[]
           }
         })()
@@ -113,16 +118,28 @@ export function createAiChatService(deps: AiChatDeps): AiChatService {
         try {
           const memId = deps.db.insertMemory(remember, chatId)
           void deps.embed(remember).then((vec) => {
-            try { deps.db.insertMemoryEmbedding(memId, vec) } catch { /* ignore duplicate */ }
+            try {
+              deps.db.insertMemoryEmbedding(memId, vec)
+            } catch (err) {
+              logError('ai-chat:remember_embedding', err, 'Failed to insert memory embedding')
+            }
+          }).catch((err) => {
+            logError('ai-chat:remember_embed', err, 'Failed to embed memory')
           })
-        } catch { /* non-fatal */ }
+        } catch (err) {
+          logError('ai-chat:remember', err, 'Failed to persist memory')
+        }
       }
 
       // ── Step 8: Enrich context of the selected message (Option A) ──────
       if (goodSourceId !== undefined) {
         try {
-          void enrichSourceMessageContext(config, goodSourceId, question, history, deps)
-        } catch { /* non-fatal */ }
+          void enrichSourceMessageContext(config, goodSourceId, question, history, deps).catch((err) => {
+            logError('ai-chat:enrich_context', err, 'Failed during enrichSourceMessageContext')
+          })
+        } catch (err) {
+          logError('ai-chat:enrich_context', err, 'Failed to trigger enrichSourceMessageContext')
+        }
       }
 
       return { content, sources: filteredSources, action }
@@ -196,7 +213,9 @@ Output ONLY a JSON array of strings, nothing else.`
       const valid = terms.filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
       if (valid.length > 0) return valid.slice(0, 6)
     }
-  } catch { /* fall through to original query */ }
+  } catch (err) {
+    logError('ai-chat:planQueries', err, 'Query planning LLM call failed, falling back to original query')
+  }
 
   return [question]
 }
@@ -343,7 +362,9 @@ function parseBlocks(raw: string): {
         sources = parsed.sources.filter((item): item is number => typeof item === 'number')
         return ''
       }
-    } catch { /* not parseable — keep the line */ }
+    } catch (err) {
+      logError('ai-chat:parseBlocks', err, `Failed to parse line JSON: ${json}`)
+    }
     return line
   }).trim()
 
@@ -402,6 +423,6 @@ ${chatHistorySnippet}`
       deps.db.insertEmbedding(msgId, vec)
     }
   } catch (err) {
-    console.error('Failed to enrich source message context:', err)
+    logError('ai-chat:enrichSourceMessageContext', err, `Failed to enrich source message context for msgId: ${msgId}`)
   }
 }

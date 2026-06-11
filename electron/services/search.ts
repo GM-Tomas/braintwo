@@ -1,4 +1,5 @@
 import type { DbInstance, KeywordResult, SimilarResult, MediaMeta } from './db'
+import { logError } from './logger'
 import type { EmbeddingService } from './embeddings'
 import type { SearchResult } from '@shared/types'
 
@@ -13,9 +14,6 @@ export interface SearchServiceDeps {
   scheduler?: (cb: () => void) => unknown
   batchSize?: number
 }
-
-// Floor calibrated for multilingual-e5-base with short WhatsApp messages.
-const MIN_SIMILARITY = 0.75
 
 // Standard RRF constant — chosen to balance precision and recall across lists.
 const RRF_K = 60
@@ -166,7 +164,8 @@ export function createSearchService(deps: SearchServiceDeps): SearchService {
             const vec = await deps.embeddings.embed(embedText.trim() || row.text)
             deps.db.insertEmbedding(row.id, vec)
             inserted++
-          } catch {
+          } catch (err) {
+            logError('search:backfillMissing', err, `Failed to embed message ID ${row.id} during backfill`)
             // Another path may have embedded this row meanwhile. Keep backfill best-effort.
           }
         }
