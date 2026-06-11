@@ -10,9 +10,10 @@ import {
   dialog
 } from 'electron'
 import pino from 'pino'
+import { initLogger, logInfo, logError, getCentralLogger } from './services/logger'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync, rmSync, readdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync } from 'node:fs'
 import { createWhatsAppService } from './services/whatsapp'
 import { createTranscriptionService } from './services/transcription'
 import { openDatabase, type DbInstance, type MediaMeta } from './services/db'
@@ -42,11 +43,10 @@ import {
 import { registerAllHandlers } from './ipc/register'
 import type { AppContext } from './app-context'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
+const mainDir = dirname(fileURLToPath(import.meta.url))
 
 const isDev = !app.isPackaged
 const startedHidden = process.argv.includes('--hidden')
-const LOG_CAP_BYTES = 1_000_000
 
 let embeddings: EmbeddingService | null = null
 let catchupTimer: ReturnType<typeof setTimeout> | null = null
@@ -99,7 +99,7 @@ app.on('before-quit', () => {
 const resourceOpts = () => ({
   isPackaged: app.isPackaged,
   resourcesPath: process.resourcesPath,
-  dirname: __dirname
+  dirname: mainDir
 })
 
 function configureAutostart(): void {
@@ -171,7 +171,7 @@ function createWindow(): void {
     backgroundColor: '#060a12',
     icon: nativeImage.createFromPath(buildResourcePath(resourceOpts(), 'icon-256.png')),
     webPreferences: {
-      preload: join(__dirname, '../preload/preload.cjs'),
+      preload: join(mainDir, '../preload/preload.cjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false
@@ -241,7 +241,7 @@ function createWindow(): void {
     void context.mainWindow.value.loadURL(process.env['ELECTRON_RENDERER_URL'])
     // if (isDev) context.mainWindow.value.webContents.openDevTools({ mode: 'detach' })
   } else {
-    void context.mainWindow.value.loadFile(join(__dirname, '../renderer/index.html'))
+    void context.mainWindow.value.loadFile(join(mainDir, '../renderer/index.html'))
   }
 }
 
@@ -270,15 +270,19 @@ function checkAndClearFallbackEmbeddings(db: DbInstance, search: SearchService):
       }
       if (nonZero < 500) {
         db.clearEmbeddings()
-        void search.backfillMissing(50_000).catch(() => { /* ignore */ })
+        void search.backfillMissing(50_000).catch((err) => {
+          logError('main:fallback_backfill', err, 'Failed during fallback check backfill')
+        })
       }
     }
-  } catch {
-    // Ignore database errors
+  } catch (err) {
+    logError('main:checkAndClearFallbackEmbeddings', err, 'Ignore database errors during fallback check')
   }
 }
 
 function openStorage(): void {
+  initLogger(app.getPath('userData'))
+  logInfo('main:storage', 'Opening storage')
   context.dbPath.value = join(app.getPath('userData'), 'braintwo.db')
   context.db.value = openDatabase(context.dbPath.value)
   const ingestLogger = isDev
@@ -290,14 +294,20 @@ function openStorage(): void {
   const EMBEDDING_VERSION = 'multilingual-e5-base:passage:v4'
   const versionFile = join(app.getPath('userData'), 'embedding_version.txt')
   let storedVersion = ''
-  try { storedVersion = readFileSync(versionFile, 'utf8').trim() } catch { /* first run */ }
+  try {
+    storedVersion = readFileSync(versionFile, 'utf8').trim()
+  } catch (err) {
+    logInfo('main:storage', 'Embedding version file read failed or first run')
+  }
   if (storedVersion !== EMBEDDING_VERSION) {
     if (context.db.value.countEmbeddings() > 0) {
       context.db.value.clearEmbeddings()
     }
     try {
       context.db.value.raw.exec('UPDATE messages SET context_note = NULL')
-    } catch { /* ignore */ }
+    } catch (err) {
+      logError('main:storage', err, 'Failed to update context_note on DB')
+    }
   }
   writeFileSync(versionFile, EMBEDDING_VERSION)
   embeddings = createEmbeddingService({
@@ -319,7 +329,10 @@ function openStorage(): void {
     db: context.db.value,
     embeddings,
     getAiConfig: () => readAiConfig(app.getPath('userData')),
-    onError: (msg) => reportError('context.generation_failed', msg)
+    onError: (msg) => {
+      logError('main:contextSvc', msg)
+      reportError('context.generation_failed', msg)
+    }
   })
   void context.contextSvc.value.backfill()
   void (async () => {
@@ -328,7 +341,9 @@ function openStorage(): void {
       try {
         const vec = await embeddings!.embed(m.content, 'passage')
         context.db.value!.insertMemoryEmbedding(m.id, vec)
-      } catch { /* best-effort */ }
+      } catch (err) {
+        logError('main:storage', err, 'Best-effort startup memory embedding failed')
+      }
     }
   })()
 
@@ -339,10 +354,12 @@ function openStorage(): void {
   }
 
   // Warm up embedding service / trigger background download on startup
-  void embeddings.embed('warmup', 'query').catch(() => { /* ignore */ })
-
+  void embeddings.embed('warmup', 'query').catch((err) => {
+    logError('main:storage', err, 'Warmup embedding failed (ignored)')
+  })
 
   void context.search.value.backfillMissing(50_000).catch((err: unknown) => {
+    logError('main:storage', err, 'Backfill missing failed')
     reportError('search.backfill_failed', err instanceof Error ? err.message : String(err))
   })
   context.messageBatcher.value = createMessageBatcher<RecentMessage>({
@@ -356,6 +373,7 @@ function queueEmbedding(rowId: number, text: string): void {
     .embed(text)
     .then((vec) => context.db.value?.insertEmbedding(rowId, vec))
     .catch((err: unknown) => {
+      logError('main:queueEmbedding', err, 'Embed failed during queueEmbedding')
       reportError('search.embed_failed', err instanceof Error ? err.message : String(err))
     })
 }
@@ -503,17 +521,7 @@ function startWhatsApp(): void {
 }
 
 function createFileLogger(name: string): pino.Logger {
-  const logDir = join(app.getPath('userData'), 'logs')
-  mkdirSync(logDir, { recursive: true })
-  const logPath = join(logDir, `${name}.log`)
-  try {
-    if (statSync(logPath).size > LOG_CAP_BYTES) {
-      renameSync(logPath, join(logDir, `${name}.1.log`))
-    }
-  } catch {
-    // No existing log yet.
-  }
-  return pino({ level: 'info', name }, pino.destination({ dest: logPath, sync: false }))
+  return getCentralLogger().child({ name })
 }
 
 void app.whenReady().then(() => {
@@ -558,4 +566,12 @@ void app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   // Intentionally empty: tray keeps the process alive.
+})
+
+process.on('uncaughtException', (error) => {
+  logError('main:uncaughtException', error, 'Uncaught Exception in main process')
+})
+
+process.on('unhandledRejection', (reason) => {
+  logError('main:unhandledRejection', reason, 'Unhandled Rejection in main process')
 })

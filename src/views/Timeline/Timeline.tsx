@@ -10,6 +10,7 @@ import { SOURCE_LABEL } from './timeline-constants'
 import { EmptyState, FilteredEmpty } from './EmptyStates'
 import { NoteRow } from './NoteRow'
 import { MessageDetail } from './MessageDetail'
+
 const RECENT_LIMIT = 50
 const SEARCH_LIMIT = 80
 
@@ -18,6 +19,7 @@ export function Timeline() {
   const [count, setCount] = useState<number>(0)
   const [noGroqKey, setNoGroqKey] = useState(false)
   const [messages, setMessages] = useState<MessageEntity[]>([])
+  const [recentLoaded, setRecentLoaded] = useState(false)
   const [filter, setFilter] = useState<MessageKind | 'all'>('all')
   const [selected, setSelected] = useState<MessageEntity | null>(null)
 
@@ -31,7 +33,6 @@ export function Timeline() {
   const [dateRange, setDateRange] = useState<'all' | 'today' | '7days' | 'month'>('all')
   const [messageSource, setMessageSource] = useState<'all' | MessageSource>('all')
   const [direction, setDirection] = useState<'all' | 'sent' | 'received'>('all')
-
   const [ignoredIds, setIgnoredIds] = useState<Set<number>>(new Set())
 
   const handleToggleIgnore = useCallback(async (msgId: number) => {
@@ -60,7 +61,6 @@ export function Timeline() {
     })
   }
 
-
   // Transcription state
   const [transcriptions, setTranscriptions] = useState<Record<number, { transcribing: boolean; transcript?: string }>>({})
 
@@ -88,7 +88,10 @@ export function Timeline() {
       if (mounted) setCount(c)
     })
     void messageRepository.getRecentMessages(RECENT_LIMIT).then((rows) => {
-      if (mounted) setMessages(rows)
+      if (mounted) {
+        setMessages(rows)
+        setRecentLoaded(true)
+      }
     })
     void aiService.getConfig().then((cfg) => {
       if (mounted) setNoGroqKey(!cfg?.groq?.apiKey)
@@ -202,11 +205,9 @@ export function Timeline() {
             subtitle="Explorá y buscá en tu historial de WhatsApp."
             action={
               !isSearching ? (
-                <div className="flex items-center gap-4">
-                  <span className="text-sm text-bt-muted" aria-label="Total de mensajes">
-                    {count.toLocaleString()} {count === 1 ? 'mensaje' : 'mensajes'}
-                  </span>
-                </div>
+                <span className="text-sm text-bt-muted" aria-label="Total de mensajes">
+                  {count.toLocaleString()} {count === 1 ? 'mensaje' : 'mensajes'}
+                </span>
               ) : undefined
             }
           />
@@ -323,6 +324,27 @@ export function Timeline() {
                     ))}
                   </div>
                 </div>
+
+                {/* Direction */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-medium text-bt-dim uppercase">Remitente</label>
+                  <div className="flex rounded-lg border border-bt-border bg-bt-bg p-0.5">
+                    {(['all', 'sent', 'received'] as const).map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setDirection(d)}
+                        className={`rounded-[6px] px-3 py-1 text-[11px] font-medium transition-colors ${
+                          direction === d
+                            ? 'bg-bt-hover text-bt-text shadow-bt-nav-active'
+                            : 'text-bt-muted hover:text-bt-text'
+                        }`}
+                      >
+                        {d === 'all' ? 'Todos' : d === 'sent' ? 'Enviados' : 'Recibidos'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -378,7 +400,7 @@ export function Timeline() {
               <div className="flex flex-1 overflow-hidden">
                 <div className="flex-1 overflow-y-auto px-10 pb-8">
                   <div className="w-full">
-                    {messages.length === 0 && count === 0 ? (
+                    {!recentLoaded && messages.length === 0 ? (
                       <SkeletonList />
                     ) : messages.length === 0 ? (
                       <EmptyState />

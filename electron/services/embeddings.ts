@@ -1,4 +1,5 @@
 import { VEC_DIM } from './db'
+import { logError } from './logger'
 
 export type ModelProgressStatus = 'idle' | 'downloading' | 'ready' | 'fallback' | 'error'
 
@@ -44,7 +45,8 @@ export function createEmbeddingService(deps: EmbeddingServiceDeps): EmbeddingSer
       return deps.embedder
     }
     if (!initPromise) {
-      initPromise = initTransformerEmbedder(deps, publish).catch(() => {
+      initPromise = initTransformerEmbedder(deps, publish).catch((err) => {
+        logError('embeddings:init', err, 'Failed to initialize local transformer model, falling back to deterministic embedder')
         publish({
           status: 'fallback',
           message: 'Modelo local no disponible; usando busqueda offline deterministica'

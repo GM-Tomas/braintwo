@@ -14,14 +14,24 @@ export function LocalFolderSection({ settings }: LocalFolderSectionProps) {
       <p className="mt-3 break-all text-[12.5px] leading-relaxed text-bt-muted">
         {settings?.userDataPath ?? 'Cargando...'}
       </p>
-      <button
-        type="button"
-        onClick={() => void settingsRepository.openUserDataFolder()}
-        className="mt-4 inline-flex h-9 items-center justify-center gap-2 rounded-[8px] border border-bt-border px-4 text-[13px] font-medium text-bt-muted transition-colors hover:bg-bt-hover hover:text-bt-text"
-      >
-        <Icon name="folder" size={16} />
-        Abrir carpeta
-      </button>
+      <div className="mt-4 flex gap-3">
+        <button
+          type="button"
+          onClick={() => void settingsRepository.openUserDataFolder()}
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-[8px] border border-bt-border px-4 text-[13px] font-medium text-bt-muted transition-colors hover:bg-bt-hover hover:text-bt-text"
+        >
+          <Icon name="folder" size={16} />
+          Abrir carpeta
+        </button>
+        <button
+          type="button"
+          onClick={() => void window.braintwo.logs.openFile()}
+          className="inline-flex h-9 items-center justify-center gap-2 rounded-[8px] border border-bt-border px-4 text-[13px] font-medium text-bt-muted transition-colors hover:bg-bt-hover hover:text-bt-text"
+        >
+          <Icon name="file" size={16} />
+          Ver Logs
+        </button>
+      </div>
     </section>
   )
 }

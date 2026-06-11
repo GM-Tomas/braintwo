@@ -87,6 +87,12 @@ export interface BrainTwoBridge {
     saveChatMessage: (chatId: number, role: 'user' | 'assistant', content: string, sources: string | null) => Promise<number>
     deleteLastMessage: (chatId: number) => Promise<void>
   }
+  logs: {
+    info: (module: string, message: string, meta?: Record<string, unknown>) => Promise<void>
+    error: (module: string, error: unknown, message?: string, meta?: Record<string, unknown>) => Promise<void>
+    openFile: () => Promise<void>
+    getFilePath: () => Promise<string>
+  }
   ollama: {
     getStatus: (serverUrl?: string) => Promise<OllamaStatus>
     install: () => Promise<void>

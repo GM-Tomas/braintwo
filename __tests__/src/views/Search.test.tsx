@@ -47,7 +47,7 @@ describe('<Search />', () => {
     render(<Search />)
     const user = userEvent.setup()
     await user.type(screen.getByRole('searchbox', { name: /Buscar en BrainTwo/ }), 'brain')
-    await waitFor(() => expect(screen.getByText('Similitud alta')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Semantico')).toBeInTheDocument())
     expect(screen.getByText('Ideas sobre BrainTwo')).toBeInTheDocument()
   })
 
