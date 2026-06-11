@@ -41,6 +41,17 @@ npm run package    # genera instalador
 
 > **Importante:** la variable de entorno `ELECTRON_RUN_AS_NODE` no debe estar seteada globalmente. Los scripts de npm la neutralizan automáticamente via `scripts/run-evite.mjs`. Si el `.exe` empaquetado crashea con `Cannot read properties of undefined (reading 'whenReady')`, esa variable es la causa.
 
+### `GROQ_API_KEY`
+
+La app transcribe audios de WhatsApp usando Whisper a través de Groq. En **desarrollo**, cargá la key desde `.env` o exportala como variable de entorno:
+
+```bash
+# .env (copiar .env.example)
+GROQ_API_KEY=gsk_tu_key
+```
+
+Al generar el **instalador** (`npm run package`), la key se inyecta automáticamente en el bundle si la variable `GROQ_API_KEY` está seteada en el entorno de build. Una vez empaquetada, la app funciona sin necesidad de la variable.
+
 ### ABI de native modules
 
 `better-sqlite3` y `onnxruntime-node` se precompilan contra una ABI específica. `postinstall` hace el rebuild automáticamente, pero si cambiás la versión de Electron o Node global:

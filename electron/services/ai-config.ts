@@ -21,7 +21,7 @@ export function readAiConfig(userDataPath: string): AiConfig | null {
       }
     },
     groq: {
-      apiKey: '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'
+      apiKey: process.env.GROQ_API_KEY ?? ''
     },
     activeProfileId: defaultId,
     profiles: [
