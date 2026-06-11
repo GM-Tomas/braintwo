@@ -66,6 +66,10 @@ export interface BrainTwoApi {
     onQr: (cb: (qr: string) => void) => Unsubscribe
     onLoggedOut: (cb: () => void) => Unsubscribe
   }
+  ignore: {
+    toggle: (msgId: number) => Promise<boolean>
+    getIds: () => Promise<number[]>
+  }
   ai: {
     getConfig: () => Promise<AiConfig | null>
     setConfig: (config: Partial<AiConfig>) => Promise<void>
@@ -173,8 +177,12 @@ export function createApi(
       onQr: subscribe<string>('wa:qr'),
       onLoggedOut: subscribe<void>('wa:logged-out')
     },
+    ignore: {
+      toggle: (msgId: number) => ipcRenderer.invoke('ignore:toggle', msgId),
+      getIds: () => ipcRenderer.invoke('ignore:get-ids')
+    },
     ai: {
-      getConfig: () => ipcRenderer.invoke('ai:get-config'),
+    getConfig: () => ipcRenderer.invoke('ai:get-config'),
       setConfig: (config: Partial<AiConfig>) => ipcRenderer.invoke('ai:set-config', config),
       send: (messages: ChatMessage[], goodSourceId?: number, chatId?: number) => ipcRenderer.invoke('ai:send', messages, goodSourceId, chatId),
       listChats: () => ipcRenderer.invoke('ai:list-chats'),

@@ -2,9 +2,9 @@ import type { MessageKind, MessageSource } from '@shared/types'
 import type { IconName } from '@/lib/icons'
 
 export const SOURCE_LABEL: Record<MessageSource, string> = {
-  realtime: 'Tiempo real',
-  'offline-sync': 'Sincronización diferida',
-  'history-sync': 'Histórico',
+  realtime: 'Directo',
+  'offline-sync': 'Offline',
+  'history-sync': 'Historial',
   export: 'Importado'
 }
 

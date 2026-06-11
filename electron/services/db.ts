@@ -144,6 +144,8 @@ export interface DbInstance {
   countEmbeddings: () => number
   hasEmbedding: (msgId: number) => boolean
   getSurroundingMessages: (msgId: number, limit: number) => { id: number; text: string; timestamp: number; contextNote: string | null }[]
+  toggleIgnored: (id: number) => boolean
+  getIgnoredIds: () => number[]
   close: () => void
 }
 
@@ -221,7 +223,8 @@ const POST_MIGRATIONS = [
   { column: 'kind', sql: `ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'` },
   { column: 'media_meta', sql: `ALTER TABLE messages ADD COLUMN media_meta TEXT` },
   { column: 'from_me', sql: `ALTER TABLE messages ADD COLUMN from_me INTEGER NOT NULL DEFAULT 0` },
-  { column: 'context_note', sql: `ALTER TABLE messages ADD COLUMN context_note TEXT` }
+  { column: 'context_note', sql: `ALTER TABLE messages ADD COLUMN context_note TEXT` },
+  { column: 'ignored', sql: `ALTER TABLE messages ADD COLUMN ignored INTEGER NOT NULL DEFAULT 0` }
 ]
 
 export function applyPragmas(db: DatabaseType): void {
@@ -482,6 +485,14 @@ export function openDatabase(filePath: string): DbInstance {
     LIMIT ?
   `)
 
+  const toggleIgnoreStmt = db.prepare<[number], { ignored: number }>(
+    `UPDATE messages SET ignored = CASE WHEN ignored = 0 THEN 1 ELSE 0 END WHERE id = ? RETURNING ignored`
+  )
+
+  const getIgnoredIdsStmt = db.prepare<[], { id: number }>(
+    `SELECT id FROM messages WHERE ignored = 1`
+  )
+
   // ── AI Memory statements ─────────────────────────────────────────────────────
   const insertMemoryStmt = db.prepare(
     'INSERT INTO ai_memory(content, chat_id) VALUES (?, ?)'
@@ -709,6 +720,13 @@ export function openDatabase(filePath: string): DbInstance {
     insertChatMessage(chatId, role, content, sources) {
       const r = insertChatMessageStmt.run(chatId, role, content, sources)
       return Number(r.lastInsertRowid)
+    },
+    toggleIgnored(id) {
+      const result = toggleIgnoreStmt.get(id)
+      return result ? result.ignored === 1 : false
+    },
+    getIgnoredIds() {
+      return getIgnoredIdsStmt.all().map((r) => r.id)
     },
     getSurroundingMessages(msgId, limit) {
       const target = getMsgStmt.get(msgId)

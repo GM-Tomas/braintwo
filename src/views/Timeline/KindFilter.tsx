@@ -5,9 +5,10 @@ interface KindFilterProps {
   onChange: (k: MessageKind | 'all') => void
   counts: Record<MessageKind, number>
   total: number
+  className?: string
 }
 
-export function KindFilter({ active, onChange, counts, total }: KindFilterProps) {
+export function KindFilter({ active, onChange, counts, total, className }: KindFilterProps) {
   const items: { id: MessageKind | 'all'; label: string; count: number }[] = [
     { id: 'all', label: 'Todo', count: total },
     { id: 'text', label: 'Textos', count: counts.text },
@@ -17,7 +18,7 @@ export function KindFilter({ active, onChange, counts, total }: KindFilterProps)
     { id: 'document', label: 'Archivos', count: counts.document }
   ]
   return (
-    <div className="flex flex-wrap items-center gap-2 px-14 pt-5">
+    <div className={`flex flex-wrap items-center gap-2 ${className ?? 'px-14 pt-5'}`}>
       {items.map((f) => {
         const isActive = active === f.id
         return (

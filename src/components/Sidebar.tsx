@@ -11,6 +11,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
   { id: 'timeline', icon: 'home', label: 'Mis mensajes' },
+  { id: 'dashboard', icon: 'folder', label: 'Dashboard' },
   { id: 'chat', icon: 'chat', label: 'Chat IA' }
 ]
 

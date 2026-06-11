@@ -50,5 +50,15 @@ export class AppIpcController {
       if (!context.mainWindow.value || context.mainWindow.value.isDestroyed()) return
       context.mainWindow.value.setTitleBarOverlay({ ...opts, height: 36 })
     })
+
+    ipcMain.handle('ignore:toggle', (_e, msgId: number) => {
+      if (!context.ingest.value) return false
+      return getMessageRepo().toggleIgnored(msgId)
+    })
+
+    ipcMain.handle('ignore:get-ids', () => {
+      if (!context.ingest.value) return []
+      return getMessageRepo().getIgnoredIds()
+    })
   }
 }

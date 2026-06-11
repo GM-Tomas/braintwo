@@ -33,4 +33,5 @@ export interface RecentMessage {
   fromMe?: boolean
   createdAt?: number
   contextNote?: string | null
+  ignored?: boolean
 }

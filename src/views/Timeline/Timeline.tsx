@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { MessageKind, ModelProgress, SearchResult, DbStats, MessageSource } from '@shared/types'
+import type { MessageKind, ModelProgress, SearchResult, MessageSource } from '@shared/types'
 import { PageHeader } from '../../components/PageHeader'
 import { useDateFormatter } from '@/hooks/useDateFormatter'
 import { useIpcSubscription } from '@/hooks/useIpcSubscription'
@@ -7,11 +7,10 @@ import { useDependencies } from '@/core/infrastructure/DependenciesContext'
 import { MessageEntity } from '@shared/domain/message.entity'
 import { Icon } from '@/lib/icons'
 import { KindFilter } from './KindFilter'
+import { SOURCE_LABEL } from './timeline-constants'
 import { EmptyState, FilteredEmpty } from './EmptyStates'
 import { NoteRow } from './NoteRow'
 import { MessageDetail } from './MessageDetail'
-import { Dashboard } from './Dashboard'
-
 const RECENT_LIMIT = 50
 const SEARCH_LIMIT = 80
 
@@ -23,40 +22,44 @@ export function Timeline() {
   const [filter, setFilter] = useState<MessageKind | 'all'>('all')
   const [selected, setSelected] = useState<MessageEntity | null>(null)
 
-  const [showDashboard, setShowDashboard] = useState<boolean>(() => {
+  const [showFilters, setShowFilters] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('braintwo:show-dashboard') !== '0'
+      return localStorage.getItem('braintwo:show-filters') === '1'
     } catch {
-      return true
+      return false
     }
   })
   const [dateRange, setDateRange] = useState<'all' | 'today' | '7days' | 'month'>('all')
   const [messageSource, setMessageSource] = useState<'all' | MessageSource>('all')
   const [direction, setDirection] = useState<'all' | 'sent' | 'received'>('all')
-  const [dbStats, setDbStats] = useState<DbStats | null>(null)
 
-  const toggleDashboard = () => {
-    setShowDashboard((prev) => {
+  const [ignoredIds, setIgnoredIds] = useState<Set<number>>(new Set())
+
+  const handleToggleIgnore = useCallback(async (msgId: number) => {
+    try {
+      const newState = await window.braintwo.ignore.toggle(msgId)
+      setIgnoredIds((prev) => {
+        const next = new Set(prev)
+        if (newState) next.add(msgId)
+        else next.delete(msgId)
+        return next
+      })
+    } catch (err) {
+      console.error('Error toggling ignore:', err)
+    }
+  }, [])
+
+  const toggleFilters = () => {
+    setShowFilters((prev) => {
       const next = !prev
       try {
-        localStorage.setItem('braintwo:show-dashboard', next ? '1' : '0')
+        localStorage.setItem('braintwo:show-filters', next ? '1' : '0')
       } catch {
         // ignore
       }
       return next
     })
   }
-
-  const loadDbStats = useCallback(() => {
-    window.braintwo.app
-      .getDbStats()
-      .then(setDbStats)
-      .catch(console.error)
-  }, [])
-
-  useEffect(() => {
-    loadDbStats()
-  }, [count, loadDbStats])
 
 
   // Transcription state
@@ -90,6 +93,9 @@ export function Timeline() {
     })
     void aiService.getConfig().then((cfg) => {
       if (mounted) setNoGroqKey(!cfg?.groq?.apiKey)
+    })
+    void window.braintwo.ignore.getIds().then((ids) => {
+      if (mounted) setIgnoredIds(new Set(ids))
     })
     return () => {
       mounted = false
@@ -175,7 +181,7 @@ export function Timeline() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden animate-fade-in">
       {selected ? (
-        <MessageDetail message={selected} onClose={() => setSelected(null)} />
+        <MessageDetail message={selected} onClose={() => setSelected(null)} onToggleIgnore={handleToggleIgnore} />
       ) : (
         <>
           <PageHeader
@@ -188,19 +194,6 @@ export function Timeline() {
                   <span className="text-sm text-bt-muted" aria-label="Total de mensajes">
                     {count.toLocaleString()} {count === 1 ? 'mensaje' : 'mensajes'}
                   </span>
-                  <button
-                    type="button"
-                    onClick={toggleDashboard}
-                    className={`flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition-all ${
-                      showDashboard
-                        ? 'border-bt-primary/30 bg-bt-primary-faint text-bt-primary shadow-bt-nav-active'
-                        : 'border-bt-border bg-transparent text-bt-muted hover:border-bt-primary/20 hover:text-bt-text'
-                    }`}
-                    title="Alternar Dashboard de estadísticas"
-                  >
-                    <Icon name="settings" size={13} />
-                    <span>Dashboard</span>
-                  </button>
                 </div>
               ) : undefined
             }
@@ -209,7 +202,7 @@ export function Timeline() {
           {/* Search bar */}
           <div className="px-10 pb-3 pt-6">
             <div
-              className="flex items-center gap-3 rounded-[12px] border bg-bt-surf px-4 py-3 transition-colors duration-150"
+              className="flex items-center gap-3 rounded-[12px] border bg-bt-bg px-4 py-3 transition-colors duration-150"
               style={{ borderColor: isSearching ? 'var(--bt-input-focus-border)' : 'var(--bt-border)' }}
             >
               <Icon name="search" size={18} className="shrink-0 text-bt-brand" />
@@ -231,6 +224,19 @@ export function Timeline() {
                   limpiar
                 </button>
               )}
+              <button
+                type="button"
+                onClick={toggleFilters}
+                className={`ml-auto flex h-7 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-semibold transition-all ${
+                  showFilters
+                    ? 'border-bt-primary/30 bg-bt-primary-faint text-bt-primary'
+                    : 'border-bt-border/60 bg-transparent text-bt-muted hover:border-bt-primary/20 hover:text-bt-text'
+                }`}
+                title="Alternar filtros avanzados"
+              >
+                <span>Filtros</span>
+                <Icon name="chev" size={10} className={`transition-transform duration-200 ${showFilters ? 'rotate-90' : ''}`} />
+              </button>
             </div>
             {(modelProgress.status !== 'idle' && modelProgress.status !== 'ready') && (
               <div className="mt-2 rounded-[8px] border border-bt-border bg-white/[0.025] px-3 py-1.5 text-[11px] text-bt-muted">
@@ -241,24 +247,59 @@ export function Timeline() {
             )}
           </div>
 
-          <div className={`overflow-hidden transition-all duration-500 ease-in-out ${
-            (showDashboard && !isSearching)
-              ? 'max-h-[1400px] opacity-100 border-b border-bt-border'
-              : 'max-h-0 opacity-0 pointer-events-none'
+          {/* Collapsible filters */}
+          <div className={`transition-all duration-500 ease-in-out ${
+            showFilters && !isSearching
+              ? 'max-h-[400px] opacity-100 overflow-visible border-b border-bt-border/50'
+              : 'max-h-0 opacity-0 pointer-events-none overflow-hidden'
           }`}>
-            <Dashboard
-              totalMessagesCount={count}
-              messages={messages}
-              dbStats={dbStats}
-              dateRange={dateRange}
-              setDateRange={setDateRange}
-              messageSource={messageSource}
-              setMessageSource={setMessageSource}
-              direction={direction}
-              setDirection={setDirection}
-            />
-          </div>
+            <div className="flex flex-col gap-4 px-10 pb-4 pt-3">
+              <KindFilter active={filter} onChange={setFilter} counts={counts} total={messages.length} className="px-0 pt-0" />
+              <div className="flex flex-wrap items-center gap-4">
+                {/* Date Range */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-medium text-bt-dim uppercase">Rango de Fecha</label>
+                  <div className="flex rounded-lg border border-bt-border bg-bt-bg p-0.5">
+                    {(['all', 'today', '7days', 'month'] as const).map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setDateRange(r)}
+                        className={`rounded-[6px] px-3 py-1 text-[11px] font-medium transition-colors ${
+                          dateRange === r
+                            ? 'bg-bt-hover text-bt-text shadow-bt-nav-active'
+                            : 'text-bt-muted hover:text-bt-text'
+                        }`}
+                      >
+                        {r === 'all' ? 'Historico' : r === 'today' ? 'Hoy' : r === '7days' ? '7 dias' : 'Este mes'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
+                {/* Source */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-medium text-bt-dim uppercase">Origen</label>
+                  <div className="flex rounded-lg border border-bt-border bg-bt-bg p-0.5">
+                    {(['all', 'realtime', 'offline-sync', 'history-sync', 'export'] as const).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setMessageSource(s)}
+                        className={`rounded-[6px] px-3 py-1 text-[11px] font-medium transition-colors ${
+                          messageSource === s
+                            ? 'bg-bt-hover text-bt-text shadow-bt-nav-active'
+                            : 'text-bt-muted hover:text-bt-text'
+                        }`}
+                      >
+                        {s === 'all' ? 'Todos' : SOURCE_LABEL[s]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {isSearching ? (
             <div className="flex-1 overflow-y-auto px-10 py-8">
@@ -295,6 +336,8 @@ export function Timeline() {
                           transcribing={transcriptions[m.id]?.transcribing}
                           transcript={transcriptions[m.id]?.transcript}
                           noApiKey={noGroqKey && m.kind === 'audio' && !transcriptions[m.id]?.transcribing && !transcriptions[m.id]?.transcript}
+                          onToggleIgnore={handleToggleIgnore}
+                          isIgnored={ignoredIds.has(r.id)}
                         />
                       )
                     })}
@@ -304,9 +347,8 @@ export function Timeline() {
             </div>
           ) : (
             <>
-              <KindFilter active={filter} onChange={setFilter} counts={counts} total={messages.length} />
               <div className="flex flex-1 overflow-hidden">
-                <div className="flex-1 overflow-y-auto px-10 py-8">
+                <div className="flex-1 overflow-y-auto px-10 pb-8">
                   <div className="w-full">
                     {messages.length === 0 ? (
                       <EmptyState />
@@ -324,6 +366,8 @@ export function Timeline() {
                             transcribing={transcriptions[m.id]?.transcribing}
                             transcript={transcriptions[m.id]?.transcript}
                             noApiKey={noGroqKey && m.kind === 'audio' && !transcriptions[m.id]?.transcribing && !transcriptions[m.id]?.transcript}
+                            onToggleIgnore={handleToggleIgnore}
+                            isIgnored={ignoredIds.has(m.id)}
                           />
                         ))}
                       </ul>

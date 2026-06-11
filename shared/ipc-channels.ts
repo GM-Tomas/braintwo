@@ -56,5 +56,9 @@ export const IPC_CHANNELS = {
   AUDIO: {
     TRANSCRIBING: 'audio:transcribing',
     TRANSCRIBED: 'audio:transcribed',
+  },
+  IGNORE: {
+    TOGGLE: 'ignore:toggle',
+    GET_IDS: 'ignore:get-ids'
   }
 } as const

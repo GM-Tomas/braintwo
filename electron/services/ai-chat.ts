@@ -80,12 +80,16 @@ export function createAiChatService(deps: AiChatDeps): AiChatService {
         memories.push(m)
       }
 
+      // Filter out ignored messages.
+      const ignoredIds = new Set(deps.db.getIgnoredIds())
+      const filteredMerged = merged.filter((m) => !ignoredIds.has(m.id))
+
       // ── Step 3: Build system prompt ────────────────────────────────────
       const stats = deps.db.stats()
       const surroundingContext = goodSourceId !== undefined
-        ? deps.db.getSurroundingMessages(goodSourceId, 5)
+        ? deps.db.getSurroundingMessages(goodSourceId, 5).filter((m) => !ignoredIds.has(m.id))
         : undefined
-      const systemPrompt = buildSystemPrompt(stats, merged, memories, queries, today, surroundingContext)
+      const systemPrompt = buildSystemPrompt(stats, filteredMerged, memories, queries, today, surroundingContext)
 
       // ── Step 4: Call LLM ───────────────────────────────────────────────
       const rawContent = await callProvider({ config, systemPrompt, messages: history })
@@ -94,11 +98,11 @@ export function createAiChatService(deps: AiChatDeps): AiChatService {
       const { content, action, remember, sources: relevantIndices } = parseBlocks(rawContent)
 
       // ── Step 6: Filter sources based on what the LLM found pertinent ─────
-      let filteredSources: RetrievedContext[] = merged
+      let filteredSources: RetrievedContext[] = filteredMerged
       if (relevantIndices !== undefined) {
         filteredSources = relevantIndices
           .map((idx): RetrievedContext | undefined => {
-            const src = merged[idx - 1]
+            const src = filteredMerged[idx - 1]
             return src ? { ...src, index: idx } : undefined
           })
           .filter((s): s is RetrievedContext => s !== undefined)
@@ -356,6 +360,8 @@ async function enrichSourceMessageContext(
   deps: AiChatDeps
 ): Promise<void> {
   try {
+    const ignoredIds = new Set(deps.db.getIgnoredIds())
+    if (ignoredIds.has(msgId)) return
     const msgs = deps.db.getSurroundingMessages(msgId, 0)
     const msg = msgs[0]
     if (!msg) return
