@@ -15,6 +15,23 @@ interface NoteRowProps {
   noApiKey?: boolean
   onToggleIgnore?: (msgId: number) => void
   isIgnored?: boolean
+  highlight?: string
+  delayMs?: number
+}
+
+const MARK_CLASS = 'rounded-sm bg-bt-accent/15 text-bt-text px-[2px]'
+
+function highlightText(text: string, query: string) {
+  if (!query.trim()) return text
+  const terms = query.trim().split(/\s+/).filter(Boolean)
+  if (terms.length === 0) return text
+  const pattern = new RegExp(`(${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi')
+  const parts = text.split(pattern)
+  return parts.map((part, i) =>
+    terms.some((t) => t.toLowerCase() === part.toLowerCase())
+      ? `<mark class="${MARK_CLASS}">${part}</mark>`
+      : part
+  ).join('')
 }
 
 export function NoteRow({
@@ -29,12 +46,14 @@ export function NoteRow({
   transcript,
   noApiKey,
   onToggleIgnore,
-  isIgnored: isIgnoredProp
+  isIgnored: isIgnoredProp,
+  highlight,
+  delayMs
 }: NoteRowProps) {
   const style = KIND_STYLE[message.kind] ?? KIND_STYLE.other
   const isIgnored = isIgnoredProp ?? message.ignored
   return (
-    <li>
+    <li className="animate-slide-in" style={delayMs ? { animationDelay: `${delayMs}ms` } : undefined}>
       <article
         role="button"
         tabIndex={0}
@@ -43,15 +62,14 @@ export function NoteRow({
           if (e.key === 'Enter' || e.key === ' ') onClick()
         }}
         aria-pressed={isSelected}
-        className={`group grid min-h-[80px] cursor-pointer items-start gap-[18px] border-b border-bt-border px-4 py-4 transition-colors duration-100 outline-none focus-visible:ring-1 focus-visible:ring-bt-primary/40 ${
+        className={`group grid min-h-[68px] cursor-pointer items-start gap-[18px] border-b border-bt-border px-4 py-3 outline-none focus-visible:ring-1 focus-visible:ring-bt-primary/40 ${
           isSelected
-            ? 'bg-bt-primary/[0.06] border-l-2 border-l-bt-primary'
-            : 'hover:bg-white/[0.018]'
-        } ${isIgnored ? 'opacity-40' : ''} ${similarity !== undefined ? 'grid-cols-[36px_minmax(0,1fr)_auto_16px]' : 'grid-cols-[36px_minmax(0,1fr)_16px]'}`}
-      >
+            ? 'bg-bt-primary/[0.06] border-l-2 border-l-bt-primary transition-colors duration-100'
+            : 'hover:bg-bt-hover/20 transition-colors duration-150'
+        } ${isIgnored ? 'opacity-40' : ''} ${similarity !== undefined ? 'grid-cols-[36px_minmax(0,1fr)_auto_16px]' : 'grid-cols-[36px_minmax(0,1fr)_16px]'}`}>
         <div
           aria-hidden
-          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
+          className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] transition-transform duration-150 group-hover:scale-105"
           style={{
             background: style.bg,
             border: `1px solid ${style.border}`
@@ -59,9 +77,9 @@ export function NoteRow({
         >
           <Icon name={style.icon} size={15} className={style.iconColor} />
         </div>
-        <div className="min-w-0 flex-1">
-          <NotePreview message={message} kindLabel={style.label} transcribing={transcribing} transcript={transcript} />
-          <div className="mt-2 flex items-center gap-2.5 text-[11.5px] text-bt-dim">
+          <div className="min-w-0 flex-1">
+          <NotePreview message={message} kindLabel={style.label} transcribing={transcribing} transcript={transcript} highlight={highlight} />
+          <div className="mt-1.5 flex items-center gap-2 text-[11.5px] text-bt-dim">
             <span className="inline-flex items-center gap-1.5 text-bt-muted">
               <span
                 aria-hidden
@@ -69,41 +87,29 @@ export function NoteRow({
               />
               {SOURCE_LABEL[message.source]}
             </span>
-            <span>·</span>
-            <time
-              dateTime={new Date(message.timestamp).toISOString()}
-              className="text-bt-dim"
-            >
-              {formatted}
-            </time>
             {noApiKey ? (
-              <>
-                <span>·</span>
-                <span
-                  className="inline-flex items-center gap-1 text-bt-red cursor-pointer"
-                  title="API key de Groq no configurada — clic para ir a Ajustes"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    window.dispatchEvent(new CustomEvent('navigate-to-settings'))
-                  }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-80 hover:opacity-100 transition-opacity">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="16" x2="12" y2="12" />
-                    <line x1="12" y1="8" x2="12.01" y2="8" />
-                  </svg>
-                  <span className="text-[11px]">sin API key</span>
-                </span>
-              </>
+              <span
+                className="inline-flex items-center gap-1 text-bt-red cursor-pointer"
+                title="API key de Groq no configurada — clic para ir a Ajustes"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  window.dispatchEvent(new CustomEvent('navigate-to-settings'))
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-80 hover:opacity-100 transition-opacity">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+              </span>
             ) : null}
-            <span>·</span>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
                 onToggleIgnore?.(message.id)
               }}
-              className="inline-flex items-center gap-1 text-bt-dim hover:text-bt-muted transition-colors"
+              className="text-bt-dim opacity-0 group-hover:opacity-100 transition-opacity duration-100 hover:text-bt-muted"
               title={isIgnored ? 'Incluir en contexto IA' : 'Ignorar (excluir del contexto IA)'}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -120,23 +126,31 @@ export function NoteRow({
                   </>
                 )}
               </svg>
-              <span className="text-[11px]">{isIgnored ? 'omitido' : 'ignorar'}</span>
             </button>
+            <time
+              dateTime={new Date(message.timestamp).toISOString()}
+              className="ml-auto text-[11px] text-bt-dim whitespace-nowrap"
+            >
+              {formatted}
+            </time>
           </div>
         </div>
         {similarity !== undefined && (
           <div className="flex shrink-0 items-center mt-1.5">
             {matchSource === 'keyword' || matchSource === 'both' ? (
-              <span className="rounded-full border border-bt-accent/30 bg-bt-accent/[0.04] px-2.5 py-1 text-[11px] text-bt-accent font-medium uppercase tracking-wider">
-                Máxima similitud
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-bt-accent/30 bg-bt-accent/[0.04] px-2.5 py-1 text-[11px] text-bt-accent font-medium uppercase tracking-wider">
+                <Icon name="tag" size={11} />
+                Keyword
               </span>
             ) : lowRelevance ? (
-              <span className="rounded-full border border-bt-amber/30 bg-bt-amber/[0.04] px-2.5 py-1 text-[11px] text-bt-amber font-medium uppercase tracking-wider">
-                Similitud baja
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-bt-amber/30 bg-bt-amber/[0.04] px-2.5 py-1 text-[11px] text-bt-amber font-medium tracking-wider">
+                <Icon name="help" size={11} />
+                Baja relevancia
               </span>
             ) : (
-              <span className="rounded-full border border-bt-brand/30 bg-bt-brand/[0.04] px-2.5 py-1 text-[11px] text-bt-brand font-medium uppercase tracking-wider">
-                Similitud alta
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-bt-brand/30 bg-bt-brand/[0.04] px-2.5 py-1 text-[11px] text-bt-brand font-medium uppercase tracking-wider">
+                <Icon name="cpu" size={11} />
+                Semantico
               </span>
             )}
           </div>
@@ -157,13 +171,24 @@ function NotePreview({
   message,
   kindLabel,
   transcribing,
-  transcript
+  transcript,
+  highlight
 }: {
   message: MessageEntity
   kindLabel: string
   transcribing?: boolean
   transcript?: string
+  highlight?: string
 }) {
+  if (highlight && message.text && message.kind !== 'audio') {
+    const html = highlightText(message.text, highlight)
+    return (
+      <p
+        className="line-clamp-2 whitespace-pre-wrap text-[14.5px] leading-relaxed [&>mark]:rounded-sm [&>mark]:bg-bt-accent/15 [&>mark]:text-bt-text [&>mark]:px-[2px]"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    )
+  }
   if (message.text && message.kind !== 'audio') {
     return (
       <p className="line-clamp-2 whitespace-pre-wrap text-[14.5px] leading-relaxed text-bt-text">

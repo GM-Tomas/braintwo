@@ -52,10 +52,15 @@ export default {
         fadeIn: {
           from: { opacity: '0', transform: 'translateY(6px)' },
           to: { opacity: '1', transform: 'none' }
+        },
+        slideIn: {
+          from: { opacity: '0', transform: 'translateY(10px)' },
+          to: { opacity: '1', transform: 'none' }
         }
       },
       animation: {
-        'fade-in': 'fadeIn 0.35s cubic-bezier(0.22,1,0.36,1) both'
+        'fade-in': 'fadeIn 0.35s cubic-bezier(0.22,1,0.36,1) both',
+        'slide-in': 'slideIn 0.4s cubic-bezier(0.22,1,0.36,1) both'
       }
     }
   },

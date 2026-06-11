@@ -1,4 +1,5 @@
 import type { MessageKind } from '@shared/types'
+import { Icon } from '@/lib/icons'
 
 interface KindFilterProps {
   active: MessageKind | 'all'
@@ -6,6 +7,15 @@ interface KindFilterProps {
   counts: Record<MessageKind, number>
   total: number
   className?: string
+}
+
+const FILTER_ICONS: Record<string, import('@/lib/icons').IconName | null> = {
+  all: null,
+  text: 'chat',
+  audio: 'mic',
+  image: 'image',
+  video: 'video',
+  document: 'file'
 }
 
 export function KindFilter({ active, onChange, counts, total, className }: KindFilterProps) {
@@ -21,6 +31,7 @@ export function KindFilter({ active, onChange, counts, total, className }: KindF
     <div className={`flex flex-wrap items-center gap-2 ${className ?? 'px-14 pt-5'}`}>
       {items.map((f) => {
         const isActive = active === f.id
+        const iconName = FILTER_ICONS[f.id]
         return (
           <button
             key={f.id}
@@ -33,6 +44,7 @@ export function KindFilter({ active, onChange, counts, total, className }: KindF
                 : 'border-bt-border bg-transparent text-bt-muted hover:border-bt-primary/20 hover:text-bt-text'
             }`}
           >
+            {iconName && <Icon name={iconName} size={12} />}
             <span>{f.label}</span>
             <span className="text-bt-dim">{f.count}</span>
           </button>

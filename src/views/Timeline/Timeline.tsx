@@ -202,7 +202,7 @@ export function Timeline() {
           {/* Search bar */}
           <div className="px-10 pb-3 pt-6">
             <div
-              className="flex items-center gap-3 rounded-[12px] border bg-bt-bg px-4 py-3 transition-colors duration-150"
+              className="flex items-center gap-3 rounded-[12px] border bg-bt-bg px-4 py-3 transition-colors duration-150 focus-within:shadow-[0_0_0_2px_var(--bt-input-focus-border)]"
               style={{ borderColor: isSearching ? 'var(--bt-input-focus-border)' : 'var(--bt-border)' }}
             >
               <Icon name="search" size={18} className="shrink-0 text-bt-brand" />
@@ -239,10 +239,24 @@ export function Timeline() {
               </button>
             </div>
             {(modelProgress.status !== 'idle' && modelProgress.status !== 'ready') && (
-              <div className="mt-2 rounded-[8px] border border-bt-border bg-white/[0.025] px-3 py-1.5 text-[11px] text-bt-muted">
-                {modelProgress.status === 'downloading'
-                  ? `Descargando modelo semántico${typeof modelProgress.progress === 'number' ? ` ${Math.round(modelProgress.progress * 100)}%` : ''}`
-                  : modelProgress.message ?? 'Preparando búsqueda…'}
+              <div className="mt-2 flex items-center gap-3 rounded-[8px] border border-bt-border bg-white/[0.025] px-3 py-2">
+                <div className="flex-1">
+                  <div className="h-1 w-full overflow-hidden rounded-full bg-bt-border/40">
+                    <div
+                      className="h-full rounded-full bg-bt-accent transition-all duration-300"
+                      style={{
+                        width: modelProgress.status === 'downloading' && typeof modelProgress.progress === 'number'
+                          ? `${Math.round(modelProgress.progress * 100)}%`
+                          : '60%'
+                      }}
+                    />
+                  </div>
+                </div>
+                <span className="shrink-0 text-[11px] text-bt-muted">
+                  {modelProgress.status === 'downloading'
+                    ? `Modelo semántico${typeof modelProgress.progress === 'number' ? ` ${Math.round(modelProgress.progress * 100)}%` : ''}`
+                    : modelProgress.message ?? 'Preparando…'}
+                </span>
               </div>
             )}
           </div>
@@ -321,7 +335,7 @@ export function Timeline() {
                     {searchResults.length} resultado{searchResults.length !== 1 ? 's' : ''}
                   </div>
                   <ul className="w-full">
-                    {searchResults.map((r) => {
+                    {searchResults.map((r, idx) => {
                       const m = new MessageEntity(r)
                       return (
                         <NoteRow
@@ -338,6 +352,8 @@ export function Timeline() {
                           noApiKey={noGroqKey && m.kind === 'audio' && !transcriptions[m.id]?.transcribing && !transcriptions[m.id]?.transcript}
                           onToggleIgnore={handleToggleIgnore}
                           isIgnored={ignoredIds.has(r.id)}
+                          highlight={q}
+                          delayMs={idx * 35}
                         />
                       )
                     })}
@@ -350,13 +366,15 @@ export function Timeline() {
               <div className="flex flex-1 overflow-hidden">
                 <div className="flex-1 overflow-y-auto px-10 pb-8">
                   <div className="w-full">
-                    {messages.length === 0 ? (
+                    {messages.length === 0 && count === 0 ? (
+                      <SkeletonList />
+                    ) : messages.length === 0 ? (
                       <EmptyState />
                     ) : visible.length === 0 ? (
                       <FilteredEmpty kind={filter as MessageKind} />
                     ) : (
                       <ul className="w-full">
-                        {visible.map((m) => (
+                        {visible.map((m, idx) => (
                           <NoteRow
                             key={m.id}
                             message={m}
@@ -368,6 +386,8 @@ export function Timeline() {
                             noApiKey={noGroqKey && m.kind === 'audio' && !transcriptions[m.id]?.transcribing && !transcriptions[m.id]?.transcript}
                             onToggleIgnore={handleToggleIgnore}
                             isIgnored={ignoredIds.has(m.id)}
+                            highlight={q}
+                            delayMs={idx * 35}
                           />
                         ))}
                       </ul>
@@ -384,6 +404,22 @@ export function Timeline() {
 }
 
 
+
+function SkeletonList() {
+  return (
+    <ul className="w-full">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <li key={i} className="flex min-h-[80px] animate-pulse items-start gap-[18px] border-b border-bt-border px-4 py-4">
+          <div className="mt-0.5 h-9 w-9 shrink-0 rounded-[10px] bg-bt-hover/50" />
+          <div className="min-w-0 flex-1">
+            <div className="h-4 w-3/4 rounded bg-bt-hover/40" />
+            <div className="mt-2 h-3 w-1/2 rounded bg-bt-hover/30" />
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 function kindCounts(list: MessageEntity[]): Record<MessageKind, number> {
   const out: Record<MessageKind, number> = {
