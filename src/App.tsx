@@ -6,6 +6,7 @@ import { Search } from './views/Search'
 import { Timeline } from './views/Timeline'
 import { Settings } from './views/Settings'
 import { Chat } from './views/Chat'
+import { DashboardView } from './views/Dashboard/DashboardView'
 import { Sidebar } from './components/Sidebar'
 import { useDependencies } from '@/core/infrastructure/DependenciesContext'
 import { ConnectionEntity } from '@shared/domain/connection.entity'
@@ -238,6 +239,12 @@ Aquí tienes un resumen de lo que puedes hacer:
   }, [connectionService, settingsRepository])
 
   useEffect(() => {
+    const handler = () => setView('settings')
+    window.addEventListener('navigate-to-settings', handler)
+    return () => window.removeEventListener('navigate-to-settings', handler)
+  }, [setView])
+
+  useEffect(() => {
     if (waState === 'open') {
       writeFlag(ONBOARDED_KEY, true)
       writeFlag(FTU_KEY, true)
@@ -306,6 +313,7 @@ Aquí tienes un resumen de lo que puedes hacer:
         {view === 'onboarding' && <Onboarding />}
         {view === 'search' && <Search />}
         {view === 'timeline' && <Timeline />}
+        {view === 'dashboard' && <DashboardView />}
         {view === 'chat' && (
           <Chat
             onNavigate={setView}

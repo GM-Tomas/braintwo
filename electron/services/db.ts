@@ -22,6 +22,7 @@ export interface MediaMeta {
   mimetype?: string
   transcript?: string
   ptt?: boolean
+  audioLocalPath?: string
 }
 
 export interface NewMessage {
@@ -120,6 +121,8 @@ export interface DbInstance {
   listMessagesWithoutEmbeddings: (limit: number) => EmbeddableMessage[]
   listMessagesWithoutContext: (limit: number) => ContextableMessage[]
   updateContextNote: (id: number, note: string) => void
+  updateMediaMeta: (id: number, meta: Partial<MediaMeta>) => void
+  updateTranscript: (id: number, transcript: string) => void
   deleteEmbedding: (msgId: number) => void
   // AI memory
   insertMemory: (content: string, chatId?: number) => number
@@ -141,6 +144,8 @@ export interface DbInstance {
   countEmbeddings: () => number
   hasEmbedding: (msgId: number) => boolean
   getSurroundingMessages: (msgId: number, limit: number) => { id: number; text: string; timestamp: number; contextNote: string | null }[]
+  toggleIgnored: (id: number) => boolean
+  getIgnoredIds: () => number[]
   close: () => void
 }
 
@@ -218,7 +223,8 @@ const POST_MIGRATIONS = [
   { column: 'kind', sql: `ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'` },
   { column: 'media_meta', sql: `ALTER TABLE messages ADD COLUMN media_meta TEXT` },
   { column: 'from_me', sql: `ALTER TABLE messages ADD COLUMN from_me INTEGER NOT NULL DEFAULT 0` },
-  { column: 'context_note', sql: `ALTER TABLE messages ADD COLUMN context_note TEXT` }
+  { column: 'context_note', sql: `ALTER TABLE messages ADD COLUMN context_note TEXT` },
+  { column: 'ignored', sql: `ALTER TABLE messages ADD COLUMN ignored INTEGER NOT NULL DEFAULT 0` }
 ]
 
 export function applyPragmas(db: DatabaseType): void {
@@ -435,6 +441,22 @@ export function openDatabase(filePath: string): DbInstance {
     `UPDATE messages SET context_note = ? WHERE id = ?`
   )
 
+  const readMediaMetaStmt = db.prepare<[number], { media_meta: string | null }>(
+    `SELECT media_meta FROM messages WHERE id = ?`
+  )
+
+  const writeMediaMetaStmt = db.prepare<[string, number], void>(
+    `UPDATE messages SET media_meta = ? WHERE id = ?`
+  )
+
+  const updateMsgTextStmt = db.prepare<[string, number], void>(
+    `UPDATE messages SET text = ? WHERE id = ?`
+  )
+
+  const updateFtsTextStmt = db.prepare<[string, number], void>(
+    `UPDATE messages_fts SET text = ? WHERE rowid = ?`
+  )
+
   const deleteEmbStmt = db.prepare<[bigint], void>(
     `DELETE FROM message_embeddings WHERE msg_id = ?`
   )
@@ -462,6 +484,14 @@ export function openDatabase(filePath: string): DbInstance {
     ORDER BY timestamp ASC, id ASC
     LIMIT ?
   `)
+
+  const toggleIgnoreStmt = db.prepare<[number], { ignored: number }>(
+    `UPDATE messages SET ignored = CASE WHEN ignored = 0 THEN 1 ELSE 0 END WHERE id = ? RETURNING ignored`
+  )
+
+  const getIgnoredIdsStmt = db.prepare<[], { id: number }>(
+    `SELECT id FROM messages WHERE ignored = 1`
+  )
 
   // ── AI Memory statements ─────────────────────────────────────────────────────
   const insertMemoryStmt = db.prepare(
@@ -573,6 +603,26 @@ export function openDatabase(filePath: string): DbInstance {
     updateContextNote(id, note) {
       updateContextStmt.run(note, id)
     },
+    updateMediaMeta(id, meta) {
+      const row = readMediaMetaStmt.get(id)
+      let existing: Record<string, unknown> = {}
+      if (row?.media_meta) {
+        try { existing = JSON.parse(row.media_meta) } catch { /* ignore */ }
+      }
+      const merged = { ...existing, ...meta }
+      writeMediaMetaStmt.run(JSON.stringify(merged), id)
+    },
+    updateTranscript(id, transcript) {
+      updateMsgTextStmt.run(transcript, id)
+      updateFtsTextStmt.run(transcript, id)
+      const row = readMediaMetaStmt.get(id)
+      let existing: Record<string, unknown> = {}
+      if (row?.media_meta) {
+        try { existing = JSON.parse(row.media_meta) } catch { /* ignore */ }
+      }
+      existing.transcript = transcript
+      writeMediaMetaStmt.run(JSON.stringify(existing), id)
+    },
     deleteEmbedding(msgId) {
       deleteEmbStmt.run(BigInt(msgId))
     },
@@ -670,6 +720,13 @@ export function openDatabase(filePath: string): DbInstance {
     insertChatMessage(chatId, role, content, sources) {
       const r = insertChatMessageStmt.run(chatId, role, content, sources)
       return Number(r.lastInsertRowid)
+    },
+    toggleIgnored(id) {
+      const result = toggleIgnoreStmt.get(id)
+      return result ? result.ignored === 1 : false
+    },
+    getIgnoredIds() {
+      return getIgnoredIdsStmt.all().map((r) => r.id)
     },
     getSurroundingMessages(msgId, limit) {
       const target = getMsgStmt.get(msgId)

@@ -4,7 +4,8 @@ import makeWASocket, {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   Browsers,
-  makeCacheableSignalKeyStore
+  makeCacheableSignalKeyStore,
+  downloadMediaMessage
 } from '@whiskeysockets/baileys'
 import pino, { type Logger } from 'pino'
 import {
@@ -73,6 +74,7 @@ export interface WhatsAppService {
   start(): Promise<void>
   stop(): Promise<void>
   logout(): Promise<void>
+  downloadMedia(msg: WAMessageLike): Promise<Buffer>
   getState(): WAConnectionState
   getCurrentQr(): string | null
   on(event: 'qr', listener: (qr: string) => void): this
@@ -95,6 +97,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
   private pendingMessages: IngestableMessage[] = []
   private stopped = false
   private connecting = false
+  private pendingFlushTimer: ReturnType<typeof setTimeout> | null = null
 
   private readonly authPath: string
   private readonly logger: Logger
@@ -108,6 +111,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
   private readonly maxBackoffMs: number
   private readonly scheduleReconnect: (cb: () => void, ms: number) => unknown
   private readonly cancelReconnect: (handle: unknown) => void
+  private readonly pendingFlushTimeoutMs = 5000
 
   constructor(deps: WhatsAppDeps) {
     super()
@@ -138,6 +142,10 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       })
   }
 
+  async downloadMedia(msg: WAMessageLike): Promise<Buffer> {
+    return downloadMediaMessage(msg as never, 'buffer', {}) as Promise<Buffer>
+  }
+
   getState(): WAConnectionState {
     return this.state
   }
@@ -155,6 +163,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
   async stop(): Promise<void> {
     this.stopped = true
     this.clearReconnect()
+    this.clearPendingFlushTimer()
     if (this.socket?.end) {
       try {
         this.socket.end(undefined)
@@ -169,6 +178,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
     this.stopped = true
     this.currentBackoffMs = 0
     this.clearReconnect()
+    this.clearPendingFlushTimer()
     if (this.socket?.logout) {
       try {
         await this.socket.logout()
@@ -189,6 +199,13 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
     if (this.reconnectHandle !== null && this.reconnectHandle !== undefined) {
       this.cancelReconnect(this.reconnectHandle)
       this.reconnectHandle = null
+    }
+  }
+
+  private clearPendingFlushTimer(): void {
+    if (this.pendingFlushTimer !== null) {
+      clearTimeout(this.pendingFlushTimer)
+      this.pendingFlushTimer = null
     }
   }
 
@@ -364,7 +381,9 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
     for (const msg of messages) {
       const remoteJid = msg.key?.remoteJid
       if (remoteJid) sampleRemoteJids.add(remoteJid)
-      if (!isSelfChat(remoteJid, variants)) {
+      const isSelf = isSelfChat(remoteJid, variants)
+      console.log('[DEBUG] isSelfChat:', isSelf, 'remoteJid:', remoteJid, 'variants:', variants, 'fromMe:', msg.key?.fromMe, 'id:', msg.key?.id)
+      if (!isSelf) {
         skipped++
         continue
       }
@@ -407,12 +426,28 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       },
       `${event} queued until own JID variants are known`
     )
+    if (!this.pendingFlushTimer) {
+      this.pendingFlushTimer = setTimeout(() => {
+        this.pendingFlushTimer = null
+        this.flushPendingMessages('timeout')
+      }, this.pendingFlushTimeoutMs)
+    }
   }
 
   private flushPendingMessages(reason: string): void {
+    this.clearPendingFlushTimer()
     if (this.pendingMessages.length === 0) return
     const variants = this.myJidVariants()
-    if (variants.length === 0) return
+    if (variants.length === 0) {
+      console.log('[DEBUG] flushPendingMessages: variants still empty, rescheduling timeout')
+      if (!this.pendingFlushTimer) {
+        this.pendingFlushTimer = setTimeout(() => {
+          this.pendingFlushTimer = null
+          this.flushPendingMessages('timeout')
+        }, this.pendingFlushTimeoutMs)
+      }
+      return
+    }
 
     const pending = this.pendingMessages
     this.pendingMessages = []
@@ -423,7 +458,9 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       const msg = raw
       const remoteJid = msg.key?.remoteJid
       if (remoteJid) sampleRemoteJids.add(remoteJid)
-      if (!isSelfChat(remoteJid, variants)) {
+      const isSelf = isSelfChat(remoteJid, variants)
+      console.log('[DEBUG] pending flush - isSelfChat:', isSelf, 'remoteJid:', remoteJid, 'variants:', variants)
+      if (!isSelf) {
         skipped++
         continue
       }
@@ -448,6 +485,7 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
     this.stopped = true
     this.currentBackoffMs = 0
     this.clearReconnect()
+    this.clearPendingFlushTimer()
     this.socket = null
     this.authCreds = null
     this.pendingMessages = []

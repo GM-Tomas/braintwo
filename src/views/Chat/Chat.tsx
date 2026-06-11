@@ -246,7 +246,7 @@ export function Chat({ onNavigate, activeChatId, setActiveChatId, loadChats }: C
 
 
       {/* Message list */}
-      <div className="flex-1 overflow-y-auto px-14 py-6">
+      <div className="flex-1 overflow-y-auto px-14 py-8">
         <div className="mx-auto flex max-w-[760px] flex-col gap-5">
           {messages.length === 0 && (
             <div className="py-16 text-center text-[13px] text-bt-dim select-none">

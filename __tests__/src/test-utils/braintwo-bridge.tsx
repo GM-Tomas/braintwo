@@ -152,7 +152,9 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
           const i = errorListeners.indexOf(cb)
           if (i >= 0) errorListeners.splice(i, 1)
         }
-      }
+      },
+      onTranscribing: () => () => {},
+      onTranscribed: () => () => {}
     },
     search: {
       query: spies.searchQuery,

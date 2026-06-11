@@ -44,6 +44,10 @@ export class MessageEntity {
     return this.data.contextNote ?? null
   }
 
+  get ignored(): boolean {
+    return !!this.data.ignored
+  }
+
   getMediaSummary(): string {
     const m = this.media
     if (!m) return 'Sin contenido textual'

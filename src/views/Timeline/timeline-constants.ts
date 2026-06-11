@@ -2,9 +2,9 @@ import type { MessageKind, MessageSource } from '@shared/types'
 import type { IconName } from '@/lib/icons'
 
 export const SOURCE_LABEL: Record<MessageSource, string> = {
-  realtime: 'Tiempo real',
-  'offline-sync': 'Sincronización diferida',
-  'history-sync': 'Histórico',
+  realtime: 'Directo',
+  'offline-sync': 'Offline',
+  'history-sync': 'Historial',
   export: 'Importado'
 }
 
@@ -25,7 +25,7 @@ export interface KindStyle {
 
 export const KIND_STYLE: Record<MessageKind, KindStyle> = {
   text: {
-    icon: 'bolt',
+    icon: 'chat',
     label: 'Texto',
     iconColor: 'text-bt-primary',
     bg: 'rgba(26,143,227,0.08)',

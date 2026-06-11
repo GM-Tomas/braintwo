@@ -46,6 +46,8 @@ export interface BrainTwoApi {
     onMessagesBatch: (cb: (batch: RecentMessage[]) => void) => Unsubscribe
     onSyncStateChanged: (cb: (status: SyncStatus) => void) => Unsubscribe
     onError: (cb: (error: AppErrorEvent) => void) => Unsubscribe
+    onTranscribing: (cb: (payload: { msgId: number }) => void) => Unsubscribe
+    onTranscribed: (cb: (payload: { msgId: number; transcript: string }) => void) => Unsubscribe
   }
   search: {
     query: (text: string, k?: number) => Promise<SearchResult[]>
@@ -63,6 +65,10 @@ export interface BrainTwoApi {
     onConnectionState: (cb: (state: WAConnectionState) => void) => Unsubscribe
     onQr: (cb: (qr: string) => void) => Unsubscribe
     onLoggedOut: (cb: () => void) => Unsubscribe
+  }
+  ignore: {
+    toggle: (msgId: number) => Promise<boolean>
+    getIds: () => Promise<number[]>
   }
   ai: {
     getConfig: () => Promise<AiConfig | null>
@@ -150,7 +156,9 @@ export function createApi(
       openUserDataFolder: () => ipcRenderer.invoke('app:open-userdata-folder'),
       onMessagesBatch: subscribe<RecentMessage[]>('app:messages-batch'),
       onSyncStateChanged: subscribe<SyncStatus>('sync:state-changed'),
-      onError: subscribe<AppErrorEvent>('app:error')
+      onError: subscribe<AppErrorEvent>('app:error'),
+      onTranscribing: subscribe<{ msgId: number }>('audio:transcribing'),
+      onTranscribed: subscribe<{ msgId: number; transcript: string }>('audio:transcribed')
     },
     search: {
       query: (text: string, k = 12) => ipcRenderer.invoke('search:query', text, k),
@@ -169,8 +177,12 @@ export function createApi(
       onQr: subscribe<string>('wa:qr'),
       onLoggedOut: subscribe<void>('wa:logged-out')
     },
+    ignore: {
+      toggle: (msgId: number) => ipcRenderer.invoke('ignore:toggle', msgId),
+      getIds: () => ipcRenderer.invoke('ignore:get-ids')
+    },
     ai: {
-      getConfig: () => ipcRenderer.invoke('ai:get-config'),
+    getConfig: () => ipcRenderer.invoke('ai:get-config'),
       setConfig: (config: Partial<AiConfig>) => ipcRenderer.invoke('ai:set-config', config),
       send: (messages: ChatMessage[], goodSourceId?: number, chatId?: number) => ipcRenderer.invoke('ai:send', messages, goodSourceId, chatId),
       listChats: () => ipcRenderer.invoke('ai:list-chats'),

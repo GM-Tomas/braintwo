@@ -15,4 +15,12 @@ export class SqliteMessageRepository implements IMessageRepository {
   getMessageById(id: number): RecentMessage | null {
     return this.ingest.getById(id)
   }
+
+  toggleIgnored(id: number): boolean {
+    return this.ingest.toggleIgnored(id)
+  }
+
+  getIgnoredIds(): number[] {
+    return this.ingest.getIgnoredIds()
+  }
 }
