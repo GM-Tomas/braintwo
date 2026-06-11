@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MessageKind, ModelProgress, SearchResult, MessageSource } from '@shared/types'
 import { PageHeader } from '../../components/PageHeader'
-import { useDateFormatter } from '@/hooks/useDateFormatter'
 import { useIpcSubscription } from '@/hooks/useIpcSubscription'
 import { useDependencies } from '@/core/infrastructure/DependenciesContext'
 import { MessageEntity } from '@shared/domain/message.entity'
@@ -148,8 +147,21 @@ export function Timeline() {
     return () => window.removeEventListener('keydown', handler)
   }, [selected])
 
-  const formatter = useDateFormatter({ dateStyle: 'short', timeStyle: 'short' })
-  const searchFormatter = useDateFormatter({ dateStyle: 'medium', timeStyle: 'short' })
+  const formatRelativeTime = useCallback((ts: number) => {
+    const diff = Date.now() - ts
+    const s = Math.floor(diff / 1000)
+    const m = Math.floor(s / 60)
+    const h = Math.floor(m / 60)
+    const d = Math.floor(h / 24)
+    if (s < 60) return 'Ahora'
+    if (m < 60) return `Hace ${m} min`
+    if (h < 24) return `Hace ${h} h`
+    if (d === 1) return 'Ayer'
+    if (d < 7) return `Hace ${d} días`
+    const date = new Date(ts)
+    const months = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+    return `${date.getDate()} ${months[date.getMonth()]}`
+  }, [])
 
   const filteredForCounts = useMemo(() => {
     return messages.filter((m) => {
@@ -341,7 +353,7 @@ export function Timeline() {
                         <NoteRow
                           key={r.id}
                           message={m}
-                          formatted={searchFormatter.format(new Date(r.timestamp))}
+                          formatted={formatRelativeTime(r.timestamp)}
                           isSelected={false}
                           onClick={() => setSelected(m)}
                           similarity={r.similarity}
@@ -378,7 +390,7 @@ export function Timeline() {
                           <NoteRow
                             key={m.id}
                             message={m}
-                            formatted={formatter.format(new Date(m.timestamp))}
+                            formatted={formatRelativeTime(m.timestamp)}
                             isSelected={selected ? (selected as MessageEntity).id === m.id : false}
                             onClick={() => setSelected(m)}
                             transcribing={transcriptions[m.id]?.transcribing}

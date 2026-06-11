@@ -129,6 +129,7 @@ export function NoteRow({
             </button>
             <time
               dateTime={new Date(message.timestamp).toISOString()}
+              title={new Date(message.timestamp).toLocaleString('es-AR', { dateStyle: 'long', timeStyle: 'short' })}
               className="ml-auto text-[11px] text-bt-dim whitespace-nowrap"
             >
               {formatted}
