@@ -31,8 +31,8 @@ const FTU_STEPS: FTUStepDef[] = [
   {
     kind: 'feature',
     icon: 'home',
-    title: 'TU TIMELINE PERSONAL',
-    body: 'Tu actividad de WhatsApp ordenada cronológicamente — un feed de lo que importa, sin algoritmo.',
+    title: 'TU MEMORIA DIGITAL',
+    body: 'Tu información de WhatsApp organizada para que puedas encontrar ideas, recordatorios y datos importantes cuando los necesites.',
   },
   { kind: 'qr' },
 ]

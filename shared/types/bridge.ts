@@ -25,6 +25,7 @@ export interface DbStats {
 export interface UserSettings {
   autostart: boolean
   userDataPath: string
+  textSize: 'small' | 'medium' | 'large'
 }
 
 export interface BrainTwoBridge {

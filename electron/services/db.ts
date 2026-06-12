@@ -346,7 +346,7 @@ export function openDatabase(filePath: string): DbInstance {
         'BrainTwo es un segundo cerebro digital personal que se conecta de manera segura a tu WhatsApp para indexar, buscar y organizar tus mensajes, audios y enlaces.',
         'Toda la información y base de datos de BrainTwo se almacena localmente de forma privada en tu computadora. Nada sale de tu máquina.',
         'Puedes usar la sección de Búsqueda de BrainTwo para encontrar de manera instantánea cualquier mensaje, conversación, audio transcrito o link que hayas enviado o recibido sin tener que scrollear.',
-        'La sección del Timeline de la aplicación muestra tu actividad de WhatsApp de manera puramente cronológica, creando un feed limpio y útil libre de algoritmos.',
+        'La memoria digital de BrainTwo organiza tu información de WhatsApp para que puedas encontrar ideas, recordatorios y datos importantes cuando los necesites.',
         'En la sección de Chat IA, puedes interactuar directamente con un asistente inteligente que tiene acceso a tu memoria global y contexto para ayudarte a responder preguntas sobre tus chats.',
         'El asistente de chat utiliza la memoria global para aprender de ti a lo largo del tiempo y para proporcionarte información precisa sobre el funcionamiento de la aplicación.',
         'Puedes preguntarle al Chat IA cosas sobre BrainTwo, como "¿qué es?", "¿dónde se guardan mis datos?" o pedirle sugerencias de uso.',

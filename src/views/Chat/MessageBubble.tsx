@@ -43,7 +43,7 @@ export function MessageBubble({
   return (
     <div className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
       {isUser ? (
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-bt-primary text-[11px] font-semibold text-white">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-bt-user-bubble-border bg-bt-user-bubble text-[11px] font-semibold text-bt-user-bubble-text">
           T
         </div>
       ) : (
@@ -54,7 +54,7 @@ export function MessageBubble({
         <div
           className={`rounded-[12px] px-4 py-3 text-[14px] leading-relaxed whitespace-pre-wrap ${
             isUser
-               ? 'bg-bt-primary text-white'
+               ? 'border border-bt-user-bubble-border bg-bt-user-bubble text-bt-user-bubble-text'
                : 'border border-bt-border bg-bt-surf text-bt-text'
           }`}
         >

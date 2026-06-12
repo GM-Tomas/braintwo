@@ -77,6 +77,11 @@ describe('<Timeline />', () => {
     expect(screen.getByText('Mis mensajes')).toBeInTheDocument()
   })
 
+  it('leaves the dashboard deselected by default', () => {
+    render(<Timeline />)
+    expect(screen.getByRole('button', { name: /Dashboard/ })).toHaveClass('bg-transparent')
+  })
+
   it('shows empty-state when there are no messages', async () => {
     render(<Timeline />)
     expect(

@@ -8,6 +8,7 @@ import type {
   RecentMessage,
   SearchResult,
   SyncStatus,
+  UserSettings,
   WAConnectionState
 } from '@shared/types'
 
@@ -82,13 +83,15 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
       stalePrimaryDays: 0,
       newMessages: 0
     })),
-    getSettings: vi.fn(async () => ({
+    getSettings: vi.fn(async (): Promise<UserSettings> => ({
       autostart: true,
-      userDataPath: 'C:\\Users\\admin\\AppData\\Roaming\\BrainTwo'
+      userDataPath: 'C:\\Users\\admin\\AppData\\Roaming\\BrainTwo',
+      textSize: 'small'
     })),
-    setSettings: vi.fn(async (patch) => ({
+    setSettings: vi.fn(async (patch): Promise<UserSettings> => ({
       autostart: patch.autostart ?? true,
-      userDataPath: 'C:\\Users\\admin\\AppData\\Roaming\\BrainTwo'
+      userDataPath: 'C:\\Users\\admin\\AppData\\Roaming\\BrainTwo',
+      textSize: patch.textSize ?? 'small'
     })),
     getDbStats: vi.fn(async () => ({
       messages: opts.initialMessageCount ?? 0,

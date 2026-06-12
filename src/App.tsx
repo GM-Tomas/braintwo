@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { AppErrorEvent, DbChat, View, WAConnectionState } from '@shared/types'
+import type { AppErrorEvent, DbChat, UserSettings, View, WAConnectionState } from '@shared/types'
 import { Onboarding, FTU } from './views/Onboarding'
 import { Search } from './views/Search'
 import { Timeline } from './views/Timeline'
@@ -10,9 +10,15 @@ import { useDependencies } from '@/core/infrastructure/DependenciesContext'
 import { ConnectionEntity } from '@shared/domain/connection.entity'
 
 type Phase = 'welcome' | 'qr' | 'app'
+type TextSize = UserSettings['textSize']
 
 const FTU_KEY = 'braintwo:ftu-seen'
 const ONBOARDED_KEY = 'braintwo:onboarded'
+const TEXT_SCALE: Record<TextSize, string> = {
+  small: '1',
+  medium: '1.08',
+  large: '1.16'
+}
 
 function readFlag(key: string): boolean {
   try {
@@ -50,6 +56,7 @@ export default function App() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [syncStatus, setSyncStatus] = useState<ConnectionEntity | null>(null)
   const [appError, setAppError] = useState<AppErrorEvent | null>(null)
+  const [textSize, setTextSize] = useState<TextSize>('small')
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
       const saved = localStorage.getItem('braintwo:theme')
@@ -79,8 +86,8 @@ export default function App() {
 Este es tu segundo cerebro digital, diseñado para ayudarte a buscar, recordar y analizar todo lo que pasa por tu WhatsApp de forma 100% segura y local. 🔒💻
 
 Aquí tienes un resumen de lo que puedes hacer:
-1. 🔍 **Buscador Inteligente**: Encuentra mensajes, enlaces y transcripciones de audios al instante desde la pestaña de **Búsqueda**.
-2. 📅 **Timeline**: Revisa todo tu historial de forma cronológica, como un feed personal limpio y sin algoritmos.
+1. 🔍 **Buscador Inteligente**: Busca en tus conversaciones, enlaces y audios transcritos para encontrar la información que necesitas en segundos.
+2. 🧠 **Memoria Digital**: Accede a tu información importante de WhatsApp organizada para recuperar ideas, recordatorios, links y datos cuando los necesites.
 3. 💬 **Asistente IA**: Este chat sirve para conversar con un asistente de Inteligencia Artificial que tiene acceso a tus conversaciones y a la memoria de la aplicación.
 
 ¡Pregúntame lo que quieras! Por ejemplo:
@@ -145,6 +152,10 @@ Aquí tienes un resumen de lo que puedes hacer:
   }, [view, loadChats])
 
   useEffect(() => {
+    document.documentElement.style.setProperty('--bt-ui-scale', TEXT_SCALE[textSize])
+  }, [textSize])
+
+  useEffect(() => {
     try {
       localStorage.setItem('braintwo:theme', theme)
     } catch {
@@ -169,6 +180,7 @@ Aquí tienes un resumen de lo que puedes hacer:
     void connectionService.getConnectionState().then(setWaState)
     void settingsRepository.getVersion().then(setVersion)
     void settingsRepository.getPlatform().then((p) => setPlatform(p as NodeJS.Platform))
+    void settingsRepository.getSettings().then((settings) => setTextSize(settings.textSize))
     void connectionService.getSyncStatus().then(setSyncStatus)
     
     void connectionService.getCurrentQr().then((qr) => {
@@ -246,7 +258,7 @@ Aquí tienes un resumen de lo que puedes hacer:
 
   if (phase === 'welcome' || phase === 'qr') {
     return (
-      <div className="flex h-full bg-bt-bg text-bt-text font-sans">
+      <div className="bt-app-shell flex h-full bg-bt-bg text-bt-text font-sans">
         <main className="relative flex flex-1 flex-col overflow-hidden">
           <div className="app-drag absolute inset-x-0 top-0 h-9 z-10" />
           <FTU startAtQr={phase === 'qr'} theme={theme} toggleTheme={toggleTheme} />
@@ -256,7 +268,7 @@ Aquí tienes un resumen de lo que puedes hacer:
   }
 
   return (
-    <div className="flex h-full bg-bt-bg text-bt-text font-sans">
+    <div className="bt-app-shell flex h-full bg-bt-bg text-bt-text font-sans">
       <Sidebar
         view={view}
         setView={setView}
@@ -301,7 +313,13 @@ Aquí tienes un resumen de lo que puedes hacer:
             loadChats={loadChats}
           />
         )}
-        {view === 'settings' && <Settings onLogout={() => setShowLogoutConfirm(true)} />}
+        {view === 'settings' && (
+          <Settings
+            onLogout={() => setShowLogoutConfirm(true)}
+            textSize={textSize}
+            onTextSizeChange={setTextSize}
+          />
+        )}
       </main>
       {appError && (
         <div className="fixed bottom-5 right-5 z-50 max-w-[360px] rounded-[8px] border border-bt-red/40 bg-bt-surf px-4 py-3 text-sm text-bt-text shadow-bt-modal">

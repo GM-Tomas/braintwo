@@ -24,9 +24,9 @@ export function Timeline() {
 
   const [showDashboard, setShowDashboard] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('braintwo:show-dashboard') !== '0'
+      return localStorage.getItem('braintwo:show-dashboard') === '1'
     } catch {
-      return true
+      return false
     }
   })
   const [dateRange, setDateRange] = useState<'all' | 'today' | '7days' | 'month'>('all')

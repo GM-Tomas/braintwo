@@ -28,6 +28,9 @@ export default {
           red: 'var(--bt-red)',
           'send-btn': 'var(--bt-send-btn-bg)',
           'send-btn-hover': 'var(--bt-send-btn-bg-hover)',
+          'user-bubble': 'var(--bt-user-bubble-bg)',
+          'user-bubble-text': 'var(--bt-user-bubble-text)',
+          'user-bubble-border': 'var(--bt-user-bubble-border)',
           brand: 'var(--bt-brand)'
         }
       },
