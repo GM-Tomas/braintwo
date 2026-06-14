@@ -2,7 +2,7 @@ import type { AiConfig } from '@shared/types'
 import { logError } from './logger'
 import type { ContextableMessage, DbInstance, MediaMeta, MessageKind } from './db'
 import type { EmbeddingService } from './embeddings'
-import { callProvider } from './ai-provider'
+import { callProvider, isAiConfigured } from './ai-provider'
 
 export interface ContextService {
   queue(id: number, kind: MessageKind, text: string, media: MediaMeta | null, timestamp: number): void
@@ -73,7 +73,7 @@ export function createContextService(deps: ContextServiceDeps): ContextService {
     try {
       while (pending.length > 0) {
         const config = deps.getAiConfig()
-        if (!config?.apiKey) break
+        if (!isAiConfigured(config)) break
 
         const item = pending.shift()!
         queued.delete(item.id)
@@ -126,7 +126,7 @@ export function createContextService(deps: ContextServiceDeps): ContextService {
 
     async backfill() {
       const config = deps.getAiConfig()
-      if (!config?.apiKey) return
+      if (!isAiConfigured(config)) return
 
       // Limit per-session backfill to avoid excessive API calls on large archives
       const rows: ContextableMessage[] = deps.db.listMessagesWithoutContext(300)

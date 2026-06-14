@@ -6,6 +6,7 @@ import type { ContextService } from './context'
 import type { WhatsAppService } from './whatsapp'
 import type { WAMessageLike } from './ingest'
 import { describeImage } from './vision'
+import { isAiConfigured } from './ai-provider'
 
 export interface ImageIngestDeps {
   whatsapp: WhatsAppService
@@ -63,7 +64,7 @@ export async function processImageMessage(
     console.error('[vision] Failed to download/save image:', err)
   }
 
-  if (!config?.apiKey || !buffer) {
+  if (!isAiConfigured(config) || !buffer) {
     deps.contextSvc?.queue(rowId, 'image', caption, mediaMeta, timestampMs)
     return
   }
@@ -73,16 +74,26 @@ export async function processImageMessage(
 
     let text = caption
     if (description) {
-      deps.db.updateMediaMeta(rowId, { visionDescription: description })
+      deps.db.updateMediaMeta(rowId, { visionDescription: description, visionError: undefined })
       text = caption ? `${caption}\n${description}` : description
       // Persist the description into the message text (+FTS) so it's searchable
       // by keyword and surfaced to the AI chat, which reads the `text` column.
       deps.db.updateText(rowId, text)
+    } else {
+      // The model was attempted (AI configured, image downloaded) but produced
+      // no usable description — surface this in the UI instead of leaving the
+      // user wondering why the image isn't searchable.
+      deps.db.updateMediaMeta(rowId, {
+        visionError: 'El modelo de visión configurado no pudo describir esta imagen.'
+      })
     }
 
     deps.contextSvc?.queue(rowId, 'image', text, mediaMeta, timestampMs)
   } catch (err) {
     console.error('[vision] Error:', err)
+    deps.db.updateMediaMeta(rowId, {
+      visionError: 'Ocurrió un error al generar la descripción de la imagen.'
+    })
     deps.contextSvc?.queue(rowId, 'image', caption, mediaMeta, timestampMs)
   }
 }

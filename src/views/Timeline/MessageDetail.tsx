@@ -213,6 +213,11 @@ export function MessageDetail({ message, onClose, onToggleIgnore }: MessageDetai
                   >
                     {reprocessing ? 'Reprocesando…' : 'Reprocesar descripción'}
                   </button>
+                  {view.media?.visionError && !view.media?.visionDescription ? (
+                    <p className="text-[12px] text-bt-amber">
+                      {view.media.visionError}
+                    </p>
+                  ) : null}
                 </div>
               ) : (
                 <div className="mt-2 flex flex-col items-start gap-3 rounded-lg border border-bt-border bg-bt-hover px-4 py-3.5">
@@ -281,7 +286,8 @@ export function MessageDetail({ message, onClose, onToggleIgnore }: MessageDetai
                       v != null &&
                       k !== 'imageLocalPath' &&
                       k !== 'audioLocalPath' &&
-                      k !== 'visionDescription'
+                      k !== 'visionDescription' &&
+                      k !== 'visionError'
                   )
                   .map(([key, value]) => (
                     <div key={key} className="grid grid-cols-3 gap-4 px-4 py-3">

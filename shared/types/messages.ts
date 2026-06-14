@@ -27,6 +27,9 @@ export interface MediaMeta {
   caption?: string
   /** AI-generated description of the image content (for search + chat). */
   visionDescription?: string
+  /** Set when an AI vision model was attempted but failed/returned nothing,
+   *  so the UI can tell "no description yet" apart from "couldn't process". */
+  visionError?: string
 }
 
 export interface RecentMessage {

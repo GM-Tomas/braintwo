@@ -25,6 +25,14 @@ export const DEFAULT_VISION_MODELS: Record<AiConfig['provider'], string> = {
   ollama: 'qwen3.5:4b'
 }
 
+// Ollama (local) doesn't use an apiKey, so `config.apiKey` being empty doesn't
+// mean "AI not configured" for that provider — check `ollama.enabled` instead.
+export function isAiConfigured(config: AiConfig | null | undefined): config is AiConfig {
+  if (!config) return false
+  if (config.provider === 'ollama') return !!config.ollama?.enabled
+  return !!config.apiKey
+}
+
 export async function callProvider(args: ProviderCallArgs): Promise<string> {
   try {
     switch (args.config.provider) {

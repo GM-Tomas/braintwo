@@ -29,6 +29,9 @@ export interface MediaMeta {
    *  combined `text`, which also holds the AI description). */
   caption?: string
   visionDescription?: string
+  /** Set when an AI vision model was attempted but failed/returned nothing,
+   *  so the UI can tell "no description yet" apart from "couldn't process". */
+  visionError?: string
 }
 
 export interface NewMessage {
