@@ -16,6 +16,15 @@ const DEFAULT_MODELS: Record<AiConfig['provider'], string> = {
   ollama: 'qwen3:1.7b'
 }
 
+export const DEFAULT_VISION_MODELS: Record<AiConfig['provider'], string> = {
+  anthropic: 'claude-haiku-4-5',
+  'openai-compat': 'gpt-4o-mini',
+  gemini: 'gemini-2.0-flash',
+  deepseek: 'deepseek-v4-pro',
+  'opencode-zen': 'big-pickle',
+  ollama: 'qwen3.5:4b'
+}
+
 export async function callProvider(args: ProviderCallArgs): Promise<string> {
   try {
     switch (args.config.provider) {
@@ -47,6 +56,17 @@ export async function callProvider(args: ProviderCallArgs): Promise<string> {
 
 // ── Anthropic ────────────────────────────────────────────────────────────────
 
+function toAnthropicContent(m: ChatMessage): string | Array<Record<string, unknown>> {
+  if (!m.images?.length) return m.content
+  return [
+    ...m.images.map((img) => ({
+      type: 'image',
+      source: { type: 'base64', media_type: img.mimetype, data: img.data }
+    })),
+    { type: 'text', text: m.content }
+  ]
+}
+
 async function callAnthropic({ config, systemPrompt, messages }: ProviderCallArgs): Promise<string> {
   const model = config.model?.trim() || DEFAULT_MODELS.anthropic
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -60,7 +80,7 @@ async function callAnthropic({ config, systemPrompt, messages }: ProviderCallArg
       model,
       max_tokens: 1024,
       system: systemPrompt,
-      messages: messages.map((m) => ({ role: m.role, content: m.content }))
+      messages: messages.map((m) => ({ role: m.role, content: toAnthropicContent(m) }))
     })
   })
   if (!res.ok) {
@@ -72,6 +92,17 @@ async function callAnthropic({ config, systemPrompt, messages }: ProviderCallArg
 }
 
 // ── OpenAI-compatible (OpenAI, Groq, Ollama, LM Studio, Together AI) ─────────
+
+function toOpenAiContent(m: ChatMessage): string | Array<Record<string, unknown>> {
+  if (!m.images?.length) return m.content
+  return [
+    { type: 'text', text: m.content },
+    ...m.images.map((img) => ({
+      type: 'image_url',
+      image_url: { url: `data:${img.mimetype};base64,${img.data}` }
+    }))
+  ]
+}
 
 async function callOpenAiCompat({ config, systemPrompt, messages }: ProviderCallArgs): Promise<string> {
   const model = config.model?.trim() || DEFAULT_MODELS['openai-compat']
@@ -87,7 +118,7 @@ async function callOpenAiCompat({ config, systemPrompt, messages }: ProviderCall
       model,
       messages: [
         { role: 'system', content: systemPrompt },
-        ...messages.map((m) => ({ role: m.role, content: m.content }))
+        ...messages.map((m) => ({ role: m.role, content: toOpenAiContent(m) }))
       ]
     })
   })
@@ -115,7 +146,12 @@ async function callGemini({ config, systemPrompt, messages }: ProviderCallArgs):
       system_instruction: { parts: [{ text: systemPrompt }] },
       contents: turns.map((m) => ({
         role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
+        parts: [
+          ...(m.images ?? []).map((img) => ({
+            inline_data: { mime_type: img.mimetype, data: img.data }
+          })),
+          { text: m.content }
+        ]
       }))
     })
   })

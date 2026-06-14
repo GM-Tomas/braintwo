@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { RecentMessage } from '@shared/types'
 import { MessageEntity } from '@shared/domain/message.entity'
 import { Icon } from '@/lib/icons'
 import { formatBytes, formatDuration } from '@/lib/format'
@@ -13,7 +14,8 @@ const MEDIA_KEY_LABEL: Record<string, string> = {
   ptt: 'Nota de voz',
   height: 'Alto',
   width: 'Ancho',
-  pageCount: 'Páginas'
+  pageCount: 'Páginas',
+  caption: 'Texto del usuario'
 }
 
 interface MessageDetailProps {
@@ -24,10 +26,82 @@ interface MessageDetailProps {
 
 export function MessageDetail({ message, onClose, onToggleIgnore }: MessageDetailProps) {
   const panelRef = useRef<HTMLDivElement>(null)
-  const style = KIND_STYLE[message.kind] ?? KIND_STYLE.other
-  const isIgnored = !!message.ignored
+
+  // Re-fetched data after a reprocess, so the panel reflects the new description
+  // / context note without having to reopen the message. Falls back to the prop.
+  const [live, setLive] = useState<RecentMessage | null>(null)
+  useEffect(() => setLive(null), [message.id])
+  const view = live ? new MessageEntity(live) : message
+
+  const style = KIND_STYLE[view.kind] ?? KIND_STYLE.other
+  const isIgnored = !!view.ignored
 
   const longFormatter = useDateFormatter({ dateStyle: 'long', timeStyle: 'short' })
+
+  // Lazy-load the stored image (as a data URL) for image messages. We always
+  // try to read it from disk (via IPC) rather than relying on the in-memory
+  // `imageLocalPath`, which is set asynchronously after the image is downloaded.
+  const isImage = message.kind === 'image'
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const [imageLoading, setImageLoading] = useState(false)
+  const [reprocessing, setReprocessing] = useState(false)
+  const loadImage = () => {
+    setImageLoading(true)
+    return window.braintwo.app
+      .readImage(message.id)
+      .then(setImageUrl)
+      .finally(() => setImageLoading(false))
+  }
+  useEffect(() => {
+    if (!isImage) {
+      setImageUrl(null)
+      return
+    }
+    let active = true
+    setImageLoading(true)
+    void window.braintwo.app
+      .readImage(message.id)
+      .then((url) => {
+        if (active) setImageUrl(url)
+      })
+      .finally(() => {
+        if (active) setImageLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [isImage, message.id])
+
+  // The context note is regenerated asynchronously (background queue, ~6s), so
+  // poll until it actually CHANGES from the previous value (not just until it's
+  // present — the old note is already present right after reprocessing).
+  const pollContextNote = async (prevNote: string | null) => {
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setTimeout(r, 3000))
+      const fresh = await window.braintwo.app.getMessageById(message.id)
+      if (fresh) {
+        setLive(fresh)
+        if (fresh.contextNote && fresh.contextNote !== prevNote) break
+      }
+    }
+  }
+
+  const handleReprocess = async () => {
+    setReprocessing(true)
+    const prevNote = view.contextNote
+    try {
+      const ok = await window.braintwo.app.reprocessImage(message.id)
+      if (ok) {
+        await loadImage()
+        // The description (text) is written synchronously, so a refetch shows it now.
+        const fresh = await window.braintwo.app.getMessageById(message.id)
+        if (fresh) setLive(fresh)
+        void pollContextNote(prevNote)
+      }
+    } finally {
+      setReprocessing(false)
+    }
+  }
 
   const rows = [
     { label: 'ID SQLite', value: message.id },
@@ -119,12 +193,53 @@ export function MessageDetail({ message, onClose, onToggleIgnore }: MessageDetai
       {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto px-8 py-6">
         <div className="mx-auto max-w-[720px] space-y-6">
+          {/* Image preview */}
+          {isImage ? (
+            <section>
+              <SectionLabel>Imagen</SectionLabel>
+              {imageUrl ? (
+                <div className="mt-2 flex flex-col items-start gap-2">
+                  <img
+                    src={imageUrl}
+                    alt={view.contextNote ?? 'Imagen recibida'}
+                    className="max-h-[480px] w-auto rounded-lg border border-bt-border"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleReprocess()}
+                    disabled={reprocessing}
+                    className="flex h-7 items-center gap-1.5 rounded-lg border border-bt-border px-2.5 text-[11px] font-medium text-bt-muted transition-colors hover:border-bt-primary/30 hover:text-bt-primary disabled:opacity-50"
+                    title="Vuelve a descargar la imagen y regenera su descripción con la IA"
+                  >
+                    {reprocessing ? 'Reprocesando…' : 'Reprocesar descripción'}
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-2 flex flex-col items-start gap-3 rounded-lg border border-bt-border bg-bt-hover px-4 py-3.5">
+                  <p className="text-[13px] text-bt-dim italic">
+                    {imageLoading ? 'Cargando imagen…' : 'Imagen no disponible'}
+                  </p>
+                  {!imageLoading ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleReprocess()}
+                      disabled={reprocessing}
+                      className="flex h-8 items-center gap-1.5 rounded-lg border border-bt-primary/30 px-3 text-xs font-medium text-bt-primary transition-colors hover:bg-bt-primary/[0.08] disabled:opacity-50"
+                    >
+                      {reprocessing ? 'Procesando…' : 'Descargar y procesar imagen'}
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </section>
+          ) : null}
+
           {/* Text content */}
-          {message.text ? (
+          {view.text ? (
             <section>
               <SectionLabel>Contenido</SectionLabel>
               <p className="mt-2 whitespace-pre-wrap rounded-lg border border-bt-border bg-bt-hover px-4 py-3.5 text-[14px] leading-relaxed text-bt-text">
-                {message.text}
+                {view.text}
               </p>
             </section>
           ) : null}
@@ -132,9 +247,9 @@ export function MessageDetail({ message, onClose, onToggleIgnore }: MessageDetai
           {/* Context note — generated by AI for semantic search enrichment */}
           <section>
             <SectionLabel>Contexto para búsqueda</SectionLabel>
-            {message.contextNote ? (
+            {view.contextNote ? (
               <p className="mt-2 whitespace-pre-wrap rounded-lg border border-bt-primary/20 bg-bt-primary/[0.06] px-4 py-3.5 text-[14px] leading-relaxed text-bt-text">
-                {message.contextNote}
+                {view.contextNote}
               </p>
             ) : (
               <p className="mt-2 rounded-lg border border-bt-border bg-bt-hover px-4 py-3.5 text-[13px] text-bt-dim italic">
@@ -156,12 +271,18 @@ export function MessageDetail({ message, onClose, onToggleIgnore }: MessageDetai
           </CollapsibleSection>
 
           {/* Media metadata */}
-          {message.media ? (
+          {view.media ? (
             <section>
               <SectionLabel>Metadatos de archivo</SectionLabel>
               <dl className="mt-2 divide-y divide-bt-border rounded-lg border border-bt-border bg-bt-surf overflow-hidden">
-                {Object.entries(message.media)
-                  .filter(([, v]) => v != null)
+                {Object.entries(view.media)
+                  .filter(
+                    ([k, v]) =>
+                      v != null &&
+                      k !== 'imageLocalPath' &&
+                      k !== 'audioLocalPath' &&
+                      k !== 'visionDescription'
+                  )
                   .map(([key, value]) => (
                     <div key={key} className="grid grid-cols-3 gap-4 px-4 py-3">
                       <dt className="text-[12px] font-medium text-bt-dim">{MEDIA_KEY_LABEL[key] ?? key}</dt>

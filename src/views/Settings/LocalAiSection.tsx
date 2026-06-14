@@ -27,6 +27,10 @@ const MORE_MODELS = [
 
 const ALL_CATALOG = [...RECOMMENDED_MODELS, ...MORE_MODELS]
 
+// Subset of the catalog with vision (image) support, for the "vision model" picker.
+const VISION_RECOMMENDED = RECOMMENDED_MODELS.filter(m => m.hint.includes('imágenes'))
+const VISION_MORE = MORE_MODELS.filter(m => m.hint.includes('imágenes'))
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatBytes(bytes: number): string {
@@ -105,12 +109,24 @@ interface ModelDropdownProps {
   activeModel: string
   isPulling: boolean
   catalogEnabled: boolean
+  recommendedModels?: typeof RECOMMENDED_MODELS
+  moreModels?: typeof MORE_MODELS
   onSelect: (name: string) => void
   onDownload: (name: string) => void
   onDelete: (name: string) => void
 }
 
-function ModelDropdown({ installedModels, activeModel, isPulling, catalogEnabled, onSelect, onDownload, onDelete }: ModelDropdownProps) {
+function ModelDropdown({
+  installedModels,
+  activeModel,
+  isPulling,
+  catalogEnabled,
+  recommendedModels = RECOMMENDED_MODELS,
+  moreModels = MORE_MODELS,
+  onSelect,
+  onDownload,
+  onDelete
+}: ModelDropdownProps) {
   const [open, setOpen] = useState(false)
   const [showMore, setShowMore] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -197,7 +213,7 @@ function ModelDropdown({ installedModels, activeModel, isPulling, catalogEnabled
           {catalogEnabled ? (
             <>
               <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wider text-bt-dim font-medium">Recomendados</div>
-              {RECOMMENDED_MODELS.map(m => (
+              {recommendedModels.map(m => (
                 <ModelRow key={m.name} {...m} installed={isInstalled(m.name)} isActive={activeModel === m.name && isInstalled(m.name)} />
               ))}
 
@@ -211,7 +227,7 @@ function ModelDropdown({ installedModels, activeModel, isPulling, catalogEnabled
               {showMore && (
                 <>
                   <div className="px-3 pt-1 pb-1 text-[10px] uppercase tracking-wider text-bt-dim font-medium bg-bt-bg/40">Avanzados</div>
-                  {MORE_MODELS.map(m => (
+                  {moreModels.map(m => (
                     <ModelRow key={m.name} {...m} installed={isInstalled(m.name)} isActive={activeModel === m.name && isInstalled(m.name)} />
                   ))}
                 </>
@@ -277,10 +293,12 @@ function ModeCard({
 
 interface LocalAiSectionProps {
   activeModel: string
+  visionModel: string
   serverUrl: string
   autoStart: boolean
   ollamaMode: 'ollama' | 'manual'
   onModelChange: (model: string) => void
+  onVisionModelChange: (model: string) => void
   onServerUrlChange: (url: string) => void
   onAutoStartChange: (v: boolean) => void
   onModeChange: (mode: 'ollama' | 'manual') => void
@@ -288,10 +306,12 @@ interface LocalAiSectionProps {
 
 export function LocalAiSection({
   activeModel,
+  visionModel,
   serverUrl,
   autoStart,
   ollamaMode,
   onModelChange,
+  onVisionModelChange,
   onServerUrlChange,
   onAutoStartChange,
   onModeChange
@@ -406,7 +426,7 @@ export function LocalAiSection({
     }
   }
 
-  const handlePull = async (modelName: string) => {
+  const handlePull = async (modelName: string, onSelected: (name: string) => void = onModelChange) => {
     setError(null)
     setPullProgress({ model: modelName, status: 'Iniciando…', done: false })
     try {
@@ -415,7 +435,7 @@ export function LocalAiSection({
       const models = await ollamaService.listModels()
       setInstalledModels(models)
       if (models.some(m => m.name === modelName)) {
-        onModelChange(modelName)
+        onSelected(modelName)
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al descargar el modelo')
@@ -431,6 +451,7 @@ export function LocalAiSection({
       const models = await ollamaService.listModels()
       setInstalledModels(models)
       if (activeModel === modelName) onModelChange('')
+      if (visionModel === modelName) onVisionModelChange('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al eliminar el modelo')
     }
@@ -574,6 +595,25 @@ export function LocalAiSection({
             </div>
           )}
 
+          {/* Vision model selector */}
+          {status === 'running' && !pullProgress && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">Modelo de visión (opcional)</span>
+              <ModelDropdown
+                installedModels={installedModels}
+                activeModel={visionModel}
+                isPulling={false}
+                catalogEnabled={true}
+                recommendedModels={VISION_RECOMMENDED}
+                moreModels={VISION_MORE}
+                onSelect={onVisionModelChange}
+                onDownload={(name) => void handlePull(name, onVisionModelChange)}
+                onDelete={(name) => void handleDeleteModel(name)}
+              />
+              <span className="text-[11px] text-bt-dim">Se usa para describir imágenes recibidas. Si no elegís uno, no se analizan imágenes.</span>
+            </div>
+          )}
+
           {/* Auto-start toggle */}
           {!ollamaNotInstalled && (
             <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -654,6 +694,22 @@ export function LocalAiSection({
                     onDownload={(name) => void handlePull(name)}
                     onDelete={(name) => void handleDeleteModel(name)}
                   />
+                </div>
+              )}
+
+              {!pullProgress && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">Modelo de visión (opcional)</span>
+                  <ModelDropdown
+                    installedModels={installedModels}
+                    activeModel={visionModel}
+                    isPulling={false}
+                    catalogEnabled={false}
+                    onSelect={onVisionModelChange}
+                    onDownload={(name) => void handlePull(name, onVisionModelChange)}
+                    onDelete={(name) => void handleDeleteModel(name)}
+                  />
+                  <span className="text-[11px] text-bt-dim">Se usa para describir imágenes recibidas. Si no elegís uno, no se analizan imágenes.</span>
                 </div>
               )}
             </>

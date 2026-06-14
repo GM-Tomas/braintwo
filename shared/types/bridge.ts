@@ -42,6 +42,8 @@ export interface BrainTwoBridge {
     getMessageCount: () => Promise<number>
     getRecentMessages: (limit: number) => Promise<RecentMessage[]>
     getMessageById: (id: number) => Promise<RecentMessage | null>
+    readImage: (msgId: number) => Promise<string | null>
+    reprocessImage: (msgId: number) => Promise<boolean>
     getSyncStatus: () => Promise<SyncStatus>
     setTitleBarOverlay: (opts: { color: string; symbolColor: string }) => Promise<void>
     getSettings: () => Promise<UserSettings>

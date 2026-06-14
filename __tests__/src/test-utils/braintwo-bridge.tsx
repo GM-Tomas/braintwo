@@ -126,6 +126,8 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
       getMessageById: spies.getMessageById as unknown as (
         id: number
       ) => Promise<RecentMessage | null>,
+      readImage: vi.fn(async () => null),
+      reprocessImage: vi.fn(async () => false),
       getSyncStatus: spies.getSyncStatus,
       getSettings: spies.getSettings,
       setSettings: spies.setSettings,

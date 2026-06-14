@@ -24,6 +24,11 @@ export interface MediaMeta {
   transcript?: string
   ptt?: boolean
   audioLocalPath?: string
+  imageLocalPath?: string
+  /** Original caption the user sent with the image (kept separate from the
+   *  combined `text`, which also holds the AI description). */
+  caption?: string
+  visionDescription?: string
 }
 
 export interface NewMessage {
@@ -124,6 +129,8 @@ export interface DbInstance {
   updateContextNote: (id: number, note: string) => void
   updateMediaMeta: (id: number, meta: Partial<MediaMeta>) => void
   updateTranscript: (id: number, transcript: string) => void
+  updateText: (id: number, text: string) => void
+  getRawJson: (id: number) => string | null
   deleteEmbedding: (msgId: number) => void
   // AI memory
   insertMemory: (content: string, chatId?: number) => number
@@ -462,6 +469,10 @@ export function openDatabase(filePath: string): DbInstance {
     `DELETE FROM message_embeddings WHERE msg_id = ?`
   )
 
+  const getRawJsonStmt = db.prepare<[number], { raw_json: string | null }>(
+    `SELECT raw_json FROM messages WHERE id = ?`
+  )
+
   const lastIngestStmt = db.prepare<[], { last: number | null }>(
     'SELECT MAX(created_at) AS last FROM messages'
   )
@@ -613,6 +624,13 @@ export function openDatabase(filePath: string): DbInstance {
       }
       const merged = { ...existing, ...meta }
       writeMediaMetaStmt.run(JSON.stringify(merged), id)
+    },
+    updateText(id, text) {
+      updateMsgTextStmt.run(text, id)
+      updateFtsTextStmt.run(text, id)
+    },
+    getRawJson(id) {
+      return getRawJsonStmt.get(id)?.raw_json ?? null
     },
     updateTranscript(id, transcript) {
       updateMsgTextStmt.run(transcript, id)
