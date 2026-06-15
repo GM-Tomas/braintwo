@@ -20,6 +20,16 @@ export interface MediaMeta {
   ptt?: boolean
   /** Local path to a temporary audio file (set during Groq transcription). */
   audioLocalPath?: string
+  /** Local path to the stored image file (set on image ingest, for viewing). */
+  imageLocalPath?: string
+  /** Original caption the user sent with the image (the message `text` ends up
+   *  combined with the AI description, so this preserves the user's own text). */
+  caption?: string
+  /** AI-generated description of the image content (for search + chat). */
+  visionDescription?: string
+  /** Set when an AI vision model was attempted but failed/returned nothing,
+   *  so the UI can tell "no description yet" apart from "couldn't process". */
+  visionError?: string
 }
 
 export interface RecentMessage {

@@ -4,6 +4,7 @@ export interface ProviderSpecificConfig {
   apiKey: string
   baseUrl?: string
   model?: string
+  visionModel?: string
 }
 
 export interface AiConfigProfile {
@@ -13,6 +14,7 @@ export interface AiConfigProfile {
   apiKey: string
   baseUrl?: string
   model?: string
+  visionModel?: string
   providers?: {
     [key in AiProvider]?: ProviderSpecificConfig
   }
@@ -23,6 +25,7 @@ export interface OllamaConfig {
   mode: 'ollama' | 'manual'
   serverUrl: string
   activeModel: string
+  visionModel?: string
   autoStart: boolean
 }
 
@@ -66,6 +69,8 @@ export interface AiConfig {
   baseUrl?: string
   /** Model string. Empty = per-provider default. */
   model?: string
+  /** Vision-capable model used to describe images. Empty = per-provider default. */
+  visionModel?: string
   /** Per-provider settings saved so switching providers doesn't wipe credentials */
   providers?: {
     [key in AiProvider]?: ProviderSpecificConfig
@@ -79,6 +84,8 @@ export interface AiConfig {
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+  /** Inline images (base64, no `data:` prefix) for vision-capable provider calls */
+  images?: { mimetype: string; data: string }[]
   sources?: RetrievedContext[]
   created_at?: number
 }

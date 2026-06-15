@@ -11,6 +11,7 @@ export function AiConfigSection() {
   const [aiDraft, setAiDraft] = useState<Partial<AiConfigProfile>>({})
   const [ollamaCfg, setOllamaCfg] = useState({
     activeModel: '',
+    visionModel: '',
     serverUrl: 'http://localhost:11434',
     autoStart: true,
     enabled: false,
@@ -66,6 +67,7 @@ export function AiConfigSection() {
         const o = cfg.ollama
         setOllamaCfg({
           activeModel: o?.activeModel ?? '',
+          visionModel: o?.visionModel ?? '',
           serverUrl: o?.serverUrl ?? 'http://localhost:11434',
           autoStart: o?.autoStart ?? true,
           enabled: o?.enabled ?? false,
@@ -119,6 +121,12 @@ export function AiConfigSection() {
     void aiService.setConfig({ model, ollama: next, profiles })
   }
 
+  const handleOllamaVisionModelChange = (visionModel: string) => {
+    const next = { ...ollamaCfg, visionModel }
+    setOllamaCfg(next)
+    void aiService.setConfig({ ollama: next, profiles })
+  }
+
   const handleOllamaServerUrlChange = (serverUrl: string) => {
     const next = { ...ollamaCfg, serverUrl }
     setOllamaCfg(next)
@@ -145,6 +153,7 @@ export function AiConfigSection() {
       apiKey: selected.apiKey,
       baseUrl: selected.baseUrl,
       model: selected.model,
+      visionModel: selected.visionModel,
       providers: selected.providers,
       activeProfileId: profileId,
       profiles: profiles
@@ -173,6 +182,7 @@ export function AiConfigSection() {
           apiKey: nextDraft.apiKey ?? '',
           baseUrl: nextDraft.baseUrl ?? '',
           model: nextDraft.model ?? '',
+          visionModel: nextDraft.visionModel ?? '',
           providers: nextDraft.providers ?? {},
           activeProfileId: activeProfileId,
           profiles: nextProfiles
@@ -209,6 +219,7 @@ export function AiConfigSection() {
       apiKey: newProfile.apiKey,
       baseUrl: newProfile.baseUrl,
       model: newProfile.model,
+      visionModel: newProfile.visionModel,
       providers: newProfile.providers,
       activeProfileId: newId,
       profiles: updatedProfiles
@@ -237,6 +248,7 @@ export function AiConfigSection() {
       apiKey: nextActiveProfile.apiKey,
       baseUrl: nextActiveProfile.baseUrl,
       model: nextActiveProfile.model,
+      visionModel: nextActiveProfile.visionModel,
       providers: nextActiveProfile.providers,
       activeProfileId: nextActiveId,
       profiles: updatedProfiles
@@ -251,13 +263,14 @@ export function AiConfigSection() {
   const handleProviderChange = (newProvider: AiProvider) => {
     setAiDraft((prev) => {
       const providers = prev.providers ?? {}
-      const savedForProvider = providers[newProvider] ?? { apiKey: '', baseUrl: '', model: '' }
-      
+      const savedForProvider = providers[newProvider] ?? { apiKey: '', baseUrl: '', model: '', visionModel: '' }
+
       const patch: Partial<AiConfigProfile> = {
         provider: newProvider,
         apiKey: savedForProvider.apiKey ?? '',
         baseUrl: savedForProvider.baseUrl ?? '',
         model: savedForProvider.model ?? '',
+        visionModel: savedForProvider.visionModel ?? '',
         providers: {
           ...providers,
           [newProvider]: savedForProvider
@@ -282,6 +295,7 @@ export function AiConfigSection() {
           apiKey: nextDraft.apiKey ?? '',
           baseUrl: nextDraft.baseUrl ?? '',
           model: nextDraft.model ?? '',
+          visionModel: nextDraft.visionModel ?? '',
           providers: nextDraft.providers ?? {},
           activeProfileId: activeProfileId,
           profiles: nextProfiles
@@ -295,7 +309,7 @@ export function AiConfigSection() {
     })
   }
 
-  const handleFieldChange = (field: 'apiKey' | 'baseUrl' | 'model', value: string) => {
+  const handleFieldChange = (field: 'apiKey' | 'baseUrl' | 'model' | 'visionModel', value: string) => {
     setAiDraft((prev) => {
       const currentProvider = prev.provider
       if (!currentProvider) {
@@ -312,6 +326,7 @@ export function AiConfigSection() {
             apiKey: nextDraft.apiKey ?? '',
             baseUrl: nextDraft.baseUrl ?? '',
             model: nextDraft.model ?? '',
+            visionModel: nextDraft.visionModel ?? '',
             providers: nextDraft.providers ?? {},
             activeProfileId: activeProfileId,
             profiles: nextProfiles
@@ -349,6 +364,7 @@ export function AiConfigSection() {
           apiKey: nextDraft.apiKey ?? '',
           baseUrl: nextDraft.baseUrl ?? '',
           model: nextDraft.model ?? '',
+          visionModel: nextDraft.visionModel ?? '',
           providers: nextDraft.providers ?? {},
           activeProfileId: activeProfileId,
           profiles: nextProfiles
@@ -371,6 +387,20 @@ export function AiConfigSection() {
           : aiDraft.provider === 'opencode-zen'
             ? 'big-pickle'
             : 'gpt-4o-mini'
+
+  // Mirrors DEFAULT_VISION_MODELS in electron/services/ai-provider.ts
+  const visionModelDefault =
+    aiDraft.provider === 'anthropic'
+      ? 'claude-haiku-4-5'
+      : aiDraft.provider === 'gemini'
+        ? 'gemini-2.0-flash'
+        : aiDraft.provider === 'deepseek'
+          ? 'deepseek-v4-pro'
+          : aiDraft.provider === 'opencode-zen'
+            ? 'mimo-v2.5-free'
+            : 'gpt-4o-mini'
+
+  const visionModelPlaceholder = `${visionModelDefault} (por defecto)`
 
   const baseUrlPlaceholder =
     aiDraft.provider === 'deepseek'
@@ -451,10 +481,12 @@ export function AiConfigSection() {
         <div className="mt-4">
           <LocalAiSection
             activeModel={ollamaCfg.activeModel}
+            visionModel={ollamaCfg.visionModel}
             serverUrl={ollamaCfg.serverUrl}
             autoStart={ollamaCfg.autoStart}
             ollamaMode={ollamaCfg.mode}
             onModelChange={handleOllamaModelChange}
+            onVisionModelChange={handleOllamaVisionModelChange}
             onServerUrlChange={handleOllamaServerUrlChange}
             onAutoStartChange={handleOllamaAutoStartChange}
             onModeChange={(mode) => {
@@ -506,6 +538,18 @@ export function AiConfigSection() {
               placeholder={modelPlaceholder}
               className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/50"
             />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] uppercase tracking-eyebrow text-bt-dim">Modelo de visión (opcional)</span>
+            <input
+              type="text"
+              value={aiDraft.visionModel ?? ''}
+              onChange={(e) => handleFieldChange('visionModel', e.target.value)}
+              placeholder={visionModelPlaceholder}
+              className="h-9 rounded-[8px] border border-bt-border bg-bt-bg px-3 text-[13px] text-bt-text placeholder:text-bt-dim outline-none focus:border-bt-primary/50"
+            />
+            <span className="text-[11px] text-bt-dim">Se usa para describir imágenes. Si está vacío, se usa un modelo por defecto.</span>
           </label>
 
           <label className="flex flex-col gap-1 sm:col-span-2">

@@ -67,8 +67,11 @@ export function readAiConfig(userDataPath: string): AiConfig | null {
     const raw = readFileSync(configPath, 'utf8')
     const parsed = JSON.parse(raw) as AiConfig
 
-    // Heal the config if it exists but is invalid, empty, or missing provider settings
-    if (!parsed || !parsed.provider || !parsed.apiKey || !parsed.profiles || parsed.profiles.length === 0) {
+    // Heal the config if it exists but is invalid, empty, or missing provider settings.
+    // Note: an empty apiKey is a valid state for the 'ollama' (local) provider, so it
+    // must not trigger healing on its own — otherwise every read while "Local" is the
+    // active profile would rebuild the config and drop the `ollama` settings below.
+    if (!parsed || !parsed.provider || (!parsed.apiKey && parsed.provider !== 'ollama') || !parsed.profiles || parsed.profiles.length === 0) {
       const healedConfig: AiConfig = {
         provider: parsed?.provider || defaultConfig.provider,
         apiKey: parsed?.apiKey || defaultConfig.apiKey,
@@ -80,7 +83,8 @@ export function readAiConfig(userDataPath: string): AiConfig | null {
         },
         activeProfileId: parsed?.activeProfileId || defaultConfig.activeProfileId,
         profiles: parsed?.profiles && parsed.profiles.length > 0 ? parsed.profiles : defaultConfig.profiles,
-        groq: parsed?.groq || defaultConfig.groq
+        groq: parsed?.groq || defaultConfig.groq,
+        ollama: parsed?.ollama
       }
       try {
         writeFileSync(configPath, JSON.stringify(healedConfig, null, 2), 'utf8')

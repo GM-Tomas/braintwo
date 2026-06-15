@@ -24,6 +24,7 @@ import { readAiConfig } from './services/ai-config'
 import { createOllamaService } from './services/ollama'
 import { createAiChatService } from './services/ai-chat'
 import { createContextService } from './services/context'
+import { processImageMessage } from './services/image-ingest'
 import {
   createIngestPipeline,
   extractKind,
@@ -429,6 +430,29 @@ async function handleAudioTranscription(
   }
 }
 
+function handleImageDescription(
+  raw: WAMessageLike,
+  rowId: number,
+  mediaMeta: MediaMeta | null,
+  timestampMs: number,
+  caption: string
+): Promise<void> {
+  return processImageMessage(
+    {
+      whatsapp: context.whatsapp.value!,
+      db: context.db.value!,
+      contextSvc: context.contextSvc.value,
+      userDataPath: app.getPath('userData'),
+      getAiConfig: () => readAiConfig(app.getPath('userData'))
+    },
+    raw,
+    rowId,
+    mediaMeta,
+    timestampMs,
+    caption
+  )
+}
+
 function noteCatchupMessage(): void {
   catchupInserted++
   context.syncStatus.startCatchup()
@@ -508,6 +532,8 @@ function startWhatsApp(): void {
 
     if (kind === 'audio' && result.rowId) {
       void handleAudioTranscription(raw, result.rowId, mediaMeta, timestampMs)
+    } else if (kind === 'image' && result.rowId) {
+      void handleImageDescription(raw, result.rowId, mediaMeta, timestampMs, extractText(raw))
     } else {
       context.contextSvc.value?.queue(result.rowId, kind, extractText(raw), mediaMeta, timestampMs)
     }
