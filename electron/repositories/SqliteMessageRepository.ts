@@ -16,6 +16,14 @@ export class SqliteMessageRepository implements IMessageRepository {
     return this.ingest.getById(id)
   }
 
+  getMessagesSince(timestampMs: number, limit: number): RecentMessage[] {
+    return this.ingest.since(timestampMs, limit)
+  }
+
+  getReminderCandidates(sinceMs: number, limit: number): RecentMessage[] {
+    return this.ingest.findReminderCandidates(sinceMs, limit)
+  }
+
   toggleIgnored(id: number): boolean {
     return this.ingest.toggleIgnored(id)
   }

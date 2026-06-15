@@ -22,6 +22,10 @@ export interface DbStats {
   lastIngestAt: number | null
 }
 
+export type DashboardReportResult =
+  | { ok: true; report: string }
+  | { ok: false; reason: 'not-configured' | 'no-messages' | 'error' }
+
 export interface UserSettings {
   autostart: boolean
   userDataPath: string
@@ -49,6 +53,7 @@ export interface BrainTwoBridge {
     getSettings: () => Promise<UserSettings>
     setSettings: (settings: Partial<UserSettings>) => Promise<UserSettings>
     getDbStats: () => Promise<DbStats>
+    generateDashboardReport: () => Promise<DashboardReportResult>
     openUserDataFolder: () => Promise<void>
     onMessagesBatch: (cb: (batch: RecentMessage[]) => void) => Unsubscribe
     onSyncStateChanged: (cb: (status: SyncStatus) => void) => Unsubscribe

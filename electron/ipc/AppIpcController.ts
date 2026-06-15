@@ -6,6 +6,15 @@ import { SqliteMessageRepository } from '../repositories/SqliteMessageRepository
 import { processImageMessage } from '../services/image-ingest'
 import { extractText, type WAMessageLike } from '../services/ingest'
 import { readAiConfig } from '../services/ai-config'
+import { isAiConfigured } from '../services/ai-provider'
+import { generateDashboardReport } from '../services/dashboard-report'
+import { logError } from '../services/logger'
+import type { DashboardReportResult } from '@shared/types'
+
+const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000
+const REMINDER_LOOKBACK_MS = 60 * 24 * 60 * 60 * 1000
+const MAX_REPORT_MESSAGES = 500
+const MAX_REMINDER_CANDIDATES = 100
 
 export class AppIpcController {
   static register(context: AppContext) {
@@ -45,6 +54,30 @@ export class AppIpcController {
     ipcMain.handle('app:get-message-by-id', (_e, id: number) => {
       if (!context.ingest.value) return null
       return getMessageRepo().getMessageById(id)
+    })
+
+    // Generates an AI summary of WhatsApp activity from the last 3 days.
+    ipcMain.handle('app:generate-dashboard-report', async (): Promise<DashboardReportResult> => {
+      if (!context.ingest.value) return { ok: false, reason: 'error' }
+
+      const config = readAiConfig(context.app.getPath('userData'))
+      if (!isAiConfigured(config)) return { ok: false, reason: 'not-configured' }
+
+      const messages = getMessageRepo().getMessagesSince(Date.now() - THREE_DAYS_MS, MAX_REPORT_MESSAGES)
+      if (messages.length === 0) return { ok: false, reason: 'no-messages' }
+
+      const reminderCandidates = getMessageRepo().getReminderCandidates(
+        Date.now() - REMINDER_LOOKBACK_MS,
+        MAX_REMINDER_CANDIDATES
+      )
+
+      try {
+        const report = await generateDashboardReport(config, messages, reminderCandidates)
+        return { ok: true, report }
+      } catch (err) {
+        logError('ipc:generate-dashboard-report', err, 'Failed to generate dashboard report')
+        return { ok: false, reason: 'error' }
+      }
     })
 
     ipcMain.handle('app:get-sync-status', () => {

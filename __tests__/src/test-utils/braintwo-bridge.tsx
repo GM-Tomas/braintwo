@@ -96,6 +96,7 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
       sizeBytes: 0,
       lastIngestAt: null
     })),
+    generateDashboardReport: vi.fn(async () => ({ ok: false, reason: 'not-configured' }) as const),
     openUserDataFolder: vi.fn(async () => {}),
     setTitleBarOverlay: vi.fn(async () => {}),
     searchQuery: vi.fn(async () => opts.searchResults ?? []),
@@ -132,6 +133,7 @@ export function installBraintwoBridge(opts: BridgeOpts = {}): BridgeHandle {
       getSettings: spies.getSettings,
       setSettings: spies.setSettings,
       getDbStats: spies.getDbStats,
+      generateDashboardReport: spies.generateDashboardReport,
       openUserDataFolder: spies.openUserDataFolder,
       setTitleBarOverlay: spies.setTitleBarOverlay,
       onMessagesBatch: (cb) => {
