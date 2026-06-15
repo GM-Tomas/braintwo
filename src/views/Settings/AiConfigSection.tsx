@@ -388,7 +388,19 @@ export function AiConfigSection() {
             ? 'big-pickle'
             : 'gpt-4o-mini'
 
-  const visionModelPlaceholder = modelPlaceholder
+  // Mirrors DEFAULT_VISION_MODELS in electron/services/ai-provider.ts
+  const visionModelDefault =
+    aiDraft.provider === 'anthropic'
+      ? 'claude-haiku-4-5'
+      : aiDraft.provider === 'gemini'
+        ? 'gemini-2.0-flash'
+        : aiDraft.provider === 'deepseek'
+          ? 'deepseek-v4-pro'
+          : aiDraft.provider === 'opencode-zen'
+            ? 'mimo-v2.5-free'
+            : 'gpt-4o-mini'
+
+  const visionModelPlaceholder = `${visionModelDefault} (por defecto)`
 
   const baseUrlPlaceholder =
     aiDraft.provider === 'deepseek'

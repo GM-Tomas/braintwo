@@ -21,7 +21,7 @@ export const DEFAULT_VISION_MODELS: Record<AiConfig['provider'], string> = {
   'openai-compat': 'gpt-4o-mini',
   gemini: 'gemini-2.0-flash',
   deepseek: 'deepseek-v4-pro',
-  'opencode-zen': 'big-pickle',
+  'opencode-zen': 'mimo-v2.5-free',
   ollama: 'qwen3.5:4b'
 }
 
