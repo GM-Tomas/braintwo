@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AppErrorEvent, DbChat, View, WAConnectionState } from '@shared/types'
 import { NavigationGuardContext, type ExitGuard } from '@/core/NavigationGuardContext'
-import { Onboarding, FTU } from './views/Onboarding'
+import { FTU } from './views/Onboarding'
 import { Search } from './views/Search'
 import { Timeline } from './views/Timeline'
 import { Settings } from './views/Settings'
@@ -42,9 +42,7 @@ function initialPhase(): Phase {
 export default function App() {
   const { connectionService, settingsRepository, aiService } = useDependencies()
   const [phase, setPhase] = useState<Phase>(() => initialPhase())
-  const [view, setViewRaw] = useState<View>(() =>
-    readFlag(ONBOARDED_KEY) ? 'chat' : 'onboarding'
-  )
+  const [view, setViewRaw] = useState<View>('chat')
 
   // Navigation guard: a view (e.g. local AI config) can block leaving until it's complete.
   const exitGuardRef = useRef<ExitGuard | null>(null)
@@ -186,11 +184,7 @@ Aquí tienes un resumen de lo que puedes hacer:
     
     void connectionService.getCurrentQr().then((qr) => {
       if (qr) {
-        setPhase((prev) => {
-          if (prev !== 'app') return prev
-          setViewRaw('onboarding')
-          return 'qr'
-        })
+        setPhase((prev) => (prev === 'app' ? 'qr' : prev))
       }
     })
 
@@ -217,11 +211,7 @@ Aquí tienes un resumen de lo que puedes hacer:
     })
 
     const offQr = connectionService.onQr(() => {
-      setPhase((prev) => {
-        if (prev !== 'app') return prev
-        setViewRaw('onboarding')
-        return 'qr'
-      })
+      setPhase((prev) => (prev === 'app' ? 'qr' : prev))
     })
 
     const offSync = connectionService.onSyncStateChanged(setSyncStatus)
@@ -258,7 +248,8 @@ Aquí tienes un resumen de lo que puedes hacer:
     if (waState === 'logged-out') {
       setPhase(readFlag(ONBOARDED_KEY) || readFlag(FTU_KEY) ? 'qr' : 'welcome')
       writeFlag(ONBOARDED_KEY, false)
-      setViewRaw('onboarding')
+      setViewRaw('chat')
+      setAutoRouted(false)
       setShowLogoutConfirm(false)
     }
   }, [waState, autoRouted, phase])
@@ -310,7 +301,6 @@ Aquí tienes un resumen de lo que puedes hacer:
       />
       <main className="relative flex flex-1 flex-col overflow-hidden">
         <div className="app-drag absolute inset-x-0 top-0 h-9 z-10" />
-        {view === 'onboarding' && <Onboarding />}
         {view === 'search' && <Search />}
         {view === 'timeline' && <Timeline />}
         {view === 'dashboard' && <DashboardView />}

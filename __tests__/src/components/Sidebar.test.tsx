@@ -6,7 +6,7 @@ import { Sidebar } from '../../../src/components/Sidebar'
 describe('<Sidebar />', () => {
   it('exposes the BrainTwo wordmark accessibly (sr-only)', () => {
     const setView = vi.fn()
-    render(<Sidebar view="onboarding" setView={setView} connectionState="connecting" />)
+    render(<Sidebar view="search" setView={setView} connectionState="connecting" />)
     expect(screen.getByText('BrainTwo')).toBeInTheDocument()
   })
 
@@ -33,7 +33,7 @@ describe('<Sidebar />', () => {
 
   it('clicking a nav button calls setView with the view id', async () => {
     const setView = vi.fn()
-    render(<Sidebar view="onboarding" setView={setView} connectionState="connecting" />)
+    render(<Sidebar view="search" setView={setView} connectionState="connecting" />)
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Mis mensajes' }))
     expect(setView).toHaveBeenCalledWith('timeline')
@@ -46,7 +46,7 @@ describe('<Sidebar />', () => {
     ['logged-out', 'Sesión cerrada']
   ] as const)('shows the connection label for %s', (state, label) => {
     const setView = vi.fn()
-    render(<Sidebar view="onboarding" setView={setView} connectionState={state} />)
+    render(<Sidebar view="search" setView={setView} connectionState={state} />)
     expect(screen.getByText(label)).toBeInTheDocument()
   })
 
@@ -54,7 +54,7 @@ describe('<Sidebar />', () => {
     const setView = vi.fn()
     render(
       <Sidebar
-        view="onboarding"
+        view="search"
         setView={setView}
         connectionState="open"
         version="1.2.3"
@@ -67,7 +67,7 @@ describe('<Sidebar />', () => {
 
   it('omits the footer version when no version/platform supplied', () => {
     const setView = vi.fn()
-    render(<Sidebar view="onboarding" setView={setView} connectionState="open" />)
+    render(<Sidebar view="search" setView={setView} connectionState="open" />)
     expect(screen.queryByText(/v\d/)).not.toBeInTheDocument()
   })
 
@@ -75,7 +75,7 @@ describe('<Sidebar />', () => {
     const setView = vi.fn()
     render(
       <Sidebar
-        view="onboarding"
+        view="search"
         setView={setView}
         connectionState="open"
         platform="linux"
@@ -86,7 +86,7 @@ describe('<Sidebar />', () => {
 
   it('always renders the by-Syntropy stamp', () => {
     const setView = vi.fn()
-    render(<Sidebar view="onboarding" setView={setView} connectionState="open" />)
+    render(<Sidebar view="search" setView={setView} connectionState="open" />)
     expect(screen.getByText('by Syntropy')).toBeInTheDocument()
   })
 })
