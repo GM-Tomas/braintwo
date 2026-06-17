@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { MessageKind, ModelProgress, SearchResult, MessageSource } from '@shared/types'
+import type { MessageKind, ModelProgress, RecentMessage, SearchResult, MessageSource } from '@shared/types'
 import { PageHeader } from '../../components/PageHeader'
 import { useIpcSubscription } from '@/hooks/useIpcSubscription'
 import { useDependencies } from '@/core/infrastructure/DependenciesContext'
@@ -47,6 +47,14 @@ export function Timeline() {
     } catch (err) {
       console.error('Error toggling ignore:', err)
     }
+  }, [])
+
+  // Keeps the message list (and the open detail panel) in sync after a
+  // reprocess regenerates the text/contextNote/media for a message.
+  const handleMessageUpdated = useCallback((fresh: RecentMessage) => {
+    const entity = new MessageEntity(fresh)
+    setMessages((prev) => prev.map((m) => (m.id === entity.id ? entity : m)))
+    setSelected((prev) => (prev && prev.id === entity.id ? entity : prev))
   }, [])
 
   const toggleFilters = () => {
@@ -196,7 +204,12 @@ export function Timeline() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden animate-fade-in">
       {selected ? (
-        <MessageDetail message={selected} onClose={() => setSelected(null)} onToggleIgnore={handleToggleIgnore} />
+        <MessageDetail
+          message={selected}
+          onClose={() => setSelected(null)}
+          onToggleIgnore={handleToggleIgnore}
+          onMessageUpdated={handleMessageUpdated}
+        />
       ) : (
         <>
           <PageHeader

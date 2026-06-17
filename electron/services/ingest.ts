@@ -88,6 +88,8 @@ export interface IngestResult {
 export interface IngestPipeline {
   ingest: (msg: WAMessageLike, source: MessageSource) => IngestResult
   recent: (limit: number) => RecentMessage[]
+  since: (timestampMs: number, limit: number) => RecentMessage[]
+  findReminderCandidates: (sinceMs: number, limit: number) => RecentMessage[]
   getById: (id: number) => RecentMessage | null
   count: () => number
   toggleIgnored: (id: number) => boolean
@@ -219,6 +221,26 @@ export function createIngestPipeline(
        WHERE id = ?`
   )
 
+  const sinceStmt = db.raw.prepare<[number, number], RecentMessageRow>(
+    `SELECT id, wa_msg_id, timestamp, text, source, kind, media_meta, from_me, created_at, context_note, ignored
+       FROM messages
+       WHERE timestamp >= ?
+       ORDER BY timestamp ASC
+       LIMIT ?`
+  )
+
+  // Messages tagged by the context pipeline as reminders/events, used to surface
+  // upcoming dates mentioned in older messages (e.g. "turno dentro de 15 días").
+  const reminderCandidatesStmt = db.raw.prepare<[number, number], RecentMessageRow>(
+    `SELECT id, wa_msg_id, timestamp, text, source, kind, media_meta, from_me, created_at, context_note, ignored
+       FROM messages
+       WHERE timestamp >= ?
+         AND ignored = 0
+         AND (context_note LIKE '%#recordatorio%' OR context_note LIKE '%#evento%')
+       ORDER BY timestamp DESC
+       LIMIT ?`
+  )
+
   return {
     ingest(msg, source) {
       const id = msg.key?.id
@@ -278,6 +300,16 @@ export function createIngestPipeline(
     recent(limit) {
       if (limit <= 0) return []
       return recentStmt.all(limit).map(rowToRecent)
+    },
+
+    since(timestampMs, limit) {
+      if (limit <= 0) return []
+      return sinceStmt.all(timestampMs, limit).map(rowToRecent)
+    },
+
+    findReminderCandidates(sinceMs, limit) {
+      if (limit <= 0) return []
+      return reminderCandidatesStmt.all(sinceMs, limit).map(rowToRecent)
     },
 
     getById(id: number) {

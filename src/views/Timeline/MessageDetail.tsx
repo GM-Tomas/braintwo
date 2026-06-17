@@ -22,9 +22,10 @@ interface MessageDetailProps {
   message: MessageEntity
   onClose: () => void
   onToggleIgnore?: (msgId: number) => void
+  onMessageUpdated?: (fresh: RecentMessage) => void
 }
 
-export function MessageDetail({ message, onClose, onToggleIgnore }: MessageDetailProps) {
+export function MessageDetail({ message, onClose, onToggleIgnore, onMessageUpdated }: MessageDetailProps) {
   const panelRef = useRef<HTMLDivElement>(null)
 
   // Re-fetched data after a reprocess, so the panel reflects the new description
@@ -81,6 +82,7 @@ export function MessageDetail({ message, onClose, onToggleIgnore }: MessageDetai
       const fresh = await window.braintwo.app.getMessageById(message.id)
       if (fresh) {
         setLive(fresh)
+        onMessageUpdated?.(fresh)
         if (fresh.contextNote && fresh.contextNote !== prevNote) break
       }
     }
@@ -95,7 +97,10 @@ export function MessageDetail({ message, onClose, onToggleIgnore }: MessageDetai
         await loadImage()
         // The description (text) is written synchronously, so a refetch shows it now.
         const fresh = await window.braintwo.app.getMessageById(message.id)
-        if (fresh) setLive(fresh)
+        if (fresh) {
+          setLive(fresh)
+          onMessageUpdated?.(fresh)
+        }
         void pollContextNote(prevNote)
       }
     } finally {

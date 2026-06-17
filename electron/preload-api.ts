@@ -6,6 +6,7 @@ import type {
   AiChatResponse,
   AppErrorEvent,
   ChatMessage,
+  DashboardReportResult,
   DbChat,
   DbChatMessage,
   DbStats,
@@ -44,6 +45,7 @@ export interface BrainTwoApi {
     getSettings: () => Promise<UserSettings>
     setSettings: (settings: Partial<UserSettings>) => Promise<UserSettings>
     getDbStats: () => Promise<DbStats>
+    generateDashboardReport: () => Promise<DashboardReportResult>
     openUserDataFolder: () => Promise<void>
     onMessagesBatch: (cb: (batch: RecentMessage[]) => void) => Unsubscribe
     onSyncStateChanged: (cb: (status: SyncStatus) => void) => Unsubscribe
@@ -163,6 +165,7 @@ export function createApi(
       setSettings: (settings: Partial<UserSettings>) =>
         ipcRenderer.invoke('settings:set', settings),
       getDbStats: () => ipcRenderer.invoke('db:stats'),
+      generateDashboardReport: () => ipcRenderer.invoke('app:generate-dashboard-report'),
       openUserDataFolder: () => ipcRenderer.invoke('app:open-userdata-folder'),
       onMessagesBatch: subscribe<RecentMessage[]>('app:messages-batch'),
       onSyncStateChanged: subscribe<SyncStatus>('sync:state-changed'),

@@ -5,6 +5,17 @@ import { useDependencies } from '@/core/infrastructure/DependenciesContext'
 import { MessageEntity } from '@shared/domain/message.entity'
 import { Icon } from '@/lib/icons'
 
+// Renders the **bold** segments produced by the AI report as <strong>, since
+// the report is shown as plain text otherwise.
+function renderReportLine(line: string, key: number) {
+  const parts = line.split(/\*\*(.+?)\*\*/g)
+  return (
+    <p key={key}>
+      {parts.map((part, i) => (i % 2 === 1 ? <strong key={i}>{part}</strong> : part))}
+    </p>
+  )
+}
+
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
   const k = 1024
@@ -15,6 +26,11 @@ function formatBytes(bytes: number): string {
 
 const LOAD_COUNT = 200
 
+// Keeps the generated AI report in memory across navigation (DashboardView
+// unmounts when the user switches views), without persisting it to the DB.
+let cachedAiReport: string | null = null
+let cachedReportError: string | null = null
+
 export function DashboardView() {
   const { messageRepository } = useDependencies()
   const [count, setCount] = useState(0)
@@ -22,7 +38,18 @@ export function DashboardView() {
   const [dbStats, setDbStats] = useState<DbStats | null>(null)
 
   const [isGeneratingReport, setIsGeneratingReport] = useState(false)
-  const [aiReport, setAiReport] = useState<string | null>(null)
+  const [aiReport, setAiReportState] = useState<string | null>(cachedAiReport)
+  const [reportError, setReportErrorState] = useState<string | null>(cachedReportError)
+
+  const setAiReport = (report: string | null) => {
+    cachedAiReport = report
+    setAiReportState(report)
+  }
+
+  const setReportError = (error: string | null) => {
+    cachedReportError = error
+    setReportErrorState(error)
+  }
 
   const loadDbStats = useCallback(() => {
     window.braintwo.app.getDbStats().then(setDbStats).catch(console.error)
@@ -86,18 +113,26 @@ export function DashboardView() {
     }
   }, [messages])
 
-  const handleGenerateReport = () => {
+  const handleGenerateReport = async () => {
     setIsGeneratingReport(true)
     setAiReport(null)
-    setTimeout(() => {
+    setReportError(null)
+    try {
+      const result = await window.braintwo.app.generateDashboardReport()
+      if (result.ok) {
+        setAiReport(result.report)
+      } else if (result.reason === 'not-configured') {
+        setReportError('Configurá un proveedor de IA en Ajustes para generar un resumen.')
+      } else if (result.reason === 'no-messages') {
+        setReportError('No hay mensajes de los últimos 3 días para resumir.')
+      } else {
+        setReportError('No se pudo generar el resumen. Intentá de nuevo más tarde.')
+      }
+    } catch {
+      setReportError('No se pudo generar el resumen. Intentá de nuevo más tarde.')
+    } finally {
       setIsGeneratingReport(false)
-      const randomReports = [
-        '**Resumen de Patrones:** Has registrado principalmente reflexiones personales sobre desarrollo de producto y experiencia de usuario. Tu mayor pico de actividad es por la tarde (12:00 - 18:00). Las palabras clave mas recurrentes son *producto*, *usuario*, y *diseno*. Te recomendamos repasar los audios de notas de voz, que contienen ideas clave aun no transcritas.',
-        '**Resumen de Patrones:** Tus mensajes indican un enfoque constante en la organizacion de tareas semanales y notas de estudio. Utilizas el chat de WhatsApp como un bloc de notas rapido, mayormente por la noche (18:00 - 00:00). Hay 3 enlaces guardados esta semana que podrian beneficiarse de un analisis semantico en el Chat IA.',
-        '**Resumen de Patrones:** La actividad de esta semana muestra un balance equilibrado entre recordatorios rapidos de tareas y notas teoricas mas extensas. Has guardado un 20% mas de contenido que la semana pasada. La mayoria de las interacciones son en tiempo real durante las mananas.'
-      ]
-      setAiReport(randomReports[Math.floor(Math.random() * randomReports.length)])
-    }, 2000)
+    }
   }
 
   return (
@@ -114,6 +149,83 @@ export function DashboardView() {
       />
       <div className="flex-1 overflow-y-auto py-8">
         <div className="flex flex-col gap-6 px-6 md:px-14">
+          {/* AI Report */}
+          <div className="flex flex-col rounded-[14px] border border-bt-border bg-bt-surf p-5">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-bt-muted">Resumen Inteligente</h3>
+            <p className="mt-1 text-[11px] text-bt-dim">
+              Temas, fechas y recordatorios de tu actividad de los últimos 3 días.
+            </p>
+
+            <div className="mt-4 flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => void handleGenerateReport()}
+                disabled={isGeneratingReport}
+                className="flex w-full sm:w-auto h-9 items-center justify-between gap-2 rounded-[8px] border border-bt-primary/20 bg-bt-primary/[0.03] px-3.5 text-left text-xs font-medium text-bt-primary transition-all hover:bg-bt-primary/10 hover:text-white disabled:opacity-50"
+              >
+                <div className="flex items-center gap-2">
+                  <Icon name="bolt" size={13} />
+                  <span>{isGeneratingReport ? 'Generando resumen...' : 'Generar Resumen IA'}</span>
+                </div>
+                <Icon name="chev" size={10} />
+              </button>
+
+              {isGeneratingReport && (
+                <div className="animate-pulse rounded-[10px] border border-bt-border bg-bt-bg p-4">
+                  <div className="flex gap-2">
+                    <div className="h-4 w-4 shrink-0 rounded bg-bt-dim/30" />
+                    <div className="flex flex-1 flex-col gap-2">
+                      <div className="h-3 w-full rounded bg-bt-dim/20" />
+                      <div className="h-3 w-5/6 rounded bg-bt-dim/20" />
+                      <div className="h-3 w-4/6 rounded bg-bt-dim/20" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {reportError && !isGeneratingReport && (
+                <div className="relative rounded-[12px] border border-bt-border bg-bt-bg p-4 text-[12.5px] leading-relaxed text-bt-muted animate-fade-in">
+                  <div className="flex gap-2.5">
+                    <Icon name="bolt" size={16} className="text-bt-dim mt-0.5 shrink-0" />
+                    <div>{reportError}</div>
+                  </div>
+                </div>
+              )}
+
+              {aiReport && !isGeneratingReport && (
+                <div className="relative rounded-[12px] border border-bt-accent/30 bg-bt-accent/[0.03] p-4 text-[12.5px] leading-relaxed text-bt-text animate-fade-in">
+                  <div className="absolute top-3 right-3 flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => void handleGenerateReport()}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-bt-dim hover:text-bt-text hover:bg-bt-hover transition-colors"
+                      title="Regenerar resumen"
+                    >
+                      <Icon name="refresh" size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAiReport(null)}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-bt-dim hover:text-bt-text hover:bg-bt-hover transition-colors"
+                      title="Cerrar resumen"
+                    >
+                      <Icon name="x" size={11} />
+                    </button>
+                  </div>
+                  <div className="flex gap-2.5 pr-14">
+                    <Icon name="bolt" size={16} className="text-bt-accent mt-0.5 shrink-0" />
+                    <div className="flex flex-col gap-1.5">
+                      {aiReport
+                        .split('\n')
+                        .filter((line) => line.trim().length > 0)
+                        .map((line, i) => renderReportLine(line, i))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Metrics Row */}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <div className="group relative flex flex-col justify-between overflow-hidden rounded-[14px] border border-bt-border bg-bt-surf p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-bt-primary/30 hover:shadow-bt-nav-active">
@@ -186,7 +298,7 @@ export function DashboardView() {
           </div>
 
           {/* Visual Analytics Grid */}
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Distribution */}
             <div className="flex flex-col rounded-[14px] border border-bt-border bg-bt-surf p-5">
               <h3 className="text-xs font-bold uppercase tracking-wider text-bt-muted">Distribucion de Contenido</h3>
@@ -269,66 +381,6 @@ export function DashboardView() {
                     </div>
                   )
                 })}
-              </div>
-            </div>
-
-            {/* AI Report */}
-            <div className="flex flex-col rounded-[14px] border border-bt-border bg-bt-surf p-5">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-bt-muted">Resumen Inteligente</h3>
-
-              <div className="mt-4 flex flex-col gap-3">
-                <button
-                  type="button"
-                  onClick={handleGenerateReport}
-                  disabled={isGeneratingReport}
-                  className="flex w-full h-9 items-center justify-between rounded-[8px] border border-bt-primary/20 bg-bt-primary/[0.03] px-3.5 text-left text-xs font-medium text-bt-primary transition-all hover:bg-bt-primary/10 hover:text-white disabled:opacity-50"
-                >
-                  <div className="flex items-center gap-2">
-                    <Icon name="bolt" size={13} />
-                    <span>{isGeneratingReport ? 'Generando resumen...' : 'Generar Resumen IA'}</span>
-                  </div>
-                  <Icon name="chev" size={10} />
-                </button>
-
-                {isGeneratingReport && (
-                  <div className="animate-pulse rounded-[10px] border border-bt-border bg-bt-bg p-4">
-                    <div className="flex gap-2">
-                      <div className="h-4 w-4 shrink-0 rounded bg-bt-dim/30" />
-                      <div className="flex flex-1 flex-col gap-2">
-                        <div className="h-3 w-full rounded bg-bt-dim/20" />
-                        <div className="h-3 w-5/6 rounded bg-bt-dim/20" />
-                        <div className="h-3 w-4/6 rounded bg-bt-dim/20" />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {aiReport && !isGeneratingReport && (
-                  <div className="relative rounded-[12px] border border-bt-accent/30 bg-bt-accent/[0.03] p-4 text-[12.5px] leading-relaxed text-bt-text animate-fade-in">
-                    <div className="absolute top-3 right-3 flex gap-1">
-                      <button
-                        type="button"
-                        onClick={handleGenerateReport}
-                        className="flex h-6 w-6 items-center justify-center rounded-md text-bt-dim hover:text-bt-text hover:bg-bt-hover transition-colors"
-                        title="Regenerar resumen"
-                      >
-                        <Icon name="refresh" size={11} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAiReport(null)}
-                        className="flex h-6 w-6 items-center justify-center rounded-md text-bt-dim hover:text-bt-text hover:bg-bt-hover transition-colors"
-                        title="Cerrar resumen"
-                      >
-                        <Icon name="x" size={11} />
-                      </button>
-                    </div>
-                    <div className="flex gap-2.5 pr-14">
-                      <Icon name="bolt" size={16} className="text-bt-accent mt-0.5 shrink-0" />
-                      <div className="whitespace-pre-wrap">{aiReport}</div>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
