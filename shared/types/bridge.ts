@@ -3,7 +3,7 @@ import type { SearchResult, ModelProgress } from './search'
 import type { AiConfig, ChatMessage, AiChatResponse, DbChat, DbChatMessage, OllamaStatus, OllamaModel, OllamaPullProgress, OllamaInstallProgress } from './ai'
 import type { WAConnectionState, SyncStatus, AppErrorEvent } from './sync'
 
-export type View = 'onboarding' | 'search' | 'timeline' | 'dashboard' | 'settings' | 'chat'
+export type View = 'search' | 'timeline' | 'dashboard' | 'settings' | 'chat'
 
 export type Unsubscribe = () => void
 

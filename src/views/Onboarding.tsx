@@ -1,10 +1,43 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
-import type { ImportProgress, WAConnectionState } from '@shared/types'
-import { PageHeader } from '../components/PageHeader'
+import type { WAConnectionState } from '@shared/types'
 import { Icon, BrainMark, type IconName } from '@/lib/icons'
 
 const FTU_KEY = 'braintwo:ftu-seen'
+// Baileys closes the socket briefly after a successful QR scan before
+// reconnecting and reaching 'open'. While the new socket comes up, the WA
+// state passes through 'disconnected' — which used to surface the failure UI
+// even though pairing was actually succeeding.
+const POST_SCAN_GRACE_MS = 30_000
+
+// True while the QR has been dismissed (most likely scanned) but the
+// connection has not yet reached a terminal state. Use this to render a
+// "Conectando…" spinner instead of the misleading "no se pudo conectar"
+// error during the post-scan reconnect window.
+function usePairingInFlight(qr: string | null, state: WAConnectionState): boolean {
+  const [inFlight, setInFlight] = useState(false)
+  const prevQrRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const hadQr = prevQrRef.current !== null
+    prevQrRef.current = qr
+    if (hadQr && qr === null && state !== 'open' && state !== 'logged-out') {
+      setInFlight(true)
+    }
+  }, [qr, state])
+
+  useEffect(() => {
+    if (state === 'open' || state === 'logged-out') setInFlight(false)
+  }, [state])
+
+  useEffect(() => {
+    if (!inFlight) return
+    const t = setTimeout(() => setInFlight(false), POST_SCAN_GRACE_MS)
+    return () => clearTimeout(t)
+  }, [inFlight])
+
+  return inFlight
+}
 
 function setFtuFlag(value: boolean) {
   try {
@@ -51,6 +84,7 @@ export function FTU({
   const [qr, setQr] = useState<string | null>(null)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [timeLeft, setTimeLeft] = useState(60)
+  const pairingInFlight = usePairingInFlight(qr, waState)
 
   useEffect(() => {
     void window.braintwo.wa.getConnectionState().then(setWaState)
@@ -120,6 +154,7 @@ export function FTU({
               waState={waState}
               qrDataUrl={qrDataUrl}
               timeLeft={timeLeft}
+              pairingInFlight={pairingInFlight}
               onReload={() => {
                 setQr(null)
                 setQrDataUrl(null)
@@ -207,11 +242,13 @@ function FTUQrCard({
   waState,
   qrDataUrl,
   timeLeft,
+  pairingInFlight,
   onReload,
 }: {
   waState: WAConnectionState
   qrDataUrl: string | null
   timeLeft: number
+  pairingInFlight: boolean
   onReload: () => void
 }) {
   return (
@@ -257,6 +294,14 @@ function FTUQrCard({
               Expira en {timeLeft}s
             </div>
           </>
+        ) : pairingInFlight ? (
+          <div className="flex flex-col items-center gap-3 px-6 text-center text-sm text-bt-muted">
+            <span
+              aria-hidden
+              className="h-6 w-6 animate-spin rounded-full border-2 border-bt-border border-t-bt-primary"
+            />
+            Conectando…
+          </div>
         ) : waState === 'disconnected' ? (
           <div className="flex flex-col items-center gap-3 px-6 text-center">
             <span className="h-2 w-2 rounded-full bg-bt-muted" />
@@ -281,306 +326,3 @@ function FTUQrCard({
   )
 }
 
-// ── Onboarding (sidebar view for already-connected users) ────────────────────
-
-export function Onboarding() {
-  const [state, setState] = useState<WAConnectionState>('connecting')
-  const [qr, setQr] = useState<string | null>(null)
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
-  const [timeLeft, setTimeLeft] = useState(60)
-  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null)
-
-  useEffect(() => {
-    void window.braintwo.wa.getConnectionState().then((s) => setState(s))
-    void window.braintwo.wa.getCurrentQr().then((q) => setQr(q))
-    const offState = window.braintwo.wa.onConnectionState((s) => setState(s))
-    const offQr = window.braintwo.wa.onQr((q) => {
-      setQr(q)
-      setTimeLeft(60)
-    })
-    const offLoggedOut = window.braintwo.wa.onLoggedOut(() => {
-      setQr(null)
-      setQrDataUrl(null)
-    })
-    const offProgress = window.braintwo.export.onProgress((progress) => {
-      setImportProgress(progress)
-    })
-    return () => {
-      offState()
-      offQr()
-      offLoggedOut()
-      offProgress()
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!qr || state === 'open') return
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0))
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [qr, state])
-
-  useEffect(() => {
-    let cancelled = false
-    if (!qr) {
-      setQrDataUrl(null)
-      return
-    }
-    void QRCode.toDataURL(qr, {
-      width: 280,
-      margin: 1,
-      color: { dark: '#0f172a', light: '#ffffff' }
-    }).then((url) => {
-      if (!cancelled) setQrDataUrl(url)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [qr])
-
-  return (
-    <div className="flex flex-1 flex-col overflow-hidden animate-fade-in">
-      <PageHeader
-        eyebrow="Primeros pasos"
-        title="Vinculá tu WhatsApp"
-        subtitle="BrainTwo se conecta como dispositivo vinculado a tu cuenta. Tus mensajes se procesan localmente — nunca salen de tu computadora."
-      />
-
-      <div className="flex flex-1 overflow-y-auto px-14 py-10">
-        <div className="mx-auto grid w-full max-w-3xl gap-6 md:grid-cols-[300px_1fr] md:items-start">
-          <PairingPanel
-            state={state}
-            qrDataUrl={qrDataUrl}
-            timeLeft={timeLeft}
-            onReload={() => {
-              setQr(null)
-              setQrDataUrl(null)
-              void window.braintwo.wa.requestQr()
-            }}
-          />
-          <div className="flex flex-col gap-6">
-            <Steps state={state} hasQr={!!qrDataUrl} />
-            <SuccessNote state={state} />
-            <ImportHistoryPanel progress={importProgress} />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ImportHistoryPanel({ progress }: { progress: ImportProgress | null }) {
-  const [busy, setBusy] = useState(false)
-  const pct = progress && progress.total > 0
-    ? Math.round((progress.processed / progress.total) * 100)
-    : 0
-
-  return (
-    <section className="rounded-[14px] border border-bt-border bg-bt-surf px-5 py-4">
-      <div className="mb-3 text-[11px] uppercase tracking-eyebrow text-bt-dim">
-        Historico completo
-      </div>
-      <ol className="space-y-2 text-sm leading-relaxed text-bt-muted">
-        <li>1. En WhatsApp abri el chat con vos mismo.</li>
-        <li>2. Usa Exportar chat y elegi sin medios.</li>
-        <li>3. Importa el .txt para sumar mensajes viejos.</li>
-      </ol>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => {
-          setBusy(true)
-          void window.braintwo.export.importTxt().finally(() => setBusy(false))
-        }}
-        className="mt-4 h-9 rounded-[8px] border border-bt-primary/30 px-4 text-[13px] font-semibold text-bt-text transition-colors hover:bg-bt-hover disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {busy ? 'Importando...' : 'Importar historico'}
-      </button>
-      {progress ? (
-        <div className="mt-4">
-          <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full bg-bt-accent transition-all"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          <p className="mt-2 text-[12px] text-bt-dim">
-            {progress.done
-              ? `${progress.inserted} importados, ${progress.skipped} duplicados`
-              : `${progress.processed}/${progress.total} mensajes`}
-          </p>
-        </div>
-      ) : null}
-    </section>
-  )
-}
-
-interface PanelProps {
-  state: WAConnectionState
-  qrDataUrl: string | null
-  timeLeft: number
-  onReload: () => void
-}
-
-function PairingPanel({ state, qrDataUrl, timeLeft, onReload }: PanelProps) {
-  if (state === 'open') {
-    return (
-      <Card>
-        <div className="flex h-[280px] w-full flex-col items-center justify-center gap-4">
-          <div
-            className="flex h-20 w-20 items-center justify-center rounded-full"
-            style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
-          >
-            <Icon name="check" size={32} strokeWidth={2.5} className="text-white" />
-          </div>
-          <span className="text-3xl text-bt-accent" aria-hidden>
-            ✓
-          </span>
-        </div>
-      </Card>
-    )
-  }
-
-  if (state === 'logged-out') {
-    return (
-      <Card>
-        <div className="flex h-[280px] w-full flex-col items-center justify-center gap-4 px-6 text-center text-sm text-bt-muted">
-          <Icon name="wa" size={32} className="text-bt-red" />
-          <p>La sesión se cerró desde el celular.</p>
-          <button
-            type="button"
-            className="rounded-[10px] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
-            style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
-            onClick={onReload}
-          >
-            Generar QR de nuevo
-          </button>
-        </div>
-      </Card>
-    )
-  }
-
-  if (qrDataUrl) {
-    return (
-      <Card padded={false}>
-        <div className="group relative flex h-[300px] w-full items-center justify-center bg-bt-bg p-2">
-          <img
-            src={qrDataUrl}
-            alt="QR para vincular WhatsApp"
-            width={280}
-            height={280}
-            className="rounded-md"
-          />
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-bt-bg/80 opacity-0 transition-opacity group-hover:opacity-100">
-            <button
-              type="button"
-              onClick={onReload}
-              className="flex h-12 w-12 items-center justify-center rounded-full bg-bt-primary text-white shadow-lg transition-transform hover:scale-105 active:scale-95"
-              title="Recargar QR"
-            >
-              <Icon name="refresh" size={24} />
-            </button>
-            <p className="mt-2 text-xs font-medium text-bt-text">Recargar QR</p>
-          </div>
-          <div className="absolute bottom-4 right-4 rounded-full bg-bt-surf/80 px-2 py-0.5 text-[10px] font-mono text-bt-muted backdrop-blur-sm">
-            Expira en {timeLeft}s
-          </div>
-        </div>
-      </Card>
-    )
-  }
-
-  if (state === 'disconnected') {
-    return (
-      <Card>
-        <div className="flex h-[280px] w-full flex-col items-center justify-center gap-4 px-6 text-center text-sm text-bt-muted">
-          <p>No se pudo conectar con WhatsApp.</p>
-          <button
-            type="button"
-            className="rounded-[10px] px-4 py-2 text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
-            style={{ background: 'linear-gradient(135deg,var(--bt-primary),var(--bt-accent))' }}
-            onClick={onReload}
-          >
-            Reintentar
-          </button>
-        </div>
-      </Card>
-    )
-  }
-
-  return (
-    <Card>
-      <div className="flex h-[280px] w-full flex-col items-center justify-center gap-3 text-sm text-bt-muted">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-bt-primary" />
-        Generando QR…
-      </div>
-    </Card>
-  )
-}
-
-function Card({
-  children,
-  padded = true
-}: {
-  children: React.ReactNode
-  padded?: boolean
-}) {
-  return (
-    <div
-      className={`overflow-hidden rounded-[14px] border border-bt-border bg-bt-surf ${
-        padded ? 'p-2' : ''
-      }`}
-    >
-      {children}
-    </div>
-  )
-}
-
-function Steps({ state, hasQr }: { state: WAConnectionState; hasQr: boolean }) {
-  if (state === 'open' || state === 'logged-out') return null
-  return (
-    <section>
-      <div className="mb-3 text-[11px] uppercase tracking-eyebrow text-bt-dim">
-        Cómo vincular
-      </div>
-      <ol className="space-y-3 text-sm leading-relaxed text-bt-muted">
-        <Step n={1}>
-          Abrí WhatsApp en tu celular → Configuración → Dispositivos vinculados.
-        </Step>
-        <Step n={2}>
-          Tocá <em className="not-italic text-bt-text">Vincular un dispositivo</em>.
-        </Step>
-        <Step n={3}>
-          {hasQr
-            ? 'Escaneá el código de la izquierda con la cámara del celular.'
-            : 'Esperá a que aparezca el código acá.'}
-        </Step>
-      </ol>
-    </section>
-  )
-}
-
-function Step({ n, children }: { n: number; children: React.ReactNode }) {
-  return (
-    <li className="flex gap-3">
-      <span
-        aria-hidden
-        className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-bt-border text-[11px] font-semibold text-bt-text"
-        style={{ background: 'linear-gradient(135deg,var(--bt-primary-faint),var(--bt-accent-faint))' }}
-      >
-        {n}
-      </span>
-      <span>{children}</span>
-    </li>
-  )
-}
-
-function SuccessNote({ state }: { state: WAConnectionState }) {
-  if (state !== 'open') return null
-  return (
-    <p className="rounded-[14px] border border-bt-border bg-bt-surf px-5 py-4 text-sm leading-relaxed text-bt-accent">
-      ✓ Vinculado. Ya podés cerrar este panel y empezar a buscar.
-    </p>
-  )
-}
