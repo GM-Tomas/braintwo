@@ -9,6 +9,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "dev": "node scripts/run-evite.mjs dev",
+    "dev:demo": "BRAINTWO_DEMO=true node scripts/run-evite.mjs dev",
     "predev": "node scripts/rebuild-for-electron.mjs",
     "build": "node scripts/run-evite.mjs build",
     "prebuild": "node scripts/run-evite.mjs build",

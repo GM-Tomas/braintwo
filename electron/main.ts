@@ -34,6 +34,7 @@ import {
   type RecentMessage,
   type WAMessageLike
 } from './services/ingest'
+import { seedDemoData } from './services/demo-seed'
 import {
   statusLabel,
   buildResourcePath,
@@ -155,7 +156,7 @@ function publishSyncStatus(): void {
   updateTrayStatus(status.label)
 }
 
-function createWindow(): void {
+function createWindow(demo = false): void {
   context.mainWindow.value = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -212,6 +213,15 @@ function createWindow(): void {
     void shell.openExternal(details.url)
     return { action: 'deny' }
   })
+
+  if (demo) {
+    context.mainWindow.value.webContents.on('dom-ready', () => {
+      context.mainWindow.value?.webContents.executeJavaScript(`
+        localStorage.setItem('braintwo:ftu-seen', '1');
+        localStorage.setItem('braintwo:onboarded', '1');
+      `).catch(() => {})
+    })
+  }
 
   context.mainWindow.value.webContents.on('did-finish-load', () => {
     broadcast('wa:connection-state', context.lastConnectionState.value)
@@ -571,10 +581,21 @@ void app.whenReady().then(() => {
 
   configureAutostart()
   openStorage()
+
+  const isDemo = process.env.BRAINTWO_DEMO === 'true' || process.env.BRAINTWO_DEMO === '1'
+  if (isDemo) {
+    console.log('[demo] Demo mode enabled')
+    seedDemoData(context.db.value!)
+    context.lastConnectionState.value = 'open'
+    context.syncStatus.setConnection('open')
+  }
+
   registerAllHandlers(context)
   createTray()
-  startWhatsApp()
-  createWindow()
+  if (!isDemo) {
+    startWhatsApp()
+  }
+  createWindow(isDemo)
 
   const ollamaCfg = readAiConfig(app.getPath('userData'))?.ollama
   if (ollamaCfg?.enabled && ollamaCfg?.autoStart) {
