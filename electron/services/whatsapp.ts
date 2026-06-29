@@ -5,7 +5,8 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   Browsers,
   makeCacheableSignalKeyStore,
-  downloadMediaMessage
+  downloadMediaMessage,
+  proto
 } from '@whiskeysockets/baileys'
 import pino, { type Logger } from 'pino'
 import { logError } from './logger'
@@ -242,13 +243,19 @@ class WhatsAppServiceImpl extends EventEmitter implements WhatsAppService {
       // fetchLatestBaileysVersion does an HTTP GET to a remote repo; if it
       // fails (offline, blocked, slow DNS) we don't want to block pairing.
       // Fall back to a known-good version so the socket still initializes.
-      let version: unknown = [2, 3000, 1035194821]
+      let version: unknown = [2, 3000, 1033893291]
       try {
         const fetched = await this.versionFactory()
         if (fetched?.version) version = fetched.version
       } catch (err) {
         logError('whatsapp:connect', err, 'fetchLatestBaileysVersion failed, using fallback')
       }
+
+      // WhatsApp now rejects Platform.WEB (value 14) for new device
+      // registration. Use MACOS instead.
+      // https://github.com/WhiskeySockets/Baileys/issues/2364#issuecomment-3949401979
+      proto.ClientPayload.UserAgent.Platform.WEB =
+        proto.ClientPayload.UserAgent.Platform.MACOS
 
       this.socket = this.socketFactory({
         version,
