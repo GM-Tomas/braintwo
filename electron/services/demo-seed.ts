@@ -8,7 +8,7 @@ interface DemoMsg {
   m: number
 }
 
-const BASE = new Date(2026, 4, 30).getTime() / 1000
+const BASE = new Date(2026, 4, 30).getTime()
 
 const MSGS: DemoMsg[] = [
   // ── Day 0 · May 30 (Sat) ──────────────────────────────────────────
@@ -198,7 +198,7 @@ export function seedDemoData(db: DbInstance): void {
   const insertWithNote = db.raw.transaction(() => {
     for (let i = 0; i < MSGS.length; i++) {
       const m = MSGS[i]
-      const ts = BASE + m.day * 86400 + m.h * 3600 + m.m * 60
+      const ts = BASE + (m.day * 86400 + m.h * 3600 + m.m * 60) * 1000
       const waId = `demo_${String(i + 1).padStart(4, '0')}`
 
       const result = db.insertMessage({
