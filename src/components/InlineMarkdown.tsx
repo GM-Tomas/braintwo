@@ -40,7 +40,7 @@ export function InlineMarkdown({ text }: InlineMarkdownProps) {
         // Bullet list item
         if (line.startsWith('* ')) {
           return (
-            <div key={idx} className="relative pl-5 py-0.5 leading-relaxed text-bt-text">
+            <div key={idx} className="relative pl-5 py-0.5 leading-relaxed">
               <span className="absolute left-1.5 text-bt-accent select-none">•</span>
               <InlineText text={line.slice(2)} />
             </div>
@@ -50,7 +50,7 @@ export function InlineMarkdown({ text }: InlineMarkdownProps) {
         // Alternate bullet list item (dash)
         if (line.startsWith('- ')) {
           return (
-            <div key={idx} className="relative pl-5 py-0.5 leading-relaxed text-bt-text">
+            <div key={idx} className="relative pl-5 py-0.5 leading-relaxed">
               <span className="absolute left-1.5 text-bt-accent select-none">•</span>
               <InlineText text={line.slice(2)} />
             </div>
@@ -63,7 +63,7 @@ export function InlineMarkdown({ text }: InlineMarkdownProps) {
           const num = numMatch[1]
           const content = numMatch[2]
           return (
-            <div key={idx} className="relative pl-6 py-0.5 leading-relaxed text-bt-text">
+            <div key={idx} className="relative pl-6 py-0.5 leading-relaxed">
               <span className="absolute left-1 text-bt-dim select-none font-medium">{num}.</span>
               <InlineText text={content} />
             </div>
@@ -72,7 +72,7 @@ export function InlineMarkdown({ text }: InlineMarkdownProps) {
 
         // Normal paragraph
         return (
-          <div key={idx} className="leading-relaxed text-bt-text">
+          <div key={idx} className="leading-relaxed">
             <InlineText text={line} />
           </div>
         )
