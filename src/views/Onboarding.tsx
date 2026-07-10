@@ -140,6 +140,10 @@ export function FTU({
     setStep(next)
   }
 
+  function goBack() {
+    setStep((s) => Math.max(0, s - 1))
+  }
+
   return (
     <div className="flex flex-1 flex-col">
       <div
@@ -166,15 +170,35 @@ export function FTU({
       </div>
 
       <div className="flex flex-col items-center gap-5 pb-10">
-        <div className="flex items-center gap-2">
-          {FTU_STEPS.map((_, i) => (
-            <div
-              key={i}
-              className={`h-[6px] rounded-full transition-all duration-300 ${
-                i === step ? 'w-6 bg-bt-accent' : 'w-[6px] bg-bt-border-strong'
-              }`}
-            />
-          ))}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={goBack}
+            disabled={step === 0}
+            aria-label="Paso anterior"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-bt-muted transition-colors hover:bg-bt-hover hover:text-bt-text disabled:opacity-0"
+          >
+            <Icon name="chev" size={18} className="rotate-180" />
+          </button>
+          <div className="flex items-center gap-2">
+            {FTU_STEPS.map((_, i) => (
+              <div
+                key={i}
+                className={`h-[6px] rounded-full transition-all duration-300 ${
+                  i === step ? 'w-6 bg-bt-accent' : 'w-[6px] bg-bt-border-strong'
+                }`}
+              />
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={advance}
+            disabled={isLast}
+            aria-label="Paso siguiente"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-bt-muted transition-colors hover:bg-bt-hover hover:text-bt-text disabled:opacity-0"
+          >
+            <Icon name="chev" size={18} />
+          </button>
         </div>
         <div className="flex items-center gap-3">
           <button
