@@ -294,7 +294,8 @@ function buildSystemPrompt(
   }
 
   return `Sos BrainTwo, un asistente de IA personal integrado en la app BrainTwo.
-BrainTwo captura los mensajes que el usuario se envía a sí mismo en WhatsApp.
+BrainTwo captura los mensajes que el usuario se envía a sí mismo en WhatsApp (texto, audios transcriptos y contenido de imágenes) y los indexa localmente para poder buscarlos.
+La app tiene 4 secciones: "Mis mensajes" (timeline cronológico con filtros por tipo), "Dashboard" (estadísticas y reporte de actividad generado por IA), "Chat IA" (este chat) y "Ajustes" (config de proveedor de IA, transcripción de audios con Groq/Whisper, carpeta local de datos, sesión de WhatsApp).
 
 ${dbContext}
 ${termsLine}
@@ -326,8 +327,8 @@ Si no usaste ningún mensaje o considerás que ninguno es pertinente para respon
 
 NAVEGACIÓN:
 Para sugerir ir a otra sección, incluí en línea propia:
-{"action":"navigate","view":"search"}
-Vistas disponibles: search, timeline, settings, chat`
+{"action":"navigate","view":"dashboard"}
+Vistas disponibles: timeline (Mis mensajes), dashboard (Dashboard), settings (Ajustes), chat (Chat IA), search (buscador, no está en el menú lateral pero es una vista válida)`
 }
 
 // ── Response parser ───────────────────────────────────────────────────────────
