@@ -32,6 +32,59 @@ export function createAiChatService(deps: AiChatDeps): AiChatService {
       const lastUserMsg = [...history].reverse().find((m) => m.role === 'user')
       const question = lastUserMsg?.content ?? ''
 
+      // ── DEMO MOCK OVERRIDES ────────────────────────────────────────────────
+      const cleanQuestion = question.toLowerCase();
+      let demoIndex = -1;
+      if (cleanQuestion.includes('estructurada') || cleanQuestion.includes('estructura')) {
+        demoIndex = 0;
+      } else if (cleanQuestion.includes('guardan') || cleanQuestion.includes('búsqueda') || cleanQuestion.includes('base de datos') || cleanQuestion.includes('busqueda')) {
+        demoIndex = 1;
+      } else if (cleanQuestion.includes('conecta') || cleanQuestion.includes('whatsapp') || cleanQuestion.includes('baileys') || cleanQuestion.includes('wpp')) {
+        demoIndex = 2;
+      } else if (cleanQuestion.includes('procesa') || cleanQuestion.includes('inteligencia') || cleanQuestion.includes('transformers') || cleanQuestion.includes('ia local')) {
+        demoIndex = 3;
+      } else if (cleanQuestion.includes('seguro') || cleanQuestion.includes('privado') || cleanQuestion.includes('seguridad') || cleanQuestion.includes('privacidad')) {
+        demoIndex = 4;
+      }
+
+      if (demoIndex !== -1) {
+        // Wait 2 seconds to simulate thinking / processing
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        let dbMsgs: any[] = [];
+        try {
+          dbMsgs = deps.db.raw.prepare(
+            "SELECT id, text, timestamp FROM messages WHERE wa_msg_id LIKE 'demo:%' ORDER BY timestamp ASC"
+          ).all();
+        } catch (err) {
+          logError('ai-chat:demo_override', err, 'Failed to fetch demo messages');
+        }
+
+        const offset = demoIndex * 3;
+        const linkedSources = dbMsgs.slice(offset, offset + 3).map((m: any, idx: number) => ({
+          id: m.id,
+          text: m.text,
+          timestamp: m.timestamp,
+          similarity: 1.0,
+          index: idx + 1
+        }));
+
+        const responses = [
+          "La aplicación de escritorio está desarrollada utilizando **Electron** como runtime principal, lo que nos permite ofrecer una aplicación instalable y nativa tanto para Windows como para macOS.\n\nLa arquitectura interna se diseñó con un enfoque robusto y desacoplado, separando la interfaz de usuario en **React** (Renderer Process) del motor de fondo (Main Process), encargado de procesar la base de datos, embeddings y la conexión con WhatsApp.\n\nAmbos procesos se comunican de forma aislada a través de un canal IPC (Inter-Process Communication) seguro y restringido, garantizando que el frontend visual nunca acceda de forma directa al sistema de archivos ni a los tokens de sesión.",
+          "Toda la información del usuario se almacena localmente en una base de datos **SQLite**, un estándar industrial altamente confiable que previene la corrupción de datos y garantiza el rendimiento.\n\nPara habilitar la búsqueda semántica e inteligente por significado, la base de datos se potencia localmente con la extensión **sqlite-vec** (escrita en C nativo). Esta integración nos permite guardar y comparar los vectores de embeddings dentro del mismo archivo de base de datos.\n\nGracias a este diseño integrado, no es necesario instalar bases de datos vectoriales complejas (como Chroma o Pinecone) ni depender de servicios costosos o APIs en la nube. Todo el procesamiento matemático y las consultas se resuelven en milisegundos directamente en el disco del usuario.",
+          "La integración y captura en tiempo real de los mensajes se realiza mediante la librería **Baileys**, que se conecta directamente al protocolo oficial de WhatsApp Web a través de **WebSockets**.\n\nA diferencia de otras alternativas comerciales que levantan un navegador Chrome invisible en segundo plano (Puppeteer), lo cual consumiría más de 200MB de memoria y ralentizaría la computadora, nuestra solución es de consumo mínimo y ultra-eficiente.\n\nLa aplicación captura los mensajes en tiempo real. Si la app se encuentra cerrada, al momento de abrirse realiza un proceso automático de catch-up (sincronización de desconexión) para descargar y procesar todos los mensajes pendientes.",
+          "Para procesar el significado semántico de cada mensaje de texto sin requerir conexión a internet, incorporamos la librería **Transformers.js** (de Xenova). Esto permite la ejecución local de modelos avanzados de Machine Learning en Node.js.\n\nEl modelo utilizado para generar los vectores de ideas (embeddings) pesa únicamente 120MB y corre directamente en la CPU o GPU del dispositivo del usuario.\n\nEsto representa una gran ventaja comercial y de costos: el cliente no depende de servicios de pago externos (como OpenAI o Anthropic) por cada búsqueda realizada, ni se le exige instalar entornos complejos adicionales (como Ollama). Es una solución 100% autónoma y autocontenida.",
+          "La seguridad y la confidencialidad de la información son los pilares fundamentales del producto. Al no utilizar servidores intermedios de base de datos ni procesamiento en la nube, los datos del usuario viajan directamente de forma encriptada desde WhatsApp al disco local de su máquina.\n\nLas credenciales de sesión se encriptan y resguardan localmente dentro del directorio de datos de la aplicación, haciendo imposible que terceros o incluso nosotros como desarrolladores tengamos visibilidad o acceso a sus conversaciones.\n\nEsta arquitectura **'local-first'** es ideal para auditorías de seguridad corporativas exigentes, ya que garantiza de forma física que la información confidencial y los chats corporativos nunca abandonan la máquina del usuario."
+        ];
+
+        return {
+          content: responses[demoIndex],
+          sources: linkedSources,
+          action: undefined
+        };
+      }
+
+
       // Get recent memories for query expansion context
       const recentMemories = deps.db.listMemories(20)
 

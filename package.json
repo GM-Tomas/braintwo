@@ -1,6 +1,6 @@
 {
   "name": "braintwo",
-  "version": "0.0.2",
+  "version": "0.1.2",
   "description": "Personal knowledge base from your WhatsApp self-chat",
   "main": "out/main/main.mjs",
   "type": "module",
